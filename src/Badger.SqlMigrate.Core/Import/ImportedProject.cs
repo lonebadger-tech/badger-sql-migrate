@@ -40,6 +40,9 @@ public sealed partial class ImportedProject
 
     public required string Tool { get; init; }
 
+    /// <summary>The database the source project targeted, when it says (Sqitch's engine, e.g. "pg").</summary>
+    public string? SourceEngine { get; init; }
+
     /// <summary>'bsm baseline --from &lt;tool&gt;' can adopt databases the source tool manages (false for Sqitch: no SQL Server registry).</summary>
     public bool CanBaselineFromJournal { get; init; } = true;
 

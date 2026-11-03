@@ -2,16 +2,16 @@
 
 All vendor-specific behaviour lives behind `IDatabaseProvider` (`src/Badger.SqlMigrate.Core/Providers`). The engine, CLI, hashing and SSH tunnel never reference a driver, and an architecture test (`tests/Badger.SqlMigrate.ArchitectureTests`) fails the build if they do.
 
-To add, for example, PostgreSQL:
+`src/Badger.SqlMigrate.Providers.PostgreSql` is a complete example: it was added exactly this way. To add, for example, MySQL:
 
-1. Create `src/Badger.SqlMigrate.Providers.PostgreSql` referencing `Badger.SqlMigrate.Core` and the driver (Npgsql).
+1. Create `src/Badger.SqlMigrate.Providers.MySql` referencing `Badger.SqlMigrate.Core` and the driver (MySqlConnector).
 2. Implement:
-   - `IDatabaseProvider`: id (`postgresql`), capabilities, profile validation, endpoint resolution, `OpenSessionAsync`, `DescribeAsync`.
+   - `IDatabaseProvider`: id (`mysql`), capabilities, `DefaultSchema`, profile validation, endpoint resolution, `OpenSessionAsync`, `DescribeAsync`.
    - `IDatabaseSession`: transactions, `ExecuteAsync`, `QueryAsync`, server notices via `Message`.
    - `IScriptParser`: statement or batch splitting (dollar-quoted bodies for PostgreSQL, `DELIMITER` for MySQL).
    - `IScriptLinter`: statements that cannot run in a transaction (e.g. `CREATE INDEX CONCURRENTLY`).
    - `IStateStore`: the journal tables in the vendor's DDL, including `UpdateChangeAsync` for `bsm repair`.
-   - `IDeployLock`: `pg_advisory_lock`, MySQL `GET_LOCK`, SQLite `BEGIN EXCLUSIVE`.
+   - `IDeployLock`: PostgreSQL uses `pg_try_advisory_lock`; MySQL `GET_LOCK`, SQLite `BEGIN EXCLUSIVE`.
    - `ISchemaInspector`: a canonical, sorted dump of the catalog, and (optionally) `Parse`, which splits a dump into entries keyed by object so `bsm diff-schema` can report an object as changed rather than removed and added.
    - `ResolveDatabaseName`: the database name for the `{db}` built-in.
    - `IEnvironmentResources` (optional): per-environment objects that must exist before changes run (SQL Server uses it for Always Encrypted keys).

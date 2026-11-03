@@ -50,7 +50,7 @@ public static partial class SqitchImporter
         var verifyDir = System.IO.Path.Combine(root, Setting("verify_dir", System.IO.Path.Combine(Setting("top_dir", "."), "verify")));
         var extension = Setting("extension", "sql");
 
-        var result = new ImportedProject { Tool = Tool, CanBaselineFromJournal = false };
+        var result = new ImportedProject { Tool = Tool, CanBaselineFromJournal = IsPostgres(engine), SourceEngine = engine };
         var plan = ParsePlan(File.ReadAllText(planPath, Encoding.UTF8), planPath);
         if (plan.Entries.All(e => e.Tag is not null))
         {
@@ -167,7 +167,11 @@ public static partial class SqitchImporter
                 }
             }
 
-            var note = $"sqitch {entry.Name}{(occurrence > 1 ? "#" + occurrence.ToString(CultureInfo.InvariantCulture) : string.Empty)}" + (entry.Note is { Length: > 0 } n ? ": " + n.Replace('#', '-') : string.Empty);
+            // "sqitch <project>:<name>[#n] sha1 <hash>": the change in Sqitch's registry, and the SHA-1 of the deploy
+            // script Sqitch records as script_hash (checked by 'bsm baseline --from sqitch').
+            var sha1 = Convert.ToHexStringLower(System.Security.Cryptography.SHA1.HashData(File.ReadAllBytes(deployPath)));
+            var note = $"sqitch {(plan.Project is null ? string.Empty : plan.Project + ":")}{entry.Name}{(occurrence > 1 ? "#" + occurrence.ToString(CultureInfo.InvariantCulture) : string.Empty)} sha1 {sha1}"
+                + (entry.Note is { Length: > 0 } n ? ": " + n.Replace('#', '-') : string.Empty);
             result.Changes.Add(new ImportedChange(bsmName, deploy, revert, flags, note, System.IO.Path.GetRelativePath(root, deployPath).Replace('\\', '/'))
             {
                 Verify = File.Exists(verifyPath) ? Read(verifyPath, result) : null,
@@ -183,7 +187,9 @@ public static partial class SqitchImporter
             result.Warnings.Add("changes whose deploy script manages its own transaction (BEGIN ... COMMIT, as Sqitch scripts do) are !notx, so bsm does not wrap them in a second one.");
         }
 
-        result.Warnings.Add($"Sqitch has no SQL Server engine: the scripts were copied as written{(engine is null ? string.Empty : $" for {engine}")} and usually need translating to T-SQL. 'bsm plan check' flags what does not parse.");
+        result.Warnings.Add(IsPostgres(engine)
+            ? "the scripts were copied as written for PostgreSQL; databases Sqitch deployed can be adopted with 'bsm baseline --from sqitch'."
+            : $"the scripts were copied as written{(engine is null ? string.Empty : $" for {engine}")}; run them with the provider for that database, or translate them. 'bsm plan check' flags what does not parse.");
         if (config.Keys.Any(k => k.Contains("variables", StringComparison.OrdinalIgnoreCase)))
         {
             result.Warnings.Add("sqitch.conf defines variables, which Sqitch hands to the database client; scripts that use them need {name} variables in bsm.yaml instead.");
@@ -191,6 +197,9 @@ public static partial class SqitchImporter
 
         return result;
     }
+
+    /// <summary>Sqitch engines whose registry bsm can read (PostgreSQL and wire-compatible).</summary>
+    public static bool IsPostgres(string? engine) => engine is "pg" or "postgres" or "postgresql" or "cockroach";
 
     private static string Read(string path, ImportedProject result) => result.EscapeLiteral(File.ReadAllText(path, Encoding.UTF8), System.IO.Path.GetFileName(path));
 

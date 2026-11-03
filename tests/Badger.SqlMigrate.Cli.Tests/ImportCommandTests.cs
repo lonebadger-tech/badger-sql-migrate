@@ -134,4 +134,59 @@ public sealed class ImportCommandTests : IDisposable
         Assert.False(plan.Changes[1].Flags.HasFlag(Badger.SqlMigrate.Core.Plan.ChangeFlags.NoTransaction));
         Assert.Equal(0, Commands.PlanCheck(G(target)));
     }
+
+    [Theory]
+    [InlineData("jdbc:postgresql://pg.example.com:6432/shop?sslmode=verify-full&currentSchema=app&user=deployer&password=plain", "pg.example.com", 6432, "shop", "password", "strict")]
+    [InlineData("jdbc:postgresql://localhost/shop?ssl=true", "localhost", null, "shop", "integrated", "mandatory")]
+    [InlineData("jdbc:postgresql://x.postgres.database.azure.com:5432/shop?authenticationPluginClassName=com.azure.identity.extensions.jdbc.postgresql.AzurePostgresqlAuthenticationPlugin&sslmode=require", "x.postgres.database.azure.com", 5432, "shop", "entraDefault", "mandatory")]
+    public void Postgres_jdbc_urls_map_to_environments(string url, string host, int? port, string database, string authentication, string tls)
+    {
+        var warnings = new List<string>();
+        var settings = JdbcPostgreSql.Map(new ConnectionToImport("x", url, null, null), warnings)!;
+
+        Assert.Equal((host, port, database, authentication, tls), ((string?)settings["host"], (int?)settings["port"], (string?)settings["database"], (string?)settings["authentication"], (string?)settings["tls"]!["mode"]));
+        Assert.DoesNotContain("plain", settings.ToJsonString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Postgres_jdbc_options_become_npgsql_keywords()
+    {
+        var warnings = new List<string>();
+        var settings = JdbcPostgreSql.Map(new ConnectionToImport("prod", "jdbc:postgresql://h/db?currentSchema=app&ApplicationName=flyway&prepareThreshold=0", "${env.DB_USER}", "${env.DB_PASSWORD}"), warnings)!;
+        Assert.Equal("app", (string?)settings["connectionProperties"]!["Search Path"]);
+        Assert.Equal("${env:DB_USER}", (string?)settings["user"]);
+        Assert.Equal("${env:DB_PASSWORD}", (string?)settings["password"]);
+        Assert.Contains(warnings, w => w.Contains("prepareThreshold", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Init_for_postgresql_writes_a_postgres_configuration()
+    {
+        var target = Path.Combine(root, "pg");
+        Assert.Equal(0, Commands.Init(G(target), "postgres"));
+        var config = BsmConfig.Load(target);
+        Assert.Equal("postgresql", config.Provider);
+        Environment.SetEnvironmentVariable("BSM_LOCAL_PASSWORD", "x");
+        var local = config.ResolveEnvironment("local", null);
+        Assert.Equal(("localhost", 5432, "postgres"), (local.Host, local.Port!.Value, local.User));
+        Assert.Empty(Commands.Providers.Resolve(config.Provider).ValidateEnvironment(local));
+    }
+
+    [Fact]
+    public void Imports_can_target_postgresql()
+    {
+        var source = Path.Combine(root, "dbup-pg");
+        Directory.CreateDirectory(source);
+        File.WriteAllText(Path.Combine(source, "0001.sql"), "CREATE TABLE t (id int);");
+        File.WriteAllText(Path.Combine(source, "0002.sql"), "CREATE INDEX CONCURRENTLY t_id ON t (id);");
+        var target = Path.Combine(root, "bsm-pg");
+
+        Assert.Equal(0, Commands.ImportDbUp(G(target), source, false, [], false, dryRun: false, providerId: "postgresql"));
+
+        Assert.Equal("postgresql", BsmConfig.Load(target).Provider);
+        var plan = Badger.SqlMigrate.Core.Plan.PlanFile.Load(Path.Combine(target, "bsm.plan"));
+        Assert.True(plan.Changes[1].Flags.HasFlag(Badger.SqlMigrate.Core.Plan.ChangeFlags.NoTransaction));
+        Assert.Contains("port: 5432", File.ReadAllText(Path.Combine(target, "bsm.yaml")), StringComparison.Ordinal);
+    }
 }
+

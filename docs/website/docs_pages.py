@@ -25,6 +25,7 @@ SIDEBAR = [
         ("Connection settings", "docs/connections/"),
         ("Variables", "docs/variables/"),
         ("Always Encrypted", "docs/always-encrypted/"),
+        ("PostgreSQL", "docs/postgresql/"),
     ]),
     ("Operate", [
         ("Command reference", "docs/commands/"),
@@ -52,7 +53,7 @@ def link(path, label):
 
 def pages():
     return [overview(), install(), quick_start(), project(), plan(), changes(), certification(), revert(), fixing_changes(), generating(),
-            teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(),
+            teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(), postgresql(),
             commands(), ci_cd(), bundles(), drift(), baseline(), importing(), journal(), troubleshooting(), extending()]
 
 
@@ -60,7 +61,7 @@ def pages():
 
 def overview():
     return doc("docs/", "Documentation", "Everything about Badger SQL Migrate, from the first change to production pipelines.", f"""
-<p>Badger SQL Migrate deploys hand-written SQL changes to SQL Server and Azure SQL, in an order you control, and proves afterwards that every database received exactly what you intended. It is a single command-line tool, <code>bsm</code>, for Windows, macOS and Linux.</p>
+<p>Badger SQL Migrate deploys hand-written SQL changes to SQL Server, Azure SQL and PostgreSQL, in an order you control, and proves afterwards that every database received exactly what you intended. It is a single command-line tool, <code>bsm</code>, for Windows, macOS and Linux.</p>
 
 <h2>Five ideas</h2>
 <ol>
@@ -242,7 +243,7 @@ def changes():
 <p>Some statements cannot run in a transaction. Mark those changes <code>!notx</code>: batches then run one after another without a transaction, and the journal row is written only after the last succeeds. Write such scripts so they can be re-run (<code>IF NOT EXISTS</code>), because a failure can leave partial work.</p>
 
 <h2>Linter</h2>
-<p>Scripts are parsed with Microsoft's T-SQL parser before anything runs. <code>plan check</code> and <code>deploy</code> report:</p>
+<p>On SQL Server, scripts are parsed with Microsoft's T-SQL parser before anything runs ({link("docs/postgresql/#linter", "PostgreSQL's checks")} are on its own page). <code>plan check</code> and <code>deploy</code> report:</p>
 <table>
 <tr><th>Code</th><th>Severity</th><th>Finding</th></tr>
 <tr><td><code>BSM001</code></td><td>Error</td><td>Statement cannot run in a transaction (ALTER/CREATE/DROP DATABASE, BACKUP, RESTORE, full-text catalog and index DDL, RECONFIGURE, resumable online index) and the change is not <code>!notx</code>.</td></tr>
@@ -879,7 +880,7 @@ def always_encrypted():
 
 def commands():
     cmds = [
-        ("init", "[--provider sqlserver]", "Create bsm.yaml, bsm.plan, folders and .gitattributes."),
+        ("init", "[--provider sqlserver|postgresql]", "Create bsm.yaml, bsm.plan, folders and .gitattributes."),
         ("add &lt;name&gt;", "[-r|--requires a b] [-n|--note text] [--notx] [--irreversible]", "Scaffold changes/&lt;name&gt;/ and append it to the plan."),
         ("add &lt;name&gt; --from-diff", "[--shadow-env env] [--keep-shadow] [--exclude schema.name…] [--dry-run] [--no-record] [-r …] [-n …]", "Generate deploy.sql and revert.sql from schema edits made in the environment's database, compared with a shadow database built from the plan; records the change as applied there."),
         ("tag &lt;name&gt;", "", "Tag the last change in the plan (use as @name)."),
@@ -896,11 +897,11 @@ def commands():
         ("diff-schema", "[--against env] [--exit-code] [--script file]", "Schema differences: live versus the schema recorded after the last deploy, or versus another environment. --exit-code returns 3 when they differ; --script writes T-SQL that turns this database into the other."),
         ("verify", "", "Hashes versus working copy, rendered-SQL drift, verify scripts (rolled back), schema drift. Exit 1 on problems."),
         ("log", "[-n|--limit 50]", "Deploy, revert, fail, repeatable and resource events, newest first."),
-        ("baseline", "--to x | --from flyway|dbup|grate|roundhouse [--journal schema.table] [--skip-checksums] [-y]", "Record changes as applied without running them: up to x, or as far as the old tool's journal in the database says (with repeatables it already applied)."),
-        ("import flyway &lt;folder&gt;", "[--config file] [--location dir…] [--dry-run]", "Convert a Flyway project into a new bsm project (written to -C). No database."),
+        ("baseline", "--to x | --from flyway|dbup|grate|roundhouse|sqitch [--journal schema.table] [--skip-checksums] [-y]", "Record changes as applied without running them: up to x, or as far as the old tool's journal in the database says (with repeatables it already applied)."),
+        ("import flyway &lt;folder&gt;", "[--config file] [--location dir…] [--provider sqlserver|postgresql] [--dry-run]", "Convert a Flyway project into a new bsm project (written to -C). No database."),
         ("import dbup &lt;folder&gt;", "[--file-names] [--run-always glob…] [--no-variables] [--var name=value…] [--dry-run]", "Convert DbUp scripts into a new bsm project (written to -C). No database."),
         ("import grate &lt;folder&gt;", "[--folder key=name…] [--environment name…] [--ignore-directory-names] [--no-tokens] [--var name=value…] [--dry-run]", "Convert a grate or RoundhousE scripts folder into a new bsm project. No database."),
-        ("import sqitch &lt;folder&gt;", "[--engine name] [--dry-run]", "Convert a Sqitch project into a new bsm project. No database."),
+        ("import sqitch &lt;folder&gt;", "[--engine name] [--provider …] [--dry-run]", "Convert a Sqitch project into a new bsm project. No database."),
         ("vars", "", "Every variable for the environment: value, source, description."),
         ("render &lt;name&gt;", "[-k|--kind deploy|revert|verify]", "Print a change or repeatable exactly as it would run."),
         ("env list", "", "Environments and templates."),
@@ -1094,8 +1095,9 @@ bsm deploy -C db -e prod                             # from now on''')}
 <tr><td>{link("docs/importing/#flyway", "Flyway")}</td><td><code>bsm import flyway</code></td><td><code>bsm baseline --from flyway</code> (checksums checked)</td></tr>
 <tr><td>{link("docs/importing/#dbup", "DbUp")}</td><td><code>bsm import dbup</code></td><td><code>bsm baseline --from dbup</code></td></tr>
 <tr><td>{link("docs/importing/#grate", "grate, RoundhousE")}</td><td><code>bsm import grate</code></td><td><code>bsm baseline --from grate</code> or <code>--from roundhouse</code> (hashes checked)</td></tr>
-<tr><td>{link("docs/importing/#sqitch", "Sqitch")}</td><td><code>bsm import sqitch</code></td><td><code>bsm baseline --to &lt;change&gt;</code> (Sqitch has no SQL Server engine, so there is no registry to read)</td></tr>
+<tr><td>{link("docs/importing/#sqitch", "Sqitch")}</td><td><code>bsm import sqitch</code></td><td>PostgreSQL: <code>bsm baseline --from sqitch</code> (script hashes checked). Other engines: <code>bsm baseline --to &lt;change&gt;</code></td></tr>
 </table>
+<p>Imports target SQL Server unless you pass <code>--provider postgresql</code>; Sqitch projects for PostgreSQL (<code>engine = pg</code>) become PostgreSQL projects on their own, and Flyway's <code>jdbc:postgresql</code> URLs become PostgreSQL environments.</p>
 <p>Every import marks changes <code>!notx</code> when their scripts contain statements SQL Server refuses inside a transaction (the other tools often run without one), and lists everything it could not carry over.</p>
 
 <h2 id="flyway">Flyway</h2>
@@ -1164,8 +1166,10 @@ bsm import sqitch ./flipr -C bsm-db --engine pg      # use that engine's setting
   <li>A reworked change (the same name again after a tag) becomes <code>&lt;name&gt;-v2</code>, <code>-v3</code> …; earlier versions take their scripts from <code>&lt;name&gt;@&lt;tag&gt;.sql</code>, as Sqitch keeps them. Dependencies such as <code>users@v1.0.0</code> point at the right version.</li>
   <li>Conflicts (<code>!change</code>) and dependencies on other Sqitch projects have no bsm equivalent and are listed.</li>
   <li>Scripts that manage their own transaction (<code>BEGIN; … COMMIT;</code>, as Sqitch's templates do) are <code>!notx</code>.</li>
-  <li>Sqitch has no SQL Server engine, so the scripts are written for another database. They are copied as written; translate them to T-SQL (<code>bsm plan check</code> flags what does not parse), and adopt existing databases with <code>bsm baseline --to &lt;change&gt;</code>.</li>
+  <li>Scripts are copied as written. A Sqitch project for PostgreSQL becomes a PostgreSQL project; one for another engine needs its SQL translated for the provider you choose (<code>bsm plan check</code> flags what does not parse).</li>
 </ul>
+{sh('''bsm baseline --from sqitch -e prod      # reads sqitch.changes in the same PostgreSQL database''')}
+<p>On PostgreSQL, baseline reads Sqitch's registry (<code>sqitch.changes</code>), matches each deployed change by project, name and version (a reworked change is deployed once per version), and checks the SHA-1 Sqitch recorded for each deploy script against the imported one. Sqitch's registry schema stays until you drop it.</p>
 
 <h2>Text that must stay literal</h2>
 <p>None of these tools expands <code>{{name}}</code> or <code>$(name)</code>, but bsm does. The import escapes <code>{{name}}</code> to <code>{{{{name}}}}</code>, and if any script contains <code>$(name)</code> text it sets <code>preprocessor.sqlcmdSyntax: false</code> in <code>bsm.yaml</code>.</p>
@@ -1176,6 +1180,81 @@ bsm import sqitch ./flipr -C bsm-db --engine pg      # use that engine's setting
   <li>Review the generated environments and fill in what the output asks for (tenant ids, variables without values).</li>
   <li>Check the result: deploy the project to an empty database and compare it with one the old tool built, using <code>bsm diff-schema -e new --against old</code>. Only the old tool's journal table should differ.</li>
   <li>Scripts the old tool ran every time (DbUp run-always, grate everytime folders, Flyway callbacks) now run only when they change. If one must run on every deploy, make it idempotent and keep it in a change you add per release, or run it from your pipeline.</li>
+</ul>
+""")
+
+
+def postgresql():
+    return doc("docs/postgresql/", "PostgreSQL", "PostgreSQL 12 and later: self-hosted, Azure Database for PostgreSQL, Amazon RDS and Aurora, and other compatible services.", f"""
+{sh('''bsm init --provider postgresql
+bsm add create-product
+bsm deploy''')}
+{yaml('''provider: postgresql
+defaultEnvironment: local
+environments:
+  local:
+    host: localhost
+    port: 5432
+    database: shop
+    authentication: password
+    user: postgres
+    password: ${env:BSM_LOCAL_PASSWORD}
+    tls:
+      mode: optional
+  prod:
+    host: shop-prod.postgres.database.azure.com
+    database: shop
+    authentication: entraDefault        # an Entra token is the password
+    user: shop-deployers                # the Entra user, group or managed identity the server knows
+    tls:
+      mode: strict
+    connectionProperties:               # any Npgsql connection-string keyword
+      Search Path: app,public
+      Command Timeout: 120''', "bsm.yaml")}
+<p>Everything else is the same as on SQL Server: the plan, hash certification, revert from stored scripts, environments, variables, bundles, <code>diff-schema</code>, rework and repair, and imports.</p>
+
+<h2>Sign-in and TLS</h2>
+<table>
+<tr><th><code>authentication</code></th><th>PostgreSQL</th></tr>
+<tr><td><code>password</code></td><td>User and password (SCRAM or MD5, whatever the server asks for)</td></tr>
+<tr><td><code>integrated</code></td><td>Kerberos (GSSAPI); run <code>kinit</code> first on macOS and Linux</td></tr>
+<tr><td><code>entraDefault</code>, <code>entraInteractive</code>, <code>entraManagedIdentity</code>, <code>entraWorkloadIdentity</code>, <code>entraAzureCli</code>, … </td><td>Azure Database for PostgreSQL: bsm gets a token for <code>https://ossrdbms-aad.database.windows.net</code> and sends it as the password. <code>user</code> is required.</td></tr>
+</table>
+<table>
+<tr><th><code>tls.mode</code></th><th>Npgsql <code>SSL Mode</code></th></tr>
+<tr><td><code>disabled</code></td><td>Disable</td></tr>
+<tr><td><code>optional</code></td><td>Prefer</td></tr>
+<tr><td><code>mandatory</code></td><td>Require (encrypted, certificate not checked); VerifyCA with <code>tls.serverCertificate</code></td></tr>
+<tr><td><code>strict</code></td><td>VerifyFull (certificate and host name checked)</td></tr>
+</table>
+<p><code>tls.serverCertificate</code> is the CA certificate file to trust. SSH tunnels work as on SQL Server; with one, use <code>mandatory</code>, because the host name no longer matches the certificate.</p>
+
+<h2>Statements and transactions</h2>
+<p>bsm splits scripts into statements at semicolons, the way psql does: semicolons inside strings, quoted identifiers, comments and <code>$$</code> dollar-quoted bodies (functions, <code>DO</code> blocks) do not count. A change still runs in one transaction, and PostgreSQL's transactional DDL means a failure leaves nothing behind. Errors name the line of the statement that failed.</p>
+<p>Statements PostgreSQL refuses in a transaction block need a <code>!notx</code> change, which runs each statement on its own:</p>
+{sql('''CREATE INDEX CONCURRENTLY IF NOT EXISTS product_name_idx ON product (name);''', "changes/product-name-index/deploy.sql")}
+{code('''product-name-index [create-product] !notx''', "", "bsm.plan")}
+
+<h2 id="linter">Linter</h2>
+<table>
+<tr><th>Code</th><th>Severity</th><th>Finding</th></tr>
+<tr><td><code>BSM001</code></td><td>Error</td><td><code>CREATE/DROP INDEX CONCURRENTLY</code>, <code>REINDEX … CONCURRENTLY</code>, <code>VACUUM</code>, <code>CREATE/DROP DATABASE</code>, <code>ALTER SYSTEM</code>, tablespace and subscription commands in a change that is not <code>!notx</code></td></tr>
+<tr><td><code>BSM003</code></td><td>Error</td><td><code>BEGIN</code>, <code>COMMIT</code>, <code>ROLLBACK</code> or <code>END</code> in a transactional change: it would end bsm's transaction. (Inside function bodies and <code>DO</code> blocks they are fine.)</td></tr>
+<tr><td><code>BSM005</code></td><td>Error</td><td>psql meta-commands such as <code>\\set</code> or <code>\\i</code>: bsm talks to the server, not through psql</td></tr>
+<tr><td><code>BSM006</code></td><td>Error</td><td><code>COPY … FROM STDIN</code>, which needs psql to stream the data</td></tr>
+<tr><td><code>BSM007</code></td><td>Warning</td><td><code>ALTER TYPE … ADD VALUE</code> in a transaction: the new value cannot be used until it commits</td></tr>
+</table>
+
+<h2>Schema fingerprint</h2>
+<p>The fingerprint covers schemas, extensions, tables (including partitioning and row-level security settings), columns (types, defaults, identity, generated columns, collations), constraints, indexes, views and materialized views, functions and procedures, triggers, sequences, enum, domain, composite and range types, and policies. Definitions come from PostgreSQL's own <code>pg_get_*def</code> functions with an empty <code>search_path</code>, so names are always schema-qualified and identical databases fingerprint identically. Objects that belong to extensions, identity sequences and the bsm journal schema are left out.</p>
+
+<h2>Journal and lock</h2>
+<p>The journal tables are the same as on SQL Server, in schema <code>bsm</code> (<code>stateSchema</code>). The deploy lock is a session-level advisory lock (<code>pg_try_advisory_lock</code>), so it works through PgBouncer only in session pooling mode; connect deploys directly or in session mode.</p>
+
+<h2>Not available yet</h2>
+<ul>
+  <li><code>bsm add --from-diff</code> and <code>diff-schema --script</code>: generating DDL is SQL Server only for now. <code>diff-schema</code> itself works.</li>
+  <li>Always Encrypted is a SQL Server feature.</li>
 </ul>
 """)
 
@@ -1259,7 +1338,7 @@ Badger.SqlMigrate.Connectivity ─────┘   Entra ID tokens, SSH tunnels
 <p>The core holds the plan, hashing, the preprocessor and the engine, and references no database driver; a test fails the build if the engine, connectivity or CLI reference a vendor driver directly.</p>
 
 <h2>Adding a database</h2>
-<p>A provider implements <code>IDatabaseProvider</code>: sessions, batch splitting, linting, journal tables, a deploy lock, a schema fingerprint, and optionally environment resources. It must pass the shared conformance test suite. The engine, plan, certification, variables, Entra ID tokens and SSH tunnels work unchanged. <a href="https://github.com/lonebadger-tech/badger-sql-migrate/blob/dev/docs/writing-a-provider.md">Writing a provider</a> walks through it, and <a href="https://github.com/lonebadger-tech/badger-sql-migrate/blob/dev/CONTRIBUTING.md">CONTRIBUTING.md</a> covers sending it upstream. PostgreSQL, MySQL and SQLite are natural next providers.</p>
+<p>A provider implements <code>IDatabaseProvider</code>: sessions, batch splitting, linting, journal tables, a deploy lock, a schema fingerprint, and optionally environment resources. It must pass the shared conformance test suite. The engine, plan, certification, variables, Entra ID tokens and SSH tunnels work unchanged; the PostgreSQL provider was added this way without touching any of them. <a href="https://github.com/lonebadger-tech/badger-sql-migrate/blob/dev/docs/writing-a-provider.md">Writing a provider</a> walks through it, and <a href="https://github.com/lonebadger-tech/badger-sql-migrate/blob/dev/CONTRIBUTING.md">CONTRIBUTING.md</a> covers sending it upstream. MySQL and SQLite are natural next providers.</p>
 
 <h2>Source</h2>
 <p><a href="https://github.com/lonebadger-tech/badger-sql-migrate">github.com/lonebadger-tech/badger-sql-migrate</a> · <a href="{BASE}/license/">MIT license</a>. Contributions welcome.</p>

@@ -57,6 +57,9 @@ public interface IDatabaseProvider
     /// <summary>Creates temporary databases; null when the provider cannot.</summary>
     IScratchDatabases? ScratchDatabases => null;
 
+    /// <summary>The schema unqualified names live in ("dbo" on SQL Server, "public" on PostgreSQL).</summary>
+    string DefaultSchema => "dbo";
+
     /// <summary>Quotes an identifier (schema or table name) for this vendor. Default: ANSI double quotes.</summary>
     string QuoteIdentifier(string name) => "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
 }

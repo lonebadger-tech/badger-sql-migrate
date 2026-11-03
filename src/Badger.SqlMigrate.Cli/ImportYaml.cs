@@ -47,7 +47,20 @@ public static class ImportYaml
         sb.Append("\nenvironments:\n");
         if (imported.Environments.Count == 0)
         {
-            sb.Append("""
+            sb.Append((providerId == "postgresql"
+                ? """
+                  local:                               # where to deploy: edit to match your server
+                    host: localhost
+                    port: 5432
+                    database: mydatabase
+                    authentication: password
+                    user: postgres
+                    password: ${env:BSM_LOCAL_PASSWORD}
+                    tls:
+                      mode: optional                   # local development only
+
+                """
+                : """
                   local:                               # where to deploy: edit to match your server
                     host: localhost
                     port: 1433
@@ -59,7 +72,7 @@ public static class ImportYaml
                       mode: mandatory
                       trustServerCertificate: true     # local development only
 
-                """.Replace("\r\n", "\n", StringComparison.Ordinal));
+                """).Replace("\r\n", "\n", StringComparison.Ordinal));
         }
 
         foreach (var environment in imported.Environments)

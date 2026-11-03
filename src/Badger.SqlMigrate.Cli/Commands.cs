@@ -11,6 +11,7 @@ using Badger.SqlMigrate.Core.Plan;
 using Badger.SqlMigrate.Core.Preprocessing;
 using Badger.SqlMigrate.Core.Project;
 using Badger.SqlMigrate.Core.Providers;
+using Badger.SqlMigrate.Providers.PostgreSql;
 using Badger.SqlMigrate.Providers.SqlServer;
 
 namespace Badger.SqlMigrate.Cli;
@@ -31,7 +32,9 @@ public static class Commands
 
     /// <summary>The only place providers are registered. Adding a vendor = one line here plus a package reference.</summary>
     public static readonly ProviderRegistry Providers = new ProviderRegistry()
-        .Register(SqlServerProvider.ProviderId, () => new SqlServerProvider());
+        .Register(SqlServerProvider.ProviderId, () => new SqlServerProvider())
+        .Register(PostgreSqlProvider.ProviderId, () => new PostgreSqlProvider())
+        .Register("postgres", () => new PostgreSqlProvider());
 
     public static string ToolVersion { get; } =
         typeof(Commands).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.0.0";
@@ -66,7 +69,7 @@ public static class Commands
         Directory.CreateDirectory(Path.Combine(dir, MigrationProject.RepeatableFolder));
         Directory.CreateDirectory(Path.Combine(dir, MigrationProject.EnvironmentsFolder));
 
-        WriteIfMissing(Path.Combine(dir, BsmConfig.FileName), $$"""
+        WriteIfMissing(Path.Combine(dir, BsmConfig.FileName), provider.Id == PostgreSqlProvider.ProviderId ? PostgreSqlConfigTemplate : $$"""
             # Badger SQL Migrate configuration
             provider: {{provider.Id}}
             defaultEnvironment: local
@@ -134,6 +137,45 @@ public static class Commands
         return Ok;
     }
 
+    private const string PostgreSqlConfigTemplate = """
+        # Badger SQL Migrate configuration
+        provider: postgresql
+        defaultEnvironment: local
+
+        # Script variables, referenced as {Name} in scripts. Values are not part of change hashes.
+        # Environments can override them under their own 'variables:'.
+        variables: {}
+
+        environments:
+          # Names starting with '_' are templates: other environments inherit them with 'extends'.
+          _azure:
+            database: mydatabase
+            tls: { mode: strict }
+            authentication: entraDefault       # Azure Database for PostgreSQL: Entra token as the password
+            user: myapp-deployers              # the Entra user, group or managed identity the server knows
+
+          local:
+            host: localhost
+            port: 5432
+            database: mydatabase
+            authentication: password
+            user: postgres
+            password: ${env:BSM_LOCAL_PASSWORD}
+            tls:
+              mode: optional                   # local development only
+
+        #  prod:
+        #    extends: _azure
+        #    host: myapp-prod.postgres.database.azure.com
+        #    protected: true                  # deploy/revert require typing the environment name (or --yes)
+        #    allowRevert: false               # fix forward in production
+        #    ordering: strict                 # exact plan order; prod history is certified
+        #    connectionProperties:            # any Npgsql connection-string keyword
+        #      Search Path: app,public
+        #      Command Timeout: 120
+
+        """;
+
     private static void WriteGitAttributes(string dir)
     {
         var gitattributes = Path.Combine(dir, ".gitattributes");
@@ -145,14 +187,21 @@ public static class Commands
         }
     }
 
-    public static int ImportFlyway(GlobalOptions g, string path, string? configFile, string[] locations, bool dryRun)
+    public static int ImportFlyway(GlobalOptions g, string path, string? configFile, string[] locations, bool dryRun, string providerId = SqlServerProvider.ProviderId)
     {
         RequireWorkingCopy(g, "import");
-        var imported = FlywayImporter.Import(new FlywayImportOptions { Path = path, ConfigFile = configFile, Locations = locations, MapConnection = JdbcSqlServer.Map });
-        return WriteImport(g, imported, dryRun);
+        var provider = Providers.Resolve(providerId);
+        var imported = FlywayImporter.Import(new FlywayImportOptions
+        {
+            Path = path,
+            ConfigFile = configFile,
+            Locations = locations,
+            MapConnection = provider.Id == PostgreSqlProvider.ProviderId ? JdbcPostgreSql.Map : JdbcSqlServer.Map,
+        });
+        return WriteImport(g, imported, dryRun, provider);
     }
 
-    public static int ImportDbUp(GlobalOptions g, string path, bool fileNames, string[] runAlways, bool noVariables, bool dryRun)
+    public static int ImportDbUp(GlobalOptions g, string path, bool fileNames, string[] runAlways, bool noVariables, bool dryRun, string providerId = SqlServerProvider.ProviderId)
     {
         RequireWorkingCopy(g, "import");
         var imported = DbUpImporter.Import(new DbUpImportOptions
@@ -163,10 +212,10 @@ public static class Commands
             Variables = ParseVariables(g.Variables),
             VariablesDisabled = noVariables,
         });
-        return WriteImport(g, imported, dryRun);
+        return WriteImport(g, imported, dryRun, Providers.Resolve(providerId));
     }
 
-    public static int ImportGrate(GlobalOptions g, string path, string[] folders, string[] environments, bool ignoreDirectoryNames, bool noTokens, bool dryRun)
+    public static int ImportGrate(GlobalOptions g, string path, string[] folders, string[] environments, bool ignoreDirectoryNames, bool noTokens, bool dryRun, string providerId = SqlServerProvider.ProviderId)
     {
         RequireWorkingCopy(g, "import");
         var renamed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -190,17 +239,20 @@ public static class Commands
             IgnoreDirectoryNames = ignoreDirectoryNames,
             TokenReplacementDisabled = noTokens,
         });
-        return WriteImport(g, imported, dryRun);
+        return WriteImport(g, imported, dryRun, Providers.Resolve(providerId));
     }
 
-    public static int ImportSqitch(GlobalOptions g, string path, string? engine, bool dryRun)
+    public static int ImportSqitch(GlobalOptions g, string path, string? engine, bool dryRun, string? providerId = null)
     {
         RequireWorkingCopy(g, "import");
-        return WriteImport(g, SqitchImporter.Import(new SqitchImportOptions { Path = path, Engine = engine }), dryRun);
+        var imported = SqitchImporter.Import(new SqitchImportOptions { Path = path, Engine = engine });
+        // Sqitch projects for PostgreSQL ("pg") move to the PostgreSQL provider unless told otherwise.
+        providerId ??= imported.SourceEngine is "pg" or "postgres" or "postgresql" or "cockroach" ? PostgreSqlProvider.ProviderId : SqlServerProvider.ProviderId;
+        return WriteImport(g, imported, dryRun, Providers.Resolve(providerId));
     }
 
     /// <summary>Writes an imported project into the (new) project folder: scripts, plan, bsm.yaml and .gitattributes.</summary>
-    private static int WriteImport(GlobalOptions g, ImportedProject imported, bool dryRun)
+    private static int WriteImport(GlobalOptions g, ImportedProject imported, bool dryRun, IDatabaseProvider provider)
     {
         var dir = Path.GetFullPath(g.ProjectDir);
         foreach (var existing in new[] { BsmConfig.FileName, PlanFile.FileName })
@@ -217,7 +269,7 @@ public static class Commands
             throw new MigrationException($"{changesDir} is not empty. Import into a new folder.");
         }
 
-        MarkNonTransactional(imported, Providers.Resolve(SqlServerProvider.ProviderId));
+        MarkNonTransactional(imported, provider);
         var tool = imported.Tool.ToLowerInvariant();
         if (g.Out.Json)
         {
@@ -281,7 +333,6 @@ public static class Commands
         }
 
         Write();
-        var provider = Providers.Resolve(SqlServerProvider.ProviderId);
         var project = MigrationProject.Load(dir, provider.Id);
         foreach (var problem in project.Problems)
         {
@@ -300,7 +351,7 @@ public static class Commands
             Directory.CreateDirectory(dir);
             imported.WriteScripts(dir);
             Directory.CreateDirectory(Path.Combine(dir, MigrationProject.EnvironmentsFolder));
-            File.WriteAllText(Path.Combine(dir, BsmConfig.FileName), ImportYaml.Write(imported, SqlServerProvider.ProviderId), Utf8NoBom);
+            File.WriteAllText(Path.Combine(dir, BsmConfig.FileName), ImportYaml.Write(imported, provider.Id), Utf8NoBom);
             WriteGitAttributes(dir);
         }
     }
@@ -392,7 +443,7 @@ public static class Commands
     }
 
     /// <summary>Other tools' journal tables, never part of a generated change.</summary>
-    private static readonly string[] DefaultScriptExclusions = ["*.flyway_schema_history", "*.SchemaVersions", "grate.*", "RoundhousE.*", "*.__EFMigrationsHistory"];
+    private static readonly string[] DefaultScriptExclusions = ["*.flyway_schema_history", "*.SchemaVersions", "grate.*", "RoundhousE.*", "sqitch.*", "*.__EFMigrationsHistory"];
 
     /// <summary>
     /// Captures schema edits made directly in a database as a new change: builds a shadow database from the plan
@@ -1360,7 +1411,7 @@ public static class Commands
         IReadOnlyList<string> repeatables = [];
         if (from is not null)
         {
-            var (schema, table) = SplitTable(journal, from);
+            var (schema, table) = SplitTable(journal, from, ctx.Provider.DefaultSchema);
             var project = MigrationProject.Load(Open(g).ProjectDir, ctx.Provider.Id, ctx.Environment.Name);
             string Rendered(RepeatableScript r) => ctx.Engine.Render(r.Name, "repeatable", r.Script).Text;
             switch (from.ToLowerInvariant())
@@ -1373,13 +1424,16 @@ public static class Commands
                 case "dbup":
                     to = ForeignJournal.DbUpTarget(project, await ForeignJournal.ReadDbUpAsync(ctx.Session, ctx.Provider, schema, table, ct));
                     break;
+                case "sqitch":
+                    to = ForeignJournal.SqitchTarget(project, await ForeignJournal.ReadSqitchAsync(ctx.Session, ctx.Provider, schema, table, ct), checkHashes: !skipChecksums);
+                    break;
                 case "grate" or "roundhouse":
                     var runs = await ForeignJournal.ReadGrateAsync(ctx.Session, ctx.Provider, schema, table, ct);
                     to = ForeignJournal.GrateTarget(project, runs, skipChecksums ? null : change => ctx.Engine.Render(change.Name, "deploy", change.DeployScript, change.ScriptHash).Text);
                     repeatables = ForeignJournal.GrateRepeatables(project, runs, Rendered);
                     break;
                 default:
-                    throw new MigrationException("--from must be flyway, dbup, grate or roundhouse.");
+                    throw new MigrationException("--from must be flyway, dbup, grate, roundhouse or sqitch.");
             }
             if (to is null)
             {
@@ -1725,14 +1779,15 @@ public static class Commands
     }
 
     /// <summary>"schema.table" or "table", with each tool's default schema and table (RoundhousE: RoundhousE.ScriptsRun).</summary>
-    private static (string Schema, string Table) SplitTable(string? journal, string tool)
+    private static (string Schema, string Table) SplitTable(string? journal, string tool, string defaultSchema)
     {
         var (schema, table) = tool.ToLowerInvariant() switch
         {
-            "dbup" => ("dbo", ForeignJournal.DbUpDefaultTable),
+            "dbup" => (defaultSchema, ForeignJournal.DbUpDefaultTable),
             "grate" => (ForeignJournal.GrateDefaultSchema, ForeignJournal.GrateDefaultTable),
             "roundhouse" => ("RoundhousE", ForeignJournal.GrateDefaultTable),
-            _ => ("dbo", ForeignJournal.FlywayDefaultTable),
+            "sqitch" => (ForeignJournal.SqitchDefaultSchema, ForeignJournal.SqitchDefaultTable),
+            _ => (defaultSchema, ForeignJournal.FlywayDefaultTable),
         };
         if (string.IsNullOrWhiteSpace(journal))
         {

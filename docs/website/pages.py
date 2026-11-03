@@ -39,7 +39,7 @@ def home():
   <img class="icon" src="{BASE}/icon.svg" alt="Badger SQL Migrate icon">
   <div>
     <h1>Badger SQL Migrate</h1>
-    <p class="lede">Database migrations for SQL Server and Azure SQL that you can prove. Free, cross-platform, with real up <em>and</em> down.</p>
+    <p class="lede">Database migrations for SQL Server, Azure SQL and PostgreSQL that you can prove. Free, cross-platform, with real up <em>and</em> down.</p>
     <div class="actions">
       <a class="button primary" href="{BASE}/download/">Download {VERSION}</a>
       <a class="button" href="{BASE}/docs/quick-start/">Quick start</a>
@@ -83,7 +83,7 @@ bsm revert --to create-customer -e test''')}
 
 <p><a href="{BASE}/docs/">Documentation</a> · <a href="{BASE}/examples/">Example scripts</a> · <a href="{BASE}/download/">Download</a> · <a href="{BASE}/releases/">What's new</a> · <a href="https://github.com/lonebadger-tech/badger-sql-migrate">Source on GitHub</a></p>
 """
-    return Page("", "Badger SQL Migrate: hash-certified SQL Server migrations", "Free, cross-platform, hash-certified database migrations for SQL Server and Azure SQL with real up and down, named changes, environments, Entra ID and Always Encrypted.", body)
+    return Page("", "Badger SQL Migrate: hash-certified SQL Server and PostgreSQL migrations", "Free, cross-platform, hash-certified database migrations for SQL Server, Azure SQL and PostgreSQL with real up and down, named changes, environments, Entra ID and Always Encrypted.", body)
 
 
 # ---------------------------------------------------------------- download
@@ -179,6 +179,19 @@ def releases():
     body = f"""
 <section class="release" id="v{VERSION}">
   <h2>Version {VERSION} <span class="date">{RELEASE_DATE}</span></h2>
+  <h3>PostgreSQL</h3>
+  <ul>
+    <li>A PostgreSQL provider (PostgreSQL 12 and later, Azure Database for PostgreSQL, Amazon RDS and Aurora): <code>bsm init --provider postgresql</code></li>
+    <li>Everything SQL Server has: certified plans, revert from stored scripts, environments, variables, bundles, <code>diff-schema</code>, rework, repair and imports</li>
+    <li>Statement splitting that understands dollar-quoted bodies; <code>CREATE INDEX CONCURRENTLY</code> and friends run in <code>!notx</code> changes</li>
+    <li>Password, Kerberos and Entra ID sign-in (Azure Database for PostgreSQL), TLS modes, SSH tunnels, any Npgsql setting</li>
+    <li>A schema fingerprint over PostgreSQL's catalog: tables, partitions, constraints, indexes, views, functions, triggers, types, sequences, policies</li>
+    <li><code>bsm baseline --from sqitch</code> adopts PostgreSQL databases Sqitch deployed, checking its script hashes; imports take <code>--provider postgresql</code></li>
+  </ul>
+</section>
+
+<section class="release" id="v0.2.0">
+  <h2>Version 0.2.0 <span class="date">November 2026</span></h2>
   <h3>Fixing deployed changes</h3>
   <ul>
     <li><code>bsm rework</code> adds a change that supersedes a deployed one, with a revert that restores the previous version</li>
@@ -279,7 +292,7 @@ def compare():
     table = "<table><thead>" + head + "</thead><tbody>" + "".join(
         "<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows) + "</tbody></table>"
     body = f"""
-<p>Every tool here is good at something. This is how Badger SQL Migrate's design relates to them, for SQL Server and Azure SQL. Feature sets change; check each project for its current state.</p>
+<p>Every tool here is good at something. This is how Badger SQL Migrate's design relates to them, for SQL Server, Azure SQL and PostgreSQL. Feature sets change; check each project for its current state.</p>
 {table}
 
 <h2>What Badger SQL Migrate keeps</h2>
@@ -303,7 +316,7 @@ def compare():
 <p>Coming from another tool? See <a href="{BASE}/docs/baseline/">Existing databases</a> for adopting a database that is already in production.</p>
 """
     return Page("compare/", "Badger SQL Migrate compared with Flyway, DbUp, grate, EF, SSDT, Sqitch and Liquibase",
-                "How Badger SQL Migrate compares with other database migration tools for SQL Server.", body,
+                "How Badger SQL Migrate compares with other database migration tools for SQL Server and PostgreSQL.", body,
                 heading="How it compares", lede="Flyway, DbUp, grate, EF Core migrations, SSDT, Sqitch and Liquibase.", wide=True)
 
 

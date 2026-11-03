@@ -202,22 +202,50 @@ public sealed class GrateSqitchImportTests : IDisposable
         Assert.Equal("-- revert users@v1.0.0", imported.Changes[1].Revert);
         Assert.Equal("CREATE TABLE users (nick TEXT, twitter TEXT);", imported.Changes[3].Deploy);
         Assert.Equal("-- verify users", imported.Changes[3].Verify);
-        Assert.Equal("sqitch users#2: Add twitter column.", imported.Changes[3].Note);
+        Assert.Equal($"sqitch flipr:users#2 sha1 {Sha1("CREATE TABLE users (nick TEXT, twitter TEXT);")}: Add twitter column.", imported.Changes[3].Note);
         Assert.Equal(ChangeFlags.NoTransaction, imported.Changes[0].Flags);
         Assert.Equal(ChangeFlags.Irreversible, imported.Changes[4].Flags);
         Assert.Equal("SELECT '{{note}}';", imported.Changes[4].Deploy);
         Assert.Equal(("Ada_Lovelace", new DateTimeOffset(2026, 11, 3, 20, 56, 5, TimeSpan.Zero)), (imported.Changes[0].Author, imported.Changes[0].PlannedAt!.Value));
-        Assert.False(imported.CanBaselineFromJournal);
+        Assert.True(imported.CanBaselineFromJournal);
+        Assert.Equal("pg", imported.SourceEngine);
         var warnings = string.Join("\n", imported.Warnings);
         Assert.Contains("conflicts with 'gone'", warnings, StringComparison.Ordinal);
         Assert.Contains("'other:thing' from another Sqitch project", warnings, StringComparison.Ordinal);
-        Assert.Contains("copied as written for pg", warnings, StringComparison.Ordinal);
+        Assert.Contains("copied as written for PostgreSQL", warnings, StringComparison.Ordinal);
 
         var project = WriteAndLoad(imported);
         Assert.Empty(project.Problems);
         Assert.Equal(["users", "flips"], project.Changes[4].Plan.Requires);
         Assert.Equal(2, project.Plan.ResolveTarget("@v1.0.0"));
         Assert.Equal("-- verify users", project.Changes[3].VerifyScript);
+    }
+
+    private static string Sha1(string text) => Convert.ToHexStringLower(System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
+
+    [Fact]
+    public void Sqitch_target_follows_the_registry_with_reworks_and_checks_hashes()
+    {
+        Write("sqitch.conf", "[core]\n\tengine = pg\n");
+        Write("sqitch.plan", "%project=flipr\na 2026-11-03T20:56:05Z A <a@b>\nb [a] 2026-11-03T20:56:05Z A <a@b>\n@v1 2026-11-03T20:56:05Z A <a@b>\nb [b@v1] 2026-11-03T20:56:06Z A <a@b>\nc 2026-11-03T20:56:07Z A <a@b>\n");
+        Write("deploy/a.sql", "A");
+        Write("deploy/b@v1.sql", "B1");
+        Write("deploy/b.sql", "B2");
+        Write("deploy/c.sql", "C");
+        var project = WriteAndLoad(SqitchImporter.Import(new SqitchImportOptions { Path = dir }));
+        SqitchChangeRow Row(string change, string text, string projectName = "flipr") => new(change, projectName, Sha1(text));
+
+        Assert.Null(ForeignJournal.SqitchTarget(project, [], true));
+        Assert.Equal("b", ForeignJournal.SqitchTarget(project, [Row("a", "A"), Row("b", "B1"), Row("other", "x", "another-project")], true));
+        Assert.Equal("b-v2", ForeignJournal.SqitchTarget(project, [Row("a", "A"), Row("b", "B1"), Row("b", "B2")], true));
+
+        var changed = Assert.Throws<MigrationException>(() => ForeignJournal.SqitchTarget(project, [Row("a", "edited")], true));
+        Assert.Contains("'a': Sqitch recorded script hash", changed.Message, StringComparison.Ordinal);
+        Assert.Equal("a", ForeignJournal.SqitchTarget(project, [Row("a", "edited")], false));
+
+        var gap = Assert.Throws<MigrationException>(() => ForeignJournal.SqitchTarget(project, [Row("a", "A"), Row("c", "C")], true));
+        Assert.Contains("'b' was not deployed by Sqitch", gap.Message, StringComparison.Ordinal);
+        Assert.Contains("'b-v2' was not deployed by Sqitch", gap.Message, StringComparison.Ordinal);
     }
 
     [Fact]

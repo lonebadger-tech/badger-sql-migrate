@@ -6,7 +6,7 @@
 
 Free, open-source, cross-platform (Windows, macOS, Linux) database migrations with **real up and down**, **named changes instead of version numbers**, and **SHA-256 hash certification** of everything that reaches a database.
 
-Day one ships the **SQL Server / Azure SQL** provider. The engine is vendor-neutral, so PostgreSQL, MySQL and SQLite can be added as providers without touching the engine or CLI.
+Providers: **SQL Server / Azure SQL** and **PostgreSQL** (`bsm init --provider postgresql`). The engine is vendor-neutral, so MySQL and SQLite can be added as providers without touching the engine or CLI.
 
 - **Documentation:** [lonebadger.tech/badger-sql-migrate](https://lonebadger.tech/badger-sql-migrate/) (also as Markdown for AI assistants: [llms.txt](https://www.lonebadger.tech/llms.txt))
 - **Download:** [standalone binaries](https://lonebadger.tech/badger-sql-migrate/download/) or `dotnet tool install -g Badger.SqlMigrate`
@@ -183,6 +183,7 @@ Adding a database vendor: see [docs/writing-a-provider.md](docs/writing-a-provid
 | `src/Badger.SqlMigrate.Core` | Plan, hashing and certification, preprocessor, engine. No database driver |
 | `src/Badger.SqlMigrate.Connectivity` | Entra ID tokens, SSH tunnels, secrets (vendor-neutral) |
 | `src/Badger.SqlMigrate.Providers.SqlServer` | The SQL Server / Azure SQL provider |
+| `src/Badger.SqlMigrate.Providers.PostgreSql` | The PostgreSQL provider (Npgsql) |
 | `src/Badger.SqlMigrate.Cli` | The `bsm` command (packaged as the `Badger.SqlMigrate` .NET tool) |
 | `tests/` | Unit tests, the shared provider conformance suite, architecture tests |
 | `samples/demo-db` | A runnable sample project |
