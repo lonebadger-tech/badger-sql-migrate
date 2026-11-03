@@ -32,11 +32,30 @@ Shared development databases see merges in arbitrary order. Each profile picks a
 
 `revert.sql` is required unless the change is marked `!irreversible`. At deploy time the deploy, revert and verify scripts are stored in `bsm.changes`. Revert executes the **stored** revert script, so it works from any branch or machine, even after the change was removed from the working copy (`status` lists such changes as orphans).
 
+Repeatables keep their previous definition in `bsm.repeatables`; `bsm revert --repeatable <name>` re-applies it.
+
+## Fixing deployed changes
+
+A deployed change is immutable: any edit changes its hash, and deploy refuses the mismatch. Two ways forward:
+
+- `bsm rework <change>` adds `<change>-v2`, which requires the original. Its deploy script starts as a copy of the original's, and its revert script is the original's deploy script, so reverting the rework restores the previous version. For definitions that can be re-run (procedures, views, permissions).
+- `bsm repair <change>` accepts an edit without running SQL. It records the working copy's scripts, hash and flags, recomputes the chain ids of every later change from the database's deploy order, and logs a `repair` event with the old hash and a reason. Meant for revert or verify fixes and comment-only edits; an edited `deploy.sql` triggers a warning and a forced confirmation, because databases that ran the old script keep its result.
+
+## Bundles
+
+`bsm bundle create` writes a zip of the plan, the planned change folders, repeatables, environment scripts and (optionally) `bsm.yaml`, plus `bsm-bundle.json` with each file's SHA-256, the provider, the plan head and a content hash. Text is normalized and entries are sorted with fixed timestamps, so the same commit gives a byte-identical bundle on every OS. `--bundle <file>` verifies every hash, rejects missing or extra files, extracts to a temporary folder and recomputes the plan head before any command runs.
+
 ## Transactions
 
 Each change, its verify script and its journal row commit in one transaction. If anything fails the transaction rolls back, a `fail` event is recorded and the database is unchanged. Statements SQL Server refuses inside a transaction (ALTER DATABASE, full-text DDL, RECONFIGURE, resumable index operations) are caught by the linter; mark such changes `!notx` and write them so they can be re-run.
 
 Providers without transactional DDL (e.g. MySQL) declare it in their capabilities; the engine then records a change only after it succeeds.
+
+## Schema diff
+
+Providers split their schema dump into entries keyed by object (`column dbo.Customer.Email`, `module dbo.vCustomer`). `bsm diff-schema` compares the live schema with the snapshot recorded after the last run, or two environments, and reports added, removed and changed entries, with a line diff for multi-line definitions. Entries whose key repeats in a dump (several system-named constraints on one table) are compared by full text.
+
+The SQL Server dump also records system versioning (period columns, versioning state, history table, retention) and partitioning (function type, direction and boundaries; scheme filegroups; the scheme and column of each partitioned index). A history table SQL Server named itself (`MSSQL_TemporalHistoryFor_<object id>`) is recorded under its table's name, because the id differs per server. An environment can set `schemaFingerprint.partitionBoundaries: ignore` when a job splits and merges partitions. The dump format has a version (`schema_format` in `bsm.meta`); a snapshot taken with an older format that no longer matches produces a warning instead of a drift error until the next deploy re-records it.
 
 ## Concurrency
 

@@ -30,7 +30,16 @@ public sealed class SqlServerEnvironmentResources : IEnvironmentResources
         var problems = new List<string>();
         foreach (var unknown in AlwaysEncryptedSettings.UnknownSections(environment.ProviderSettings))
         {
-            problems.Add($"environment '{environment.Name}': unknown SQL Server setting '{unknown}'. Known: {AlwaysEncryptedSettings.SectionName}.");
+            problems.Add($"environment '{environment.Name}': unknown SQL Server setting '{unknown}'. Known: {AlwaysEncryptedSettings.SectionName}, {SchemaFingerprintSettings.SectionName}.");
+        }
+
+        try
+        {
+            SchemaFingerprintSettings.From(environment);
+        }
+        catch (MigrationException ex)
+        {
+            problems.Add(ex.Message);
         }
 
         AlwaysEncryptedSettings? settings;

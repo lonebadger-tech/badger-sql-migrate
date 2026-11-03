@@ -57,3 +57,32 @@ public class TSqlBatchParserTests
         Assert.Single(parser.Split("GO\n\nGO\nSELECT 1;\nGO\n\n"));
     }
 }
+
+public class SchemaInspectorParseTests
+{
+    [Fact]
+    public void Groups_module_lines_and_keys_entries_by_object()
+    {
+        var dump = string.Join('\n',
+            "column|dbo.Customer|1|Id|int|4|10|0|0|0||||<system>|0|0|||",
+            "column|dbo.Customer|2|Email|nvarchar|200|0|0|1|0|SQL_Latin1_General_CP1_CI_AS|||<system>|0|0|||",
+            "index|dbo.Customer|<system>|CLUSTERED|1|1|0||Id",
+            "module|V |dbo.vCustomer|CREATE VIEW dbo.vCustomer",
+            "AS",
+            "SELECT Id FROM dbo.Customer",
+            "object|U |dbo.Customer",
+            "partitioned|dbo.Sale|PK_Sale|psSaleDate|SaleDate",
+            "pfunction|pfSaleDate|date|3|10|0||RIGHT|2026-01-01",
+            "pscheme|psSaleDate|pfSaleDate|PRIMARY,PRIMARY",
+            "schema|sales",
+            "temporal|dbo.Price|SYSTEM_VERSIONED_TEMPORAL_TABLE|ValidFrom|ValidTo|dbo.PriceHistory||");
+
+        var entries = new SqlServerSchemaInspector().Parse(dump);
+
+        Assert.Equal(
+            ["column dbo.Customer.Id", "column dbo.Customer.Email", "index dbo.Customer.<system>", "module dbo.vCustomer", "object dbo.Customer", "partitioned dbo.Sale.PK_Sale", "pfunction pfSaleDate", "pscheme psSaleDate", "schema sales", "temporal dbo.Price"],
+            entries.Select(e => e.Key));
+        Assert.Equal("module|V |dbo.vCustomer|CREATE VIEW dbo.vCustomer\nAS\nSELECT Id FROM dbo.Customer", entries[3].Text);
+        Assert.Empty(new SqlServerSchemaInspector().Parse(string.Empty));
+    }
+}

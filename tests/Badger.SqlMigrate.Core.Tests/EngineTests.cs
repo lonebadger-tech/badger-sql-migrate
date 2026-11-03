@@ -289,4 +289,117 @@ public sealed class EngineTests : IDisposable
         Assert.Equal(["A", "B"], db.Objects.Order());
         Assert.Equal(["a"], db.Changes.Select(c => c.Name));
     }
+
+    [Fact]
+    public async Task Repair_records_edited_scripts_and_rechains_later_changes()
+    {
+        project.Change("a", "CREATE A", "FAIL").Change("b", "CREATE B", "DROP B").Change("c", "CREATE C", "DROP C");
+        await Engine().DeployAsync(new DeployOptions());
+        project.Write("changes/a/revert.sql", "DROP A");
+
+        var status = await Engine().StatusAsync();
+        Assert.False(status.Certified);
+        Assert.Equal(["a"], status.Mismatched.Select(m => m.Change.Name));
+
+        var dry = await Engine().RepairAsync(new RepairOptions { All = true, DryRun = true });
+        Assert.Equal(["a"], dry.Repaired.Select(r => r.Name));
+        Assert.DoesNotContain(db.Events, e => e.Kind == MigrationEventKind.Repair);
+
+        var executed = db.Executed.Count;
+        var result = await Engine().RepairAsync(new RepairOptions { Names = ["a"], Reason = "revert was wrong" });
+
+        Assert.Equal(["revert.sql"], result.Repaired.Single().Scripts);
+        Assert.Equal(executed, db.Executed.Count);
+        var after = await Engine().StatusAsync();
+        Assert.True(after.UpToDate);
+        Assert.True(after.Certified);
+        Assert.Equal(project.Load().Changes.Select(c => c.ChainId), db.Changes.OrderBy(c => c.Sequence).Select(c => c.ChainId));
+        Assert.Contains(db.Events, e => e.Kind == MigrationEventKind.Repair && e.Name == "a" && e.Message!.Contains("revert was wrong", StringComparison.Ordinal));
+
+        Assert.Equal(["c", "b", "a"], (await Engine().RevertAsync(new RevertOptions { All = true })).Reverted);
+        Assert.Empty(db.Objects);
+    }
+
+    [Fact]
+    public async Task Repair_refuses_pending_and_unknown_changes_and_skips_matching_ones()
+    {
+        project.Change("a", "CREATE A", "DROP A").Change("b", "CREATE B", "DROP B");
+        await Engine().DeployAsync(new DeployOptions { To = "a" });
+
+        await Assert.ThrowsAsync<MigrationException>(() => Engine().RepairAsync(new RepairOptions { Names = ["b"] }));
+        await Assert.ThrowsAsync<MigrationException>(() => Engine().RepairAsync(new RepairOptions { Names = ["nope"] }));
+        await Assert.ThrowsAsync<MigrationException>(() => Engine().RepairAsync(new RepairOptions()));
+        Assert.Empty((await Engine().RepairAsync(new RepairOptions { Names = ["a"] })).Repaired);
+    }
+
+    [Fact]
+    public async Task Repair_reports_a_plan_line_change()
+    {
+        project.Change("a", "CREATE A", "DROP A").Change("b", "CREATE B", "DROP B");
+        await Engine().DeployAsync(new DeployOptions());
+        project.WritePlan("a\nb !notx\n");
+
+        var result = await Engine().RepairAsync(new RepairOptions { All = true });
+
+        Assert.Equal(["plan line"], result.Repaired.Single().Scripts);
+        Assert.True((await Engine().StatusAsync()).Certified);
+        Assert.Equal(2, db.Changes.Single(c => c.Name == "b").Flags);
+    }
+
+    [Fact]
+    public async Task Repeatable_revert_reapplies_the_previous_definition()
+    {
+        project.Change("a", "CREATE A", "DROP A").Repeatable("views/v.sql", "PRINT v1");
+        await Engine().DeployAsync(new DeployOptions());
+        var once = await Assert.ThrowsAsync<MigrationException>(() => Engine().RevertAsync(new RevertOptions { Repeatables = ["views/v.sql"] }));
+        Assert.Contains("only been applied once", once.Message, StringComparison.Ordinal);
+
+        project.Repeatable("views/v.sql", "PRINT v2");
+        await Engine().DeployAsync(new DeployOptions());
+
+        var dry = await Engine().RevertAsync(new RevertOptions { Repeatables = ["views/v.sql"], DryRun = true });
+        Assert.Equal(["views/v.sql"], dry.Repeatables);
+        Assert.Equal("PRINT v2", db.Repeatables.Single().Script);
+
+        var result = await Engine().RevertAsync(new RevertOptions { Repeatables = ["views/v.sql"] });
+
+        Assert.Equal(["views/v.sql"], result.Repeatables);
+        Assert.Empty(result.Reverted);
+        Assert.Equal("PRINT v1", db.Executed[^1]);
+        var row = db.Repeatables.Single();
+        Assert.Equal("PRINT v1", row.Script);
+        Assert.Equal("PRINT v2", row.PreviousScript);
+        Assert.Single(db.Objects);
+        Assert.Equal(["views/v.sql"], (await Engine().DeployAsync(new DeployOptions())).Repeatables);
+        Assert.Equal("PRINT v2", db.Repeatables.Single().Script);
+    }
+
+    [Fact]
+    public async Task Revert_needs_exactly_one_selector()
+    {
+        project.Change("a", "CREATE A", "DROP A");
+        await Assert.ThrowsAsync<MigrationException>(() => Engine().RevertAsync(new RevertOptions { All = true, Repeatables = ["views/v.sql"] }));
+        await Assert.ThrowsAsync<MigrationException>(() => Engine().RevertAsync(new RevertOptions { Repeatables = ["views/missing.sql"] }));
+    }
+
+    [Fact]
+    public async Task Drift_against_a_snapshot_in_an_older_fingerprint_format_is_a_warning_until_the_next_deploy()
+    {
+        project.Change("a", "CREATE A", "DROP A");
+        await Engine().DeployAsync(new DeployOptions());
+        db.Meta.Remove(MigrationEngine.SchemaFormatMetaKey);
+        db.Objects.Add("FORMAT_CHANGE");
+
+        var upgraded = new FakeProvider { FormatVersion = 2 };
+        var result = await Engine(p: upgraded).VerifyAsync();
+        Assert.True(result.Drifted);
+        Assert.True(result.Ok);
+        Assert.True(await Engine(p: upgraded).RecordedWithOtherSchemaFormatAsync());
+
+        project.Change("b", "CREATE B", "DROP B");
+        await Engine(p: upgraded).DeployAsync(new DeployOptions());
+        Assert.Equal("2", db.Meta[MigrationEngine.SchemaFormatMetaKey]);
+        db.Objects.Add("REAL_DRIFT");
+        Assert.False((await Engine(p: upgraded).VerifyAsync()).Ok);
+    }
 }

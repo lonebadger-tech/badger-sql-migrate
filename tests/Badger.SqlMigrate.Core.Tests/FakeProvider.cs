@@ -144,6 +144,8 @@ public sealed class FakeProvider : IDatabaseProvider, IStateStore, IDeployLock, 
 
     public int LocksTaken { get; private set; }
 
+    public int FormatVersion { get; init; } = 1;
+
     public ProviderCapabilities Capabilities => new() { TransactionalDdl = TransactionalDdl, SupportsDeployLock = true, SupportsSchemaFingerprint = true };
 
     public IScriptParser Parser => this;
@@ -225,6 +227,14 @@ public sealed class FakeProvider : IDatabaseProvider, IStateStore, IDeployLock, 
     public Task DeleteChangeAsync(IDatabaseSession session, string schema, string name, CancellationToken cancellationToken)
     {
         Db(session).Changes.RemoveAll(c => c.Name == name);
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateChangeAsync(IDatabaseSession session, string schema, AppliedChange change, CancellationToken cancellationToken)
+    {
+        var changes = Db(session).Changes;
+        var i = changes.FindIndex(c => c.Name == change.Name);
+        changes[i] = change with { Sequence = changes[i].Sequence };
         return Task.CompletedTask;
     }
 

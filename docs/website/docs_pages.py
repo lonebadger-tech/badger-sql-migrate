@@ -13,8 +13,10 @@ SIDEBAR = [
         ("Changes and scripts", "docs/changes/"),
         ("Hash certification", "docs/certification/"),
         ("Revert (down)", "docs/revert/"),
+        ("Fixing deployed changes", "docs/fixing-changes/"),
         ("Teams and ordering", "docs/teamwork/"),
         ("Repeatables", "docs/repeatables/"),
+        ("Temporal tables and partitions", "docs/temporal-partitions/"),
     ]),
     ("Configure", [
         ("Environments", "docs/environments/"),
@@ -26,6 +28,8 @@ SIDEBAR = [
     ("Operate", [
         ("Command reference", "docs/commands/"),
         ("CI/CD", "docs/ci-cd/"),
+        ("Bundles", "docs/bundles/"),
+        ("Schema drift", "docs/drift/"),
         ("Existing databases", "docs/baseline/"),
         ("Journal tables", "docs/journal/"),
         ("Troubleshooting", "docs/troubleshooting/"),
@@ -45,9 +49,9 @@ def link(path, label):
 
 
 def pages():
-    return [overview(), install(), quick_start(), project(), plan(), changes(), certification(), revert(), teamwork(),
-            repeatables(), environments(), authentication(), connections(), variables(), always_encrypted(), commands(),
-            ci_cd(), baseline(), journal(), troubleshooting(), extending()]
+    return [overview(), install(), quick_start(), project(), plan(), changes(), certification(), revert(), fixing_changes(),
+            teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(),
+            commands(), ci_cd(), bundles(), drift(), baseline(), journal(), troubleshooting(), extending()]
 
 
 # ---------------------------------------------------------------- get started
@@ -242,6 +246,7 @@ def changes():
 <tr><td><code>BSM001</code></td><td>Error</td><td>Statement cannot run in a transaction (ALTER/CREATE/DROP DATABASE, BACKUP, RESTORE, full-text catalog and index DDL, RECONFIGURE, resumable online index) and the change is not <code>!notx</code>.</td></tr>
 <tr><td><code>BSM002</code></td><td>Error</td><td><code>USE</code>: bsm deploys to the environment's database; switching databases inside a script breaks that.</td></tr>
 <tr><td><code>BSM003</code></td><td>Warning</td><td>Explicit <code>BEGIN TRANSACTION</code> inside a transactional change. A <code>ROLLBACK</code> there would abort bsm's transaction.</td></tr>
+<tr><td><code>BSM004</code></td><td>Warning</td><td><code>SYSTEM_VERSIONING = OFF</code> for a table that the same script neither turns back on nor drops, so it would stop recording history.</td></tr>
 <tr><td><code>BSM000</code></td><td>Warning</td><td>The script did not parse; lint skipped (SQL Server may still accept it).</td></tr>
 </table>
 
@@ -287,7 +292,8 @@ bsm revert --to create-customer    # everything deployed after it (it stays)
 bsm revert --to @release-1.4
 bsm revert --all
 bsm revert --to x --dry-run        # list, change nothing
-bsm rebase --to x                  # revert to x, then deploy to the head again''')}
+bsm rebase --to x                  # revert to x, then deploy to the head again
+bsm revert --repeatable views/vCustomer.sql   # put a view back to its previous definition''')}
 <p>Changes are reverted in reverse deploy order, each in its own transaction (unless <code>!notx</code>), with a <code>revert</code> event in the log. Revert asks for confirmation; pass <code>--yes</code> in scripts.</p>
 
 <h2>Stored scripts</h2>
@@ -301,11 +307,54 @@ bsm rebase --to x                  # revert to x, then deploy to the head again'
   <li>Protected environments ask you to type the environment name.</li>
 </ul>
 
+<p>A revert script with a bug can be fixed after deploy without breaking certification; see {link("docs/fixing-changes/", "Fixing deployed changes")}. Repeatables are reverted one by one; see {link("docs/repeatables/#revert", "Repeatables")}.</p>
+
 <h2>Writing good revert scripts</h2>
 <ul>
   <li>Undo in reverse order of the deploy.</li>
   <li>Drop what you created; restore what you changed. For data changes, keep enough information in the deploy (for example a backup table) to restore it.</li>
   <li>Test the pair: <code>bsm rebase --to &lt;previous change&gt;</code> on a dev database runs revert and deploy back to back. <code>bsm verify</code> afterwards should match the original fingerprint.</li>
+</ul>
+""")
+
+
+def fixing_changes():
+    return doc("docs/fixing-changes/", "Fixing deployed changes", "Rework a change that needs to do something new; repair one whose scripts were edited harmlessly.", f"""
+<p>A deployed change is immutable: if its scripts change, even by one character, its hash no longer matches the database and deploy stops. That protects every database from running something other than what the others ran. There are two ways forward, depending on what the edit is.</p>
+
+<table>
+<tr><th>The edit</th><th>Use</th><th>Runs SQL?</th></tr>
+<tr><td>The change must do something different (a new procedure body, another column)</td><td><code>bsm rework</code>: a new change that supersedes it</td><td>Yes, as a normal deploy</td></tr>
+<tr><td>A bug in <code>revert.sql</code> or <code>verify.sql</code>, a comment, formatting, a new <code>!notx</code> flag</td><td><code>bsm repair</code>: accept the edit in the journal</td><td>No</td></tr>
+</table>
+
+<h2 id="rework">Rework</h2>
+{sh('''bsm rework get-customer            # adds get-customer-v2
+bsm rework get-customer --as get-customer-by-email -n "search by email"''')}
+<p>Rework adds a change named <code>&lt;change&gt;-v2</code> (then <code>-v3</code>, and so on) that requires the original:</p>
+<ul>
+  <li><code>deploy.sql</code> starts as a copy of the original deploy script. Edit it.</li>
+  <li><code>revert.sql</code> is the original deploy script, so reverting the rework restores the previous version.</li>
+  <li><code>verify.sql</code> is copied when the original has one; <code>!notx</code> carries over.</li>
+</ul>
+<p>Rework fits definitions that can be run again: <code>CREATE OR ALTER</code> procedures, views and functions kept in changes, permissions, and idempotent data fixes. For a table change, edit both scripts: an <code>ALTER TABLE</code> to deploy and its opposite to revert.</p>
+{sql('''-- Revert get-customer-v2: restore what get-customer deployed.
+-- Copied from changes/get-customer/deploy.sql; edit it if that script cannot simply be run again.
+
+CREATE OR ALTER PROCEDURE dbo.GetCustomer @Id int AS
+SELECT Id, Name FROM dbo.Customer WHERE Id = @Id;''', "changes/get-customer-v2/revert.sql")}
+<p>Already edited the original by mistake? Move your edits into the new change and restore the original (<code>git checkout -- changes/get-customer</code>), so it matches what was deployed.</p>
+
+<h2 id="repair">Repair</h2>
+{sh('''bsm status -e test                      # ! create-order  EDITED AFTER DEPLOY
+bsm repair create-order -e test --reason "revert dropped the wrong index"
+bsm repair --all --dry-run -e test     # list every edited change and what differs''')}
+<p>Repair records the working copy's scripts, hashes and flags for the named changes and recomputes the chain ids of every change deployed after them, so the database certifies against the plan again. It runs no SQL. Each repaired change gets a <code>repair</code> event in the log with what differed, the old hash and your reason.</p>
+<ul>
+  <li>Repair is per database: run it in every environment that has the change.</li>
+  <li>A fixed <code>revert.sql</code> is what revert will run from then on, because revert uses the scripts stored in the journal.</li>
+  <li>When <code>deploy.sql</code> itself differs, bsm warns and always asks for confirmation (type the environment name): databases that already ran the old script keep the old result. Only repair deploy edits that change nothing, and put real changes in a rework.</li>
+  <li>Repair takes the deploy lock and respects the environment ownership guard.</li>
 </ul>
 """)
 
@@ -353,12 +402,70 @@ CREATE OR ALTER PROCEDURE dbo.usp_FindCustomer ...''', "repeatable/procedures/us
 <h2>What is recorded</h2>
 <p>For each repeatable, the journal keeps the current and previous script and hash, and a <code>repeatable</code> event. Repeatables are not part of the plan certificate: they are re-applied by content, not by position.</p>
 
+<h2 id="revert">Reverting a repeatable</h2>
+{sh('''bsm revert --repeatable views/vCustomer.sql -e test
+bsm revert --repeatable views/a.sql --repeatable @test/seed.sql --dry-run''')}
+<p>Runs the definition the repeatable had before its last apply (stored in the journal) and records it as current, with a <code>revert</code> event. Running it twice swaps back. Use it to back out a bad view or procedure quickly; the working copy still has the newer version, so the next deploy applies it again unless you fix it too. A repeatable applied only once has nothing to go back to: remove the object with a new change instead.</p>
+
 <h2>Changes or repeatables?</h2>
 <ul>
   <li>Tables, columns, indexes, data: <strong>changes</strong> (they need explicit migrations and reverts).</li>
   <li>Views, procedures, functions, triggers: <strong>repeatables</strong> (the latest definition wins).</li>
   <li>Something a change depends on during deploy (for example a function used in a computed column): a <strong>change</strong>, because repeatables run after changes.</li>
 </ul>
+""")
+
+
+def temporal_partitions():
+    return doc("docs/temporal-partitions/", "Temporal tables and partitions", "System-versioned tables and partitioned tables in changes, reverts and fingerprints.", f"""
+<p>Both are ordinary schema, so they belong in {link("docs/changes/", "changes")}: deploy creates or alters them, revert undoes it, and both run in the change's transaction. Badger SQL Migrate adds three things: a fingerprint that understands them, a lint rule, and a setting for partitions that a job maintains.</p>
+
+<h2 id="temporal">System-versioned (temporal) tables</h2>
+{sql('''CREATE TABLE dbo.Price (
+    Id int NOT NULL CONSTRAINT PK_Price PRIMARY KEY,
+    Amount money NOT NULL,
+    ValidFrom datetime2 GENERATED ALWAYS AS ROW START HIDDEN NOT NULL,
+    ValidTo datetime2 GENERATED ALWAYS AS ROW END HIDDEN NOT NULL,
+    PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo))
+WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.PriceHistory, HISTORY_RETENTION_PERIOD = 2 YEARS));''', "changes/create-price/deploy.sql")}
+{sql('''ALTER TABLE dbo.Price SET (SYSTEM_VERSIONING = OFF);
+DROP TABLE dbo.Price, dbo.PriceHistory;''', "changes/create-price/revert.sql")}
+<ul>
+  <li><strong>Name the history table.</strong> Without <code>HISTORY_TABLE</code>, SQL Server calls it <code>MSSQL_TemporalHistoryFor_&lt;object id&gt;</code>, a different name on every server, and a revert script has to look the name up before switching versioning off.</li>
+  <li><strong>Changing a temporal table.</strong> Most schema changes go to the table and its history table together. Adding a nullable column or a column with a default works while versioning is on. For anything else, switch it off, change both tables, and switch it on again in the same script, so the change stays atomic:</li>
+</ul>
+{sql('''ALTER TABLE dbo.Price SET (SYSTEM_VERSIONING = OFF);
+ALTER TABLE dbo.Price ALTER COLUMN Amount decimal(19, 4) NOT NULL;
+ALTER TABLE dbo.PriceHistory ALTER COLUMN Amount decimal(19, 4) NOT NULL;
+ALTER TABLE dbo.Price SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.PriceHistory, DATA_CONSISTENCY_CHECK = ON));''', "changes/price-amount-decimal/deploy.sql")}
+<p>Lint rule <code>BSM004</code> warns when a script switches versioning off for a table and neither switches it back on nor drops the table. The fingerprint records each table's period columns, versioning state, history table and retention, and the <code>GENERATED ALWAYS</code> and <code>HIDDEN</code> flags of period columns. A history table SQL Server named itself is recorded under the name of its table, so databases built from the same plan fingerprint the same. Reverting a change also reverts the schema; the rows in the history table go with it, so take a copy first if you need them.</p>
+
+<h2 id="partitions">Partitioned tables</h2>
+{sql('''CREATE PARTITION FUNCTION pfOrderDate (date) AS RANGE RIGHT FOR VALUES ('2026-01-01', '2026-04-01', '2026-07-01', '2026-10-01');
+CREATE PARTITION SCHEME psOrderDate AS PARTITION pfOrderDate ALL TO ({OrderFilegroup});
+CREATE TABLE dbo.[Order] (
+    OrderDate date NOT NULL,
+    Id bigint NOT NULL,
+    CONSTRAINT PK_Order PRIMARY KEY (OrderDate, Id)) ON psOrderDate (OrderDate);''', "changes/create-order/deploy.sql")}
+{sql('''DROP TABLE dbo.[Order];
+DROP PARTITION SCHEME psOrderDate;
+DROP PARTITION FUNCTION pfOrderDate;''', "changes/create-order/revert.sql")}
+<p>Filegroups often differ per environment (Azure SQL Database only has <code>PRIMARY</code>), so keep them in a {link("docs/variables/", "variable")}, for example <code>OrderFilegroup: "[PRIMARY]"</code> in Azure and <code>"[FG_Orders]"</code> on-premises. Adding a boundary in a change is a normal deploy, and its revert merges it back:</p>
+{sql('''ALTER PARTITION SCHEME psOrderDate NEXT USED {OrderFilegroup};
+ALTER PARTITION FUNCTION pfOrderDate() SPLIT RANGE ('2027-01-01');''', "changes/orders-2027/deploy.sql")}
+{sql('''ALTER PARTITION FUNCTION pfOrderDate() MERGE RANGE ('2027-01-01');''', "changes/orders-2027/revert.sql")}
+<p>Splitting or merging a partition that holds rows moves data and locks the table; split ahead of the data, while the partition is still empty. The fingerprint records each function's type, direction and boundary values, each scheme's filegroups, and the scheme and partitioning column of every partitioned table and index.</p>
+
+<h2 id="sliding-window">Partitions maintained by a job</h2>
+<p>With a sliding window, a scheduled job splits new partitions and switches out old ones outside bsm. Every split would show as schema drift. Tell the environment to leave boundaries out of the fingerprint:</p>
+{yaml('''environments:
+  prod:
+    schemaFingerprint:
+      partitionBoundaries: ignore   # include (default) | ignore''', "bsm.yaml")}
+<p>The fingerprint then records each function's type and direction, and the set of filegroups each scheme uses, so moving a table to another scheme or function is still drift; adding a boundary is not. The setting applies to snapshots taken from then on: deploy once after changing it.</p>
+
+<h2>Upgrading from 0.1</h2>
+<p>Version 0.2 records these details for the first time, so a database with temporal or partitioned tables deployed by 0.1 has a fingerprint in the old format. <code>bsm verify</code> warns instead of reporting drift until the next deploy records a new fingerprint. Databases without them fingerprint exactly as before.</p>
 """)
 
 
@@ -409,6 +516,7 @@ environments:
 <tr><td><code>lockTimeoutSeconds</code></td><td><code>300</code></td><td>Wait for another deployer</td></tr>
 <tr><td><code>variables</code></td><td></td><td>Environment-specific {link("docs/variables/", "variables")}</td></tr>
 <tr><td><code>alwaysEncrypted</code></td><td></td><td>{link("docs/always-encrypted/", "Always Encrypted keys")}</td></tr>
+<tr><td><code>schemaFingerprint</code></td><td></td><td><code>partitionBoundaries: ignore</code> for databases whose partitions a job splits and merges ({link("docs/temporal-partitions/#sliding-window", "Partitions")})</td></tr>
 </table>
 <p>Unknown keys inside known blocks (for example a misspelled <code>entra.tennantId</code>) are errors, so typos never silently fall back to defaults.</p>
 
@@ -716,8 +824,13 @@ def commands():
         ("plan show", "", "Changes with script hashes and chain ids; the plan head. No database."),
         ("status", "[--exit-code]", "Plan versus database: pending, applied, edited, orphans, certified. --exit-code returns 3 when not up to date."),
         ("deploy", "[--to change|@tag] [--dry-run] [--script file] [--ordering dependency|strict] [-y]", "Provision environment resources, deploy pending changes, apply changed repeatables, record a schema fingerprint. --script writes a reviewable SQL file instead."),
-        ("revert", "--to x | --last n | --all [--dry-run] [-y] [--allow-variable-drift]", "Revert with the scripts stored at deploy time."),
+        ("revert", "--to x | --last n | --all | --repeatable name… [--dry-run] [-y] [--allow-variable-drift]", "Revert with the scripts stored at deploy time; --repeatable restores a repeatable's previous definition."),
         ("rebase", "--to x [-y] [--allow-variable-drift]", "Revert to x, then deploy to the head."),
+        ("rework &lt;change&gt;", "[--as name] [-n|--note text]", "Add a change that supersedes a deployed one: a copy of its deploy script to edit, with a revert that restores it."),
+        ("repair", "[changes…] | --all [--reason text] [--dry-run] [-y]", "Accept edits to deployed changes without running SQL; re-chains and re-certifies the journal."),
+        ("bundle create", "[-o file] [--no-config]", "Write a hash-verified bundle of the project. No database."),
+        ("bundle verify &lt;file&gt;", "", "Check every file in a bundle against its manifest. No database."),
+        ("diff-schema", "[--against env] [--exit-code]", "Schema differences: live versus the schema recorded after the last deploy, or versus another environment. --exit-code returns 3 when they differ."),
         ("verify", "", "Hashes versus working copy, rendered-SQL drift, verify scripts (rolled back), schema drift. Exit 1 on problems."),
         ("log", "[-n|--limit 50]", "Deploy, revert, fail, repeatable and resource events, newest first."),
         ("baseline", "--to x [-y]", "Record changes up to x as applied without running them."),
@@ -742,6 +855,7 @@ def commands():
 <tr><td><code>-e, --env &lt;name&gt;</code></td><td>Environment (default: <code>BSM_ENV</code>, then <code>defaultEnvironment</code>, then the only one)</td></tr>
 <tr><td><code>--var name=value</code></td><td>Script variable; repeatable; overrides bsm.yaml</td></tr>
 <tr><td><code>--connection-string "..."</code></td><td>Connect exactly here for this run</td></tr>
+<tr><td><code>--bundle &lt;file&gt;</code></td><td>Take the plan and scripts from a verified bundle instead of the project folder (and <code>bsm.yaml</code> too, when bundled)</td></tr>
 <tr><td><code>--claim-environment</code></td><td>Accept a database recorded under another environment and re-record it</td></tr>
 <tr><td><code>--json</code></td><td>Machine-readable output on stdout (warnings go to stderr)</td></tr>
 <tr><td><code>-v, --verbose</code></td><td>Server messages (PRINT), fingerprints, tunnel details</td></tr>
@@ -754,7 +868,7 @@ def commands():
 <tr><th>Code</th><th>Meaning</th></tr>
 <tr><td>0</td><td>Success</td></tr>
 <tr><td>1</td><td>Failure: a script error, a problem found by <code>plan check</code> or <code>verify</code>, a refused action, bad configuration, or a command-line usage error</td></tr>
-<tr><td>3</td><td><code>status --exit-code</code>: not up to date</td></tr>
+<tr><td>3</td><td><code>status --exit-code</code>: not up to date; <code>diff-schema --exit-code</code>: schemas differ</td></tr>
 </table>
 
 <h2>Environment variables</h2>
@@ -767,7 +881,7 @@ def commands():
 </table>
 
 <h2>Confirmation</h2>
-<p>Revert, rebase, baseline and destructive provisioning ask for confirmation. In a protected environment, so does deploy, and you must type the environment name. Non-interactive runs (redirected input, <code>--json</code>) fail instead of hanging unless you pass <code>--yes</code>.</p>
+<p>Revert, rebase, repair, baseline and destructive provisioning ask for confirmation. In a protected environment, so does deploy, and you must type the environment name. Non-interactive runs (redirected input, <code>--json</code>) fail instead of hanging unless you pass <code>--yes</code>.</p>
 
 <h2>JSON output</h2>
 {sh('''bsm status -e prod --json | jq '.certified, .databaseHead'
@@ -786,6 +900,12 @@ def ci_cd():
 bsm deploy -C db -e prod --yes --json     # --yes: protected environment, no prompt in CI
 bsm verify -C db -e prod''')}
 <p>Two pipelines cannot interleave: the second waits for the deploy lock. Use <code>--script review.sql</code> to attach the exact SQL to an approval step, then <code>deploy</code> after approval.</p>
+
+<h2>Build once, deploy the same bundle everywhere</h2>
+{sh('''bsm bundle create -C db -o db-bundle.zip          # build stage: publish as an artifact
+bsm --bundle db-bundle.zip deploy -e test --json   # each release stage
+bsm --bundle db-bundle.zip deploy -e prod --yes --json''')}
+<p>A {link("docs/bundles/", "bundle")} freezes the plan and scripts at build time, and every stage checks its hashes before running anything, so production gets exactly what test got.</p>
 
 <h2>Identity without secrets</h2>
 <table>
@@ -809,6 +929,61 @@ ENTRYPOINT ["bsm", "-C", "/db"]''', "", "Dockerfile")}
 
 <h2>Applications that migrate themselves</h2>
 <p>The engine is also a .NET library; see {link("docs/extending/", "Library and providers")}.</p>
+""")
+
+
+def bundles():
+    return doc("docs/bundles/", "Bundles", "One hash-verified file with everything a deploy needs, built once and deployed everywhere.", f"""
+{sh('''bsm bundle create                    # writes bsm-bundle-<plan head>.zip
+bsm bundle create -o release-1.4.zip --no-config
+bsm bundle verify release-1.4.zip
+bsm --bundle release-1.4.zip status -e prod
+bsm --bundle release-1.4.zip deploy -e prod''')}
+
+<h2>What is in a bundle</h2>
+<p>A zip file with <code>bsm.plan</code>, the folders of every planned change, <code>repeatable/</code>, the environment scripts under <code>environments/</code>, <code>bsm.yaml</code> (unless <code>--no-config</code>) and a manifest, <code>bsm-bundle.json</code>, listing each file's SHA-256, the provider, the plan head and a content hash that identifies the bundle.</p>
+<p>Text is stored normalized (no byte-order mark, LF line endings) and entries are sorted with fixed timestamps, so the same commit produces a byte-identical bundle on Windows, macOS and Linux. A project with problems (<code>bsm plan check</code> errors) cannot be bundled.</p>
+
+<h2>Running from a bundle</h2>
+<p><code>--bundle &lt;file&gt;</code> works with every command that reads the project: <code>status</code>, <code>deploy</code>, <code>revert</code>, <code>rebase</code>, <code>verify</code>, <code>repair</code>, <code>diff-schema</code>, <code>render</code>, <code>vars</code>, <code>plan check</code> and <code>plan show</code>. Before anything runs, bsm checks:</p>
+<ul>
+  <li>every file matches its hash, none is missing and none was added;</li>
+  <li>the manifest's content hash matches its file list;</li>
+  <li>the plan head computed from the extracted scripts equals the one in the manifest.</li>
+</ul>
+<p>Any mismatch stops the run and names the files. The bundle is extracted to a temporary folder that is deleted on exit. Commands that write project files (<code>add</code>, <code>tag</code>, <code>rework</code>, <code>init</code>) refuse <code>--bundle</code>.</p>
+
+<h2>Configuration</h2>
+<p>When the bundle includes <code>bsm.yaml</code>, it is used, so the environments are frozen with the scripts. Secrets are never stored: keep them as <code>${{env:NAME}}</code> or <code>${{file:path}}</code> references, which resolve on the machine that deploys (relative paths from <code>--project</code>). Bundle with <code>--no-config</code> to read <code>bsm.yaml</code> from <code>--project</code> at deploy time instead.</p>
+""")
+
+
+def drift():
+    return doc("docs/drift/", "Schema drift", "Find out what changed outside bsm, or how two databases differ.", f"""
+<p>After every deploy and revert, bsm records a canonical dump of the schema and its fingerprint. <code>bsm verify</code> reports when the live fingerprint no longer matches. <code>bsm diff-schema</code> shows what changed.</p>
+
+<h2>What changed since the last deploy</h2>
+{sh('''bsm diff-schema -e prod''')}
+{code('''-              prod as recorded 2026-11-03 20:15Z
++              prod live
++ column dbo.Customer.Phone
++ column dbo.Hotfix.Id
+~ module dbo.vCustomerOrders
+    ...
+    -   SELECT c.Id, c.Name, c.Email
+    +   SELECT c.Id, c.Name, c.Email, c.Phone
+    ...
++ object dbo.Hotfix
+3 added, 0 removed, 1 changed.''')}
+<p><code>+</code> exists only live, <code>-</code> was removed, <code>~</code> changed (with a line diff for views, procedures, functions and triggers). Then undo the change, or capture it as a new change so every environment gets it.</p>
+
+<h2>Two environments</h2>
+{sh('''bsm diff-schema -e test --against prod
+bsm diff-schema -e test --against prod --exit-code --json   # exit 3 when they differ''')}
+<p>Compares two live databases: <code>-</code> is only in the first, <code>+</code> only in the second. Each environment uses its own connection, sign-in and fingerprint settings, so if only one of them sets <code>schemaFingerprint.partitionBoundaries: ignore</code>, partition functions and schemes show as changed.</p>
+
+<h2>What is compared</h2>
+<p>Schemas, tables and table types with their columns (type, nullability, identity, collation, computed and default definitions, encryption, period columns), indexes, foreign keys, check constraints, views, procedures, functions, triggers, user types, sequences, synonyms, system versioning (period, history table, retention) and partitioning (functions, boundaries, schemes, and the scheme and column of each partitioned table and index). The bsm journal schema is excluded. Names SQL Server generates for unnamed constraints differ on every server, so they are compared as <code>&lt;system&gt;</code>; Always Encrypted columns compare by key name, never key material, so environments with different keys still match.</p>
 """)
 
 
@@ -844,7 +1019,7 @@ def journal():
 <tr><th>Table</th><th>Contents</th></tr>
 <tr><td><code>bsm.changes</code></td><td>One row per applied change: sequence, name, script hash, chain id, deploy/revert/verify scripts, flags, deployed at/by/host, tool version, duration, out-of-order and baseline flags, rendered hashes</td></tr>
 <tr><td><code>bsm.repeatables</code></td><td>Current and previous script and hash of each repeatable, applied at/by</td></tr>
-<tr><td><code>bsm.events</code></td><td>Append-only log: deploy, revert, fail (with the error), repeatable, baseline, resource; actor, host, tool version, environment</td></tr>
+<tr><td><code>bsm.events</code></td><td>Append-only log: deploy, revert, fail (with the error), repeatable, baseline, resource, repair; actor, host, tool version, environment</td></tr>
 <tr><td><code>bsm.schema_snapshots</code></td><td>Schema fingerprint and canonical dump after each run, with the head chain id</td></tr>
 <tr><td><code>bsm.meta</code></td><td><code>state_version</code> (journal layout) and <code>environment</code> (owner)</td></tr>
 </table>
@@ -859,14 +1034,16 @@ SELECT TOP (20) at, name, message, actor, host FROM bsm.events WHERE kind = 'fai
 
 def troubleshooting():
     items = [
-        ("“These changes were edited after they were deployed”", "A deployed change's scripts changed (even whitespace). Restore the deployed version (<code>git log changes/&lt;name&gt;</code>) and add a new change for the new behaviour."),
+        ("“These changes were edited after they were deployed”", "A deployed change's scripts changed (even whitespace). For new behaviour, restore the deployed version and use <code>bsm rework</code>; for a harmless edit such as a revert fix, use <code>bsm repair</code>. See " + link("docs/fixing-changes/", "Fixing deployed changes") + "."),
         ("“This database belongs to environment 'test'…”", "You are pointing one environment's settings at another environment's database. Check <code>--env</code> and the host/database. If the database was copied on purpose, pass <code>--claim-environment</code> once."),
         ("“Timed out … waiting for the deploy lock”", "Another deploy is running against the database. Wait, or raise <code>lockTimeoutSeconds</code>."),
         ("“… cannot run inside a transaction”", "Lint BSM001. Mark the change <code>!notx</code> in the plan and make the script re-runnable."),
         ("“unknown variable {x}”", "Define it under <code>variables:</code>, pass <code>--var x=…</code>, write <code>{{x}}</code> for a literal, or set <code>preprocessor.unknown: keep</code>."),
         ("“renders differently than when it was deployed”", "A variable used by the change changed value. Run <code>bsm vars</code>; restore the value, or use <code>--allow-variable-drift</code> if the change is intended."),
         ("“Changes … come before changes already deployed” (strict ordering)", "A change merged above changes already in this database. In dev, use <code>--ordering dependency</code> or <code>rebase</code>; production should never see this if it only receives released plans."),
-        ("“schema drift”", "Something changed the schema outside bsm. Find it (compare with a fresh database built from the plan), then either revert it or capture it as a new change."),
+        ("“schema drift”", "Something changed the schema outside bsm. <code>bsm diff-schema</code> lists what changed since the last deploy; then either undo it or capture it as a new change. See " + link("docs/drift/", "Schema drift") + "."),
+        ("BSM004: “SYSTEM_VERSIONING is turned OFF … and not turned back ON”", "The script switches versioning off (usually to change the table) but never back on. Add <code>ALTER TABLE … SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = …))</code> at the end, or drop the table if that is the intent. See " + link("docs/temporal-partitions/", "Temporal tables and partitions") + "."),
+        ("“Bundle … failed verification”", "A file in the bundle was changed, added or removed after it was built. Rebuild it from source control with <code>bsm bundle create</code>; never edit a bundle."),
         ("Entra: “credential unavailable” or browser does not open", "On SSH or headless machines use <code>entraDeviceCode</code>. For CLI credentials, sign in with <code>az login</code> first. <code>bsm auth clear</code> resets saved sign-ins."),
         ("Linux: token cache error", "Install libsecret (and a keyring), use <code>entra.tokenCache: memory</code>, or set <code>allowUnencryptedTokenCache: true</code>."),
         ("Kerberos on macOS/Linux fails", "Run <code>kinit user@REALM</code>, check <code>klist</code>, and set <code>connectionProperties: { Server SPN: MSSQLSvc/host:1433 }</code> if the SPN differs."),

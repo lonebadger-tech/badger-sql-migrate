@@ -47,3 +47,24 @@ public class TSqlLinterTests
         Assert.Equal(LintSeverity.Warning, d.Severity);
     }
 }
+
+public class TemporalLintTests
+{
+    private readonly TSqlLinter linter = new();
+
+    private IReadOnlyList<LintDiagnostic> Lint(string sql) => linter.Lint(sql, new LintContext("c", "deploy", ChangeFlags.None));
+
+    [Fact]
+    public void Turning_versioning_off_and_not_back_on_is_a_warning()
+    {
+        var d = Assert.Single(Lint("ALTER TABLE dbo.Price SET (SYSTEM_VERSIONING = OFF);\nALTER TABLE dbo.Price ADD Note nvarchar(100) NULL;"));
+        Assert.Equal(("BSM004", LintSeverity.Warning, 1), (d.Code, d.Severity, d.Line));
+        Assert.Contains("dbo.Price", d.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("ALTER TABLE dbo.Price SET (SYSTEM_VERSIONING = OFF);\nALTER TABLE dbo.Price ADD Note nvarchar(100) NULL;\nALTER TABLE dbo.PriceHistory ADD Note nvarchar(100) NULL;\nALTER TABLE [dbo].[Price] SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.PriceHistory));")]
+    [InlineData("ALTER TABLE Price SET (SYSTEM_VERSIONING = OFF);\nDROP TABLE dbo.Price, dbo.PriceHistory;")]
+    [InlineData("CREATE TABLE dbo.T (Id int PRIMARY KEY, F datetime2 GENERATED ALWAYS AS ROW START, U datetime2 GENERATED ALWAYS AS ROW END, PERIOD FOR SYSTEM_TIME (F, U)) WITH (SYSTEM_VERSIONING = ON);")]
+    public void Versioning_restored_or_table_dropped_is_fine(string sql) => Assert.Empty(Lint(sql));
+}

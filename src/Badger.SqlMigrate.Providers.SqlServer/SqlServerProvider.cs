@@ -60,6 +60,7 @@ public sealed class SqlServerProvider : IDatabaseProvider
 
     public async Task<IDatabaseSession> OpenSessionAsync(DeploymentEnvironment environment, SessionContext context, CancellationToken cancellationToken)
     {
+        var fingerprint = SchemaFingerprintSettings.From(environment);
         var (connection, description, keyStores) = SqlServerConnectionFactory.Create(environment, context);
         try
         {
@@ -71,7 +72,7 @@ public sealed class SqlServerProvider : IDatabaseProvider
             throw new MigrationException($"Could not connect to {description}: {ex.Message}", ex);
         }
 
-        return new SqlServerSession(connection, description, keyStores);
+        return new SqlServerSession(connection, description, keyStores) { Fingerprint = fingerprint };
     }
 
     public async Task<IReadOnlyList<KeyValuePair<string, string>>> DescribeAsync(IDatabaseSession session, CancellationToken cancellationToken)

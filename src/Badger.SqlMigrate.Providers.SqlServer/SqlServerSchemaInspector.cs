@@ -8,6 +8,10 @@ namespace Badger.SqlMigrate.Providers.SqlServer;
 /// replaced with a placeholder; otherwise identical schemas would never fingerprint the same.
 /// Always Encrypted columns record the CEK name but never key paths or values, which differ per environment,
 /// so identical schemas fingerprint the same in every environment. The bsm state schema is excluded. Catalog views mix collations, so each line is forced to a binary collation.
+/// System-versioned (temporal) tables record their period columns, history table and retention; a history table SQL Server
+/// named itself (MSSQL_TemporalHistoryFor_&lt;object id&gt;) is renamed after its table, because the id differs per server.
+/// Partitioning records functions (type, direction, boundaries), schemes (filegroups) and each partitioned index's
+/// scheme and column. Lines for these features appear only when they are used, so other schemas fingerprint as before.
 /// </summary>
 public sealed class SqlServerSchemaInspector : ISchemaInspector
 {
@@ -21,7 +25,8 @@ public sealed class SqlServerSchemaInspector : ISchemaInspector
                '|', c.max_length, '|', c.precision, '|', c.scale, '|', c.is_nullable, '|', c.is_identity,
                '|', ISNULL(c.collation_name, ''), '|', ISNULL(cc.definition, ''), '|', ISNULL(dc.definition, ''),
                '|', CASE WHEN dc.is_system_named = 1 THEN '<system>' ELSE ISNULL(dc.name, '') END,
-               '|', c.is_sparse, '|', c.is_rowguidcol, '|', ISNULL(c.encryption_type_desc, ''), '|', ISNULL(c.encryption_algorithm_name, ''), '|', ISNULL(cek.name, ''))
+               '|', c.is_sparse, '|', c.is_rowguidcol, '|', ISNULL(c.encryption_type_desc, ''), '|', ISNULL(c.encryption_algorithm_name, ''), '|', ISNULL(cek.name, ''),
+               CASE WHEN c.generated_always_type <> 0 THEN CONCAT('|', c.generated_always_type_desc, CASE WHEN c.is_hidden = 1 THEN '|hidden' ELSE '' END) ELSE '' END)
         FROM sys.columns c
         JOIN sys.objects o ON o.object_id = c.object_id
         JOIN sys.schemas s ON s.schema_id = o.schema_id
@@ -95,17 +100,134 @@ public sealed class SqlServerSchemaInspector : ISchemaInspector
         WHERE s.name <> @state
 
         UNION ALL
+        SELECT CONCAT(N'temporal|' COLLATE Latin1_General_BIN2, s.name, '.', t.name, '|', t.temporal_type_desc, '|', sc.name, '|', ec.name,
+               '|', ISNULL(hs.name + '.' + h.name, ''), '|', ISNULL(CONVERT(nvarchar(20), t.history_retention_period), ''), '|', ISNULL(t.history_retention_period_unit_desc, ''))
+        FROM sys.periods p
+        JOIN sys.tables t ON t.object_id = p.object_id
+        JOIN sys.schemas s ON s.schema_id = t.schema_id
+        JOIN sys.columns sc ON sc.object_id = p.object_id AND sc.column_id = p.start_column_id
+        JOIN sys.columns ec ON ec.object_id = p.object_id AND ec.column_id = p.end_column_id
+        LEFT JOIN sys.tables h ON h.object_id = t.history_table_id
+        LEFT JOIN sys.schemas hs ON hs.schema_id = h.schema_id
+        WHERE s.name <> @state
+
+        UNION ALL
+        SELECT CONCAT(N'pfunction|' COLLATE Latin1_General_BIN2, pf.name, '|', TYPE_NAME(pp.user_type_id), '|', pp.max_length, '|', pp.precision, '|', pp.scale,
+               '|', ISNULL(pp.collation_name, ''), '|', CASE WHEN pf.boundary_value_on_right = 1 THEN 'RIGHT' ELSE 'LEFT' END,
+               CASE WHEN @boundaries = 1 THEN CONCAT('|', STUFF((SELECT CONCAT(',', CONVERT(nvarchar(4000), v.value, 126))
+                           FROM sys.partition_range_values v WHERE v.function_id = pf.function_id ORDER BY v.boundary_id
+                           FOR XML PATH(''), TYPE).value('.', 'nvarchar(max)'), 1, 1, '')) ELSE '' END)
+        FROM sys.partition_functions pf
+        JOIN sys.partition_parameters pp ON pp.function_id = pf.function_id
+
+        UNION ALL
+        SELECT CONCAT(N'pscheme|' COLLATE Latin1_General_BIN2, ps.name, '|', pf.name, '|',
+               CASE WHEN @boundaries = 1
+                    THEN STUFF((SELECT CONCAT(',', fg.name) FROM sys.destination_data_spaces d JOIN sys.filegroups fg ON fg.data_space_id = d.data_space_id
+                                WHERE d.partition_scheme_id = ps.data_space_id ORDER BY d.destination_id
+                                FOR XML PATH(''), TYPE).value('.', 'nvarchar(max)'), 1, 1, '')
+                    ELSE STUFF((SELECT CONCAT(',', q.name) FROM (SELECT DISTINCT fg.name FROM sys.destination_data_spaces d JOIN sys.filegroups fg ON fg.data_space_id = d.data_space_id
+                                WHERE d.partition_scheme_id = ps.data_space_id) q ORDER BY q.name
+                                FOR XML PATH(''), TYPE).value('.', 'nvarchar(max)'), 1, 1, '') END)
+        FROM sys.partition_schemes ps
+        JOIN sys.partition_functions pf ON pf.function_id = ps.function_id
+
+        UNION ALL
+        SELECT CONCAT(N'partitioned|' COLLATE Latin1_General_BIN2, s.name, '.', o.name, '|',
+               CASE WHEN i.index_id = 0 THEN '<heap>' WHEN kc.is_system_named = 1 THEN '<system>' ELSE i.name END, '|', ps.name, '|', c.name)
+        FROM sys.indexes i
+        JOIN sys.partition_schemes ps ON ps.data_space_id = i.data_space_id
+        JOIN sys.objects o ON o.object_id = i.object_id
+        JOIN sys.schemas s ON s.schema_id = o.schema_id
+        JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.partition_ordinal = 1
+        JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+        LEFT JOIN sys.key_constraints kc ON kc.parent_object_id = i.object_id AND kc.unique_index_id = i.index_id
+        WHERE o.is_ms_shipped = 0 AND s.name <> @state
+
+        UNION ALL
         SELECT CONCAT(N'object|' COLLATE Latin1_General_BIN2, o.type, '|', s.name, '.', o.name)
         FROM sys.objects o
         JOIN sys.schemas s ON s.schema_id = o.schema_id
         WHERE o.is_ms_shipped = 0 AND o.parent_object_id = 0 AND o.type IN ('U', 'V', 'P', 'FN', 'IF', 'TF', 'SO', 'SN', 'TT') AND s.name <> @state;
         """;
 
+    /// <summary>History tables SQL Server named itself, with the table they belong to.</summary>
+    private const string AnonymousHistorySql = """
+        SELECT h.name AS history, CONCAT(s.name, N'.', t.name) AS parent
+        FROM sys.tables t
+        JOIN sys.tables h ON h.object_id = t.history_table_id
+        JOIN sys.schemas s ON s.schema_id = t.schema_id
+        WHERE h.name LIKE N'MSSQL[_]TemporalHistoryFor[_]%';
+        """;
+
+    /// <summary>2: system-versioned tables and partitioning (only lines for schemas that use them changed).</summary>
+    public int FormatVersion => 2;
+
     public async Task<string> CaptureAsync(IDatabaseSession session, string stateSchema, CancellationToken cancellationToken)
     {
-        var rows = await session.QueryAsync(Sql, new Dictionary<string, object?> { ["state"] = stateSchema }, cancellationToken).ConfigureAwait(false);
-        var lines = rows.Select(r => ((string)r["line"]!).Replace("\r\n", "\n", StringComparison.Ordinal)).ToList();
+        var boundaries = session is not SqlServerSession { Fingerprint.PartitionBoundaries: PartitionBoundaries.Ignore };
+        var rows = await session.QueryAsync(Sql, new Dictionary<string, object?> { ["state"] = stateSchema, ["boundaries"] = boundaries ? 1 : 0 }, cancellationToken).ConfigureAwait(false);
+        var renames = (await session.QueryAsync(AnonymousHistorySql, null, cancellationToken).ConfigureAwait(false))
+            .Select(r => (From: (string)r["history"]!, To: $"MSSQL_TemporalHistoryFor_<{r["parent"]}>"))
+            .OrderByDescending(r => r.From.Length)
+            .ToList();
+        var lines = rows.Select(r =>
+        {
+            var line = ((string)r["line"]!).Replace("\r\n", "\n", StringComparison.Ordinal);
+            foreach (var (from, to) in renames)
+            {
+                line = line.Replace(from, to, StringComparison.Ordinal);
+            }
+
+            return line;
+        }).ToList();
         lines.Sort(StringComparer.Ordinal);
         return string.Join('\n', lines);
     }
+
+    /// <summary>
+    /// Groups dump lines into entries (module definitions span lines) keyed by kind and object name, e.g.
+    /// "column dbo.Customer.Email", "index dbo.Customer.IX_Customer_Email", "module dbo.vCustomer".
+    /// </summary>
+    public IReadOnlyList<SchemaEntry> Parse(string dump)
+    {
+        var entries = new List<SchemaEntry>();
+        var current = new List<string>();
+        foreach (var line in dump.Split('\n'))
+        {
+            var bar = line.IndexOf('|', StringComparison.Ordinal);
+            if (bar > 0 && Kinds.Contains(line[..bar]) && current.Count > 0)
+            {
+                entries.Add(Entry(current));
+                current.Clear();
+            }
+
+            current.Add(line);
+        }
+
+        if (current.Count > 0 && !(current.Count == 1 && current[0].Length == 0))
+        {
+            entries.Add(Entry(current));
+        }
+
+        return entries;
+
+        static SchemaEntry Entry(List<string> lines)
+        {
+            var text = string.Join('\n', lines);
+            var f = lines[0].Split('|');
+            string Field(int i) => i < f.Length ? f[i] : string.Empty;
+            var key = f[0] switch
+            {
+                "column" => $"column {Field(1)}.{Field(3)}",
+                "index" or "fk" or "check" or "partitioned" => $"{f[0]} {Field(1)}.{Field(2)}",
+                "module" or "object" => $"{f[0]} {Field(2)}",
+                "schema" or "type" or "sequence" or "synonym" or "temporal" or "pfunction" or "pscheme" => $"{f[0]} {Field(1)}",
+                _ => text,
+            };
+            return new SchemaEntry(key, text);
+        }
+    }
+
+    private static readonly HashSet<string> Kinds = new(StringComparer.Ordinal) { "schema", "column", "index", "fk", "check", "module", "type", "sequence", "synonym", "temporal", "pfunction", "pscheme", "partitioned", "object" };
 }

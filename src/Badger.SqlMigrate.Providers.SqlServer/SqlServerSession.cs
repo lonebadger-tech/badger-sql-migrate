@@ -30,6 +30,9 @@ public sealed class SqlServerSession : IDatabaseSession
     /// <summary>Always Encrypted key stores registered on this connection (used to provision keys).</summary>
     internal IReadOnlyDictionary<string, SqlColumnEncryptionKeyStoreProvider>? KeyStores { get; }
 
+    /// <summary>How the schema fingerprint treats environment-managed details (partition boundaries).</summary>
+    public SchemaFingerprintSettings Fingerprint { get; init; } = SchemaFingerprintSettings.Default;
+
     public async Task BeginTransactionAsync(CancellationToken cancellationToken)
     {
         if (transaction is not null)

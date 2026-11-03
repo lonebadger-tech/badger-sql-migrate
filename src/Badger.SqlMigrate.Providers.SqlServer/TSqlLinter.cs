@@ -32,6 +32,7 @@ public sealed partial class TSqlLinter : IScriptLinter
 
         var visitor = new Visitor(context, diagnostics);
         fragment.Accept(visitor);
+        visitor.Finish();
         return diagnostics;
     }
 
@@ -40,7 +41,48 @@ public sealed partial class TSqlLinter : IScriptLinter
 
     private sealed class Visitor(LintContext context, List<LintDiagnostic> diagnostics) : TSqlFragmentVisitor
     {
+        private readonly Dictionary<string, int> versioningTurnedOff = new(StringComparer.OrdinalIgnoreCase);
+
         private bool Transactional => !context.Flags.HasFlag(ChangeFlags.NoTransaction);
+
+        /// <summary>
+        /// Schema changes to a system-versioned table usually need SYSTEM_VERSIONING = OFF, then ON again with the same
+        /// HISTORY_TABLE. A script that turns it off and neither turns it back on nor drops the table leaves the table
+        /// recording no history.
+        /// </summary>
+        public override void Visit(AlterTableSetStatement node)
+        {
+            foreach (var option in node.Options.OfType<SystemVersioningTableOption>())
+            {
+                var name = Name(node.SchemaObjectName);
+                if (option.OptionState == OptionState.Off)
+                {
+                    versioningTurnedOff.TryAdd(name, node.StartLine);
+                }
+                else
+                {
+                    versioningTurnedOff.Remove(name);
+                }
+            }
+        }
+
+        public override void Visit(DropTableStatement node)
+        {
+            foreach (var table in node.Objects)
+            {
+                versioningTurnedOff.Remove(Name(table));
+            }
+        }
+
+        public void Finish()
+        {
+            foreach (var (table, line) in versioningTurnedOff)
+            {
+                diagnostics.Add(new(LintSeverity.Warning, $"SYSTEM_VERSIONING is turned OFF for {table} and not turned back ON in this script, so the table stops recording history. Add ALTER TABLE {table} SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = ...)).", line, "BSM004"));
+            }
+        }
+
+        private static string Name(SchemaObjectName name) => $"{name.SchemaIdentifier?.Value ?? "dbo"}.{name.BaseIdentifier.Value}";
 
         public override void Visit(AlterDatabaseStatement node) => NotInTransaction(node, "ALTER DATABASE");
 

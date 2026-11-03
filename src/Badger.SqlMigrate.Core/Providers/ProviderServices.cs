@@ -40,4 +40,21 @@ public interface IDeployLock
 public interface ISchemaInspector
 {
     Task<string> CaptureAsync(IDatabaseSession session, string stateSchema, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Version of the dump format. Bump it when the dump changes for an unchanged schema; snapshots recorded with
+    /// another version are then not reported as drift (they are re-recorded at the next deploy).
+    /// </summary>
+    int FormatVersion => 1;
+
+    /// <summary>
+    /// Splits a dump from <see cref="CaptureAsync"/> into entries with a stable identity (e.g. "column dbo.Customer.Email"),
+    /// so 'bsm diff-schema' can report an object as changed rather than removed and added. Default: one entry per line.
+    /// </summary>
+    IReadOnlyList<SchemaEntry> Parse(string dump) =>
+        dump.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => new SchemaEntry(line, line)).ToList();
 }
+
+/// <param name="Key">Identity of the object, unique within a dump.</param>
+/// <param name="Text">Its full canonical definition (may span lines).</param>
+public sealed record SchemaEntry(string Key, string Text);

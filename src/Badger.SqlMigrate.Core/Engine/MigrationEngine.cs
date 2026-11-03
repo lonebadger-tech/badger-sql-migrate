@@ -32,6 +32,12 @@ public sealed record RevertOptions
 
     public bool All { get; init; }
 
+    /// <summary>
+    /// Restore these repeatables (e.g. "views/vCustomer.sql") to the definition they had before their last apply,
+    /// instead of reverting changes.
+    /// </summary>
+    public IReadOnlyList<string> Repeatables { get; init; } = [];
+
     public bool DryRun { get; init; }
 
     /// <summary>
@@ -43,7 +49,29 @@ public sealed record RevertOptions
 
 public sealed record DeployResult(IReadOnlyList<string> Deployed, IReadOnlyList<string> Repeatables, bool DryRun);
 
-public sealed record RevertResult(IReadOnlyList<string> Reverted, bool DryRun);
+public sealed record RevertResult(IReadOnlyList<string> Reverted, bool DryRun)
+{
+    public IReadOnlyList<string> Repeatables { get; init; } = [];
+}
+
+public sealed record RepairOptions
+{
+    /// <summary>Changes to repair. Empty with <see cref="All"/> = every change whose hash no longer matches.</summary>
+    public IReadOnlyList<string> Names { get; init; } = [];
+
+    public bool All { get; init; }
+
+    /// <summary>Why the deployed scripts were edited; recorded in the event log.</summary>
+    public string? Reason { get; init; }
+
+    public bool DryRun { get; init; }
+}
+
+/// <param name="Name">The repaired change.</param>
+/// <param name="Scripts">Which of deploy, revert, verify and the plan line (requires/flags) differ from what was deployed.</param>
+public sealed record RepairedChange(string Name, IReadOnlyList<string> Scripts);
+
+public sealed record RepairResult(IReadOnlyList<RepairedChange> Repaired, bool DryRun);
 
 public sealed record VerifyResult(StatusReport Status, string? RecordedFingerprint, string? LiveFingerprint, IReadOnlyList<string> Problems)
 {
@@ -250,10 +278,10 @@ public sealed class MigrationEngine
 
     public async Task<RevertResult> RevertAsync(RevertOptions options, CancellationToken cancellationToken = default)
     {
-        var selectors = (options.To is not null ? 1 : 0) + (options.Last is not null ? 1 : 0) + (options.All ? 1 : 0);
+        var selectors = (options.To is not null ? 1 : 0) + (options.Last is not null ? 1 : 0) + (options.All ? 1 : 0) + (options.Repeatables.Count > 0 ? 1 : 0);
         if (selectors != 1)
         {
-            throw new MigrationException("Specify exactly one of --to <change|@tag>, --last <n> or --all.");
+            throw new MigrationException("Specify exactly one of --to <change|@tag>, --last <n>, --all or --repeatable <name>.");
         }
 
         if (!environment.AllowRevert)
@@ -263,6 +291,11 @@ public sealed class MigrationEngine
 
         await using var lockHandle = await AcquireLockAsync(options.DryRun, cancellationToken).ConfigureAwait(false);
         await CheckEnvironmentAsync(cancellationToken).ConfigureAwait(false);
+        if (options.Repeatables.Count > 0)
+        {
+            return new RevertResult([], options.DryRun) { Repeatables = await RevertRepeatablesAsync(options.Repeatables, options.DryRun, cancellationToken).ConfigureAwait(false) };
+        }
+
         var status = await StatusAsync(cancellationToken).ConfigureAwait(false);
         var applied = status.Applied;
 
@@ -367,7 +400,14 @@ public sealed class MigrationEngine
             live = ContentHasher.Hash(dump);
             if (recorded is not null && !string.Equals(recorded, live, StringComparison.Ordinal))
             {
-                problems.Add($"schema drift: live fingerprint {Short(live)} != recorded {Short(recorded)}. Something changed the schema outside bsm.");
+                if (await RecordedWithOtherSchemaFormatAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    log.Warn("the recorded schema fingerprint was taken by an older version of bsm whose fingerprint format differs, so drift cannot be checked; the next deploy records a new one.");
+                }
+                else
+                {
+                    problems.Add($"schema drift: live fingerprint {Short(live)} != recorded {Short(recorded)}. Something changed the schema outside bsm.");
+                }
             }
         }
 
@@ -393,6 +433,162 @@ public sealed class MigrationEngine
 
         return new VerifyResult(status, recorded, live, problems);
     }
+
+    /// <summary>
+    /// Accepts edits to deployed changes without running anything: records the working copy's scripts, hashes and
+    /// flags for the named changes and re-chains every later change, so the database certifies against the plan again.
+    /// For fixing a revert or verify script, or a comment or whitespace edit to a deploy script, after deploy. The
+    /// database itself is not touched, so a repaired deploy.sql must describe what the database already has.
+    /// </summary>
+    public async Task<RepairResult> RepairAsync(RepairOptions options, CancellationToken cancellationToken = default)
+    {
+        if ((options.Names.Count > 0) == options.All)
+        {
+            throw new MigrationException("Name the changes to repair, or pass --all to repair every edited change.");
+        }
+
+        await using var lockHandle = await AcquireLockAsync(options.DryRun, cancellationToken).ConfigureAwait(false);
+        await CheckEnvironmentAsync(cancellationToken).ConfigureAwait(false);
+        var status = await StatusAsync(cancellationToken).ConfigureAwait(false);
+        var byName = status.Changes.ToDictionary(c => c.Change.Name, StringComparer.Ordinal);
+
+        var targets = new List<ChangeStatus>();
+        if (options.All)
+        {
+            targets.AddRange(status.Mismatched);
+        }
+        else
+        {
+            foreach (var name in options.Names.Distinct(StringComparer.Ordinal))
+            {
+                if (!byName.TryGetValue(name, out var item))
+                {
+                    throw new MigrationException(status.Orphans.Any(o => o.Name == name)
+                        ? $"'{name}' is deployed but no longer in the plan; there is no working copy to repair it from."
+                        : $"'{name}' is not a change in the plan.");
+                }
+
+                if (item.State == ChangeState.Pending)
+                {
+                    throw new MigrationException($"'{name}' is not deployed to this database; there is nothing to repair.");
+                }
+
+                if (item.State == ChangeState.Applied)
+                {
+                    log.Info($"{name} already matches the working copy.");
+                    continue;
+                }
+
+                targets.Add(item);
+            }
+        }
+
+        var repaired = targets.Select(t => new RepairedChange(t.Change.Name, Differences(t.Change, t.Applied!))).ToList();
+        if (options.DryRun || repaired.Count == 0)
+        {
+            return new RepairResult(repaired, options.DryRun);
+        }
+
+        var working = targets.ToDictionary(t => t.Change.Name, t => t.Change, StringComparer.Ordinal);
+        await session.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            string? parent = null;
+            foreach (var row in status.Applied)
+            {
+                var updated = row;
+                if (working.TryGetValue(row.Name, out var change))
+                {
+                    var fresh = NewApplied(change, row.ChainId, row.DurationMs, row.AppliedOutOfOrder);
+                    updated = row with
+                    {
+                        ScriptHash = fresh.ScriptHash,
+                        DeployScript = fresh.DeployScript,
+                        RevertScript = fresh.RevertScript,
+                        VerifyScript = fresh.VerifyScript,
+                        Flags = fresh.Flags,
+                        RenderedHash = fresh.RenderedHash,
+                        RenderedRevertHash = fresh.RenderedRevertHash,
+                    };
+                }
+
+                updated = updated with { ChainId = MigrationChange.ComputeChainId(provider.Id, updated.Name, updated.ScriptHash, parent) };
+                parent = updated.ChainId;
+                if (!updated.Equals(row))
+                {
+                    await provider.StateStore.UpdateChangeAsync(session, Schema, updated, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            foreach (var item in repaired)
+            {
+                var message = $"repaired {string.Join(", ", item.Scripts)} (was {Short(byName[item.Name].Applied!.ScriptHash)})" + (options.Reason is null ? string.Empty : $": {options.Reason}");
+                await AppendEventAsync(MigrationEventKind.Repair, item.Name, working[item.Name].ScriptHash, null, message, cancellationToken).ConfigureAwait(false);
+                log.Success($"repaired {item.Name} ({string.Join(", ", item.Scripts)})");
+            }
+
+            await session.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            if (session.InTransaction)
+            {
+                await session.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            throw;
+        }
+
+        return new RepairResult(repaired, options.DryRun);
+
+        static IReadOnlyList<string> Differences(MigrationChange change, AppliedChange row)
+        {
+            var parts = new List<string>();
+            if (!string.Equals(change.DeployScript, row.DeployScript, StringComparison.Ordinal))
+            {
+                parts.Add(MigrationProject.DeployFile);
+            }
+
+            if (!string.Equals(change.RevertScript, row.RevertScript, StringComparison.Ordinal))
+            {
+                parts.Add(MigrationProject.RevertFile);
+            }
+
+            if (!string.Equals(change.VerifyScript, row.VerifyScript, StringComparison.Ordinal))
+            {
+                parts.Add(MigrationProject.VerifyFile);
+            }
+
+            if (parts.Count == 0 || (int)change.Plan.Flags != row.Flags)
+            {
+                parts.Add("plan line");
+            }
+
+            return parts;
+        }
+    }
+
+    /// <summary>The live schema dump (for 'bsm diff-schema').</summary>
+    public Task<string> CaptureSchemaAsync(CancellationToken cancellationToken = default) =>
+        provider.Capabilities.SupportsSchemaFingerprint
+            ? provider.Schema.CaptureAsync(session, Schema, cancellationToken)
+            : throw new MigrationException($"{provider.DisplayName} does not support schema fingerprints.");
+
+    /// <summary>The meta key recording <see cref="ISchemaInspector.FormatVersion"/> of the last snapshot (absent = 1).</summary>
+    public const string SchemaFormatMetaKey = "schema_format";
+
+    /// <summary>True when the last snapshot was recorded with a different schema dump format than this provider writes.</summary>
+    public async Task<bool> RecordedWithOtherSchemaFormatAsync(CancellationToken cancellationToken = default)
+    {
+        var recorded = await provider.StateStore.GetMetaAsync(session, Schema, SchemaFormatMetaKey, cancellationToken).ConfigureAwait(false) ?? "1";
+        return recorded != provider.Schema.FormatVersion.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The schema as recorded after the last deploy or revert, or null.</summary>
+    public async Task<SchemaSnapshot?> GetRecordedSchemaAsync(CancellationToken cancellationToken = default) =>
+        await provider.StateStore.ExistsAsync(session, Schema, cancellationToken).ConfigureAwait(false)
+            ? await provider.StateStore.GetLatestSchemaSnapshotAsync(session, Schema, cancellationToken).ConfigureAwait(false)
+            : null;
 
     /// <summary>Records changes as applied without running them, for adopting an existing database.</summary>
     public async Task<IReadOnlyList<string>> BaselineAsync(string to, CancellationToken cancellationToken = default)
@@ -578,6 +774,77 @@ public sealed class MigrationEngine
         return applied;
     }
 
+    /// <summary>
+    /// Re-applies each repeatable's previous definition (stored at its last apply) and records it as current, so
+    /// the next deploy re-applies the working copy unless that is changed too.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> RevertRepeatablesAsync(IReadOnlyList<string> names, bool dryRun, CancellationToken cancellationToken)
+    {
+        var stored = await provider.StateStore.ExistsAsync(session, Schema, cancellationToken).ConfigureAwait(false)
+            ? (await provider.StateStore.GetRepeatablesAsync(session, Schema, cancellationToken).ConfigureAwait(false)).ToDictionary(r => r.Name, StringComparer.Ordinal)
+            : [];
+
+        var rows = new List<AppliedRepeatable>();
+        foreach (var name in names.Distinct(StringComparer.Ordinal))
+        {
+            if (!stored.TryGetValue(name, out var row))
+            {
+                throw new MigrationException($"Repeatable '{name}' has not been applied to this database (names look like views/vCustomer.sql or @dev/seed.sql).");
+            }
+
+            if (row.PreviousScript is null)
+            {
+                throw new MigrationException($"Repeatable '{name}' has only been applied once, so there is no earlier definition to restore. Remove the object with a new change instead.");
+            }
+
+            rows.Add(row);
+        }
+
+        var restored = new List<string>();
+        foreach (var row in rows)
+        {
+            if (dryRun)
+            {
+                log.Info($"would restore repeatable {row.Name} to {Short(row.PreviousHash!)}");
+                restored.Add(row.Name);
+                continue;
+            }
+
+            log.Info($"restoring repeatable {row.Name}");
+            try
+            {
+                await session.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+                await RunScriptAsync(row.Name, "repeatable", row.PreviousScript!, cancellationToken).ConfigureAwait(false);
+                await provider.StateStore.UpsertRepeatableAsync(session, Schema, row with
+                {
+                    Hash = row.PreviousHash!,
+                    Script = row.PreviousScript!,
+                    PreviousHash = row.Hash,
+                    PreviousScript = row.Script,
+                    AppliedAtUtc = DateTimeOffset.UtcNow,
+                    AppliedBy = actor.User,
+                }, cancellationToken).ConfigureAwait(false);
+                await AppendEventAsync(MigrationEventKind.Revert, row.Name, row.PreviousHash, null, $"repeatable restored from {Short(row.Hash)}", cancellationToken).ConfigureAwait(false);
+                await session.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                await FailAsync(row.Name, row.PreviousHash, ex, true, cancellationToken).ConfigureAwait(false);
+                throw;
+            }
+
+            log.Success($"restored repeatable {row.Name}");
+            restored.Add(row.Name);
+        }
+
+        if (!dryRun && restored.Count > 0)
+        {
+            await CaptureSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return restored;
+    }
+
     private async Task RunScriptAsync(string name, string kind, string script, CancellationToken cancellationToken)
     {
         var substituted = Render(name, kind, script, project.Find(name)?.ScriptHash).Text;
@@ -630,6 +897,7 @@ public sealed class MigrationEngine
         var applied = await provider.StateStore.GetAppliedChangesAsync(session, Schema, cancellationToken).ConfigureAwait(false);
         var snapshot = new SchemaSnapshot(ContentHasher.Hash(dump), dump, DateTimeOffset.UtcNow, applied.Count == 0 ? null : applied[^1].ChainId);
         await provider.StateStore.InsertSchemaSnapshotAsync(session, Schema, snapshot, cancellationToken).ConfigureAwait(false);
+        await provider.StateStore.SetMetaAsync(session, Schema, SchemaFormatMetaKey, provider.Schema.FormatVersion.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken).ConfigureAwait(false);
         log.Detail($"schema fingerprint {Short(snapshot.Fingerprint)}");
     }
 
@@ -889,7 +1157,8 @@ public sealed class MigrationEngine
             throw new MigrationException(
                 "These changes were edited after they were deployed (hash mismatch): " +
                 string.Join(", ", mismatched.Select(m => m.Change.Name)) +
-                ". Deployed changes are immutable; add a new change (or rework) instead of editing.");
+                ". Deployed changes are immutable: put the edit in a new change ('bsm rework <change>'), " +
+                "or if the edit is harmless (a revert or verify fix, a comment), accept it with 'bsm repair <change>'.");
         }
     }
 

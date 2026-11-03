@@ -21,6 +21,12 @@ public interface IStateStore
 
     Task DeleteChangeAsync(IDatabaseSession session, string schema, string name, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Rewrites the recorded hashes, chain id, scripts and flags of a deployed change (matched by name), keeping
+    /// its sequence and deploy details. Used by 'bsm repair'.
+    /// </summary>
+    Task UpdateChangeAsync(IDatabaseSession session, string schema, AppliedChange change, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<AppliedRepeatable>> GetRepeatablesAsync(IDatabaseSession session, string schema, CancellationToken cancellationToken);
 
     Task UpsertRepeatableAsync(IDatabaseSession session, string schema, AppliedRepeatable repeatable, CancellationToken cancellationToken);
@@ -104,6 +110,7 @@ public enum MigrationEventKind
     Verify,
     Tag,
     Resource,
+    Repair,
 }
 
 public sealed record MigrationEvent

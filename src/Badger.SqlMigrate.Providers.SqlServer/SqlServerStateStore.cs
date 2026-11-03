@@ -175,6 +175,28 @@ public sealed partial class SqlServerStateStore : IStateStore
     public Task DeleteChangeAsync(IDatabaseSession session, string schema, string name, CancellationToken cancellationToken) =>
         session.ExecuteAsync($"DELETE FROM {Quote(schema)}.[changes] WHERE [name] = @name;", new Dictionary<string, object?> { ["name"] = name }, cancellationToken);
 
+    public Task UpdateChangeAsync(IDatabaseSession session, string schema, AppliedChange change, CancellationToken cancellationToken) =>
+        session.ExecuteAsync($"""
+            UPDATE {Quote(schema)}.[changes]
+               SET [script_hash] = @script_hash, [chain_id] = @chain_id, [deploy_script] = @deploy_script,
+                   [revert_script] = @revert_script, [verify_script] = @verify_script, [flags] = @flags,
+                   [rendered_hash] = @rendered_hash, [rendered_revert_hash] = @rendered_revert_hash
+             WHERE [name] = @name;
+            """,
+            new Dictionary<string, object?>
+            {
+                ["name"] = change.Name,
+                ["script_hash"] = change.ScriptHash,
+                ["chain_id"] = change.ChainId,
+                ["deploy_script"] = change.DeployScript,
+                ["revert_script"] = change.RevertScript,
+                ["verify_script"] = change.VerifyScript,
+                ["flags"] = change.Flags,
+                ["rendered_hash"] = change.RenderedHash,
+                ["rendered_revert_hash"] = change.RenderedRevertHash,
+            },
+            cancellationToken);
+
     public async Task<IReadOnlyList<AppliedRepeatable>> GetRepeatablesAsync(IDatabaseSession session, string schema, CancellationToken cancellationToken)
     {
         var rows = await session.QueryAsync($"SELECT * FROM {Quote(schema)}.[repeatables] ORDER BY [name];", null, cancellationToken).ConfigureAwait(false);

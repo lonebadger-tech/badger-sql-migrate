@@ -10,9 +10,9 @@ To add, for example, PostgreSQL:
    - `IDatabaseSession`: transactions, `ExecuteAsync`, `QueryAsync`, server notices via `Message`.
    - `IScriptParser`: statement or batch splitting (dollar-quoted bodies for PostgreSQL, `DELIMITER` for MySQL).
    - `IScriptLinter`: statements that cannot run in a transaction (e.g. `CREATE INDEX CONCURRENTLY`).
-   - `IStateStore`: the journal tables in the vendor's DDL.
+   - `IStateStore`: the journal tables in the vendor's DDL, including `UpdateChangeAsync` for `bsm repair`.
    - `IDeployLock`: `pg_advisory_lock`, MySQL `GET_LOCK`, SQLite `BEGIN EXCLUSIVE`.
-   - `ISchemaInspector`: a canonical, sorted dump of the catalog.
+   - `ISchemaInspector`: a canonical, sorted dump of the catalog, and (optionally) `Parse`, which splits a dump into entries keyed by object so `bsm diff-schema` can report an object as changed rather than removed and added.
    - `ResolveDatabaseName`: the database name for the `{db}` built-in.
    - `IEnvironmentResources` (optional): per-environment objects that must exist before changes run (SQL Server uses it for Always Encrypted keys).
 

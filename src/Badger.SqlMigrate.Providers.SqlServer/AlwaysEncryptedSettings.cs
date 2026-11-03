@@ -69,7 +69,7 @@ public sealed class AlwaysEncryptedSettings
 
     /// <summary>Unknown top-level provider settings are reported so typos do not silently disable features.</summary>
     public static IEnumerable<string> UnknownSections(JsonObject settings) =>
-        settings.Select(kv => kv.Key).Where(k => !string.Equals(k, SectionName, StringComparison.OrdinalIgnoreCase));
+        settings.Select(kv => kv.Key).Where(k => !string.Equals(k, SectionName, StringComparison.OrdinalIgnoreCase) && !string.Equals(k, SchemaFingerprintSettings.SectionName, StringComparison.OrdinalIgnoreCase));
 }
 
 public sealed class AttestationSettings

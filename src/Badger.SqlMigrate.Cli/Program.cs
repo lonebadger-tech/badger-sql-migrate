@@ -10,6 +10,7 @@ var vars = new Option<string[]>("--var") { Description = "Script variable, name=
 var json = new Option<bool>("--json") { Description = "Machine-readable output on stdout.", Recursive = true };
 var verbose = new Option<bool>("--verbose", "-v") { Description = "Show server messages and details.", Recursive = true };
 var noColor = new Option<bool>("--no-color") { Description = "Disable ANSI colors (also honors NO_COLOR).", Recursive = true };
+var bundleFile = new Option<string?>("--bundle") { Description = "Run from a verified bundle (bsm bundle create) instead of the project folder's scripts.", Recursive = true };
 
 GlobalOptions Globals(ParseResult r) => new(
     r.GetValue(project)!,
@@ -17,7 +18,8 @@ GlobalOptions Globals(ParseResult r) => new(
     r.GetValue(connection),
     r.GetValue(vars) ?? [],
     r.GetValue(claim),
-    new ConsoleOutput(r.GetValue(json), r.GetValue(verbose), r.GetValue(noColor)));
+    new ConsoleOutput(r.GetValue(json), r.GetValue(verbose), r.GetValue(noColor)),
+    r.GetValue(bundleFile));
 
 var root = new RootCommand("Badger SQL Migrate - hash-certified, plan-based database migrations with real up and down.");
 root.Options.Add(project);
@@ -28,6 +30,7 @@ root.Options.Add(vars);
 root.Options.Add(json);
 root.Options.Add(verbose);
 root.Options.Add(noColor);
+root.Options.Add(bundleFile);
 
 // init
 var initProvider = new Option<string>("--provider") { Description = "Database provider.", DefaultValueFactory = _ => "sqlserver" };
@@ -82,8 +85,9 @@ var revertTo = new Option<string?>("--to") { Description = "Revert everything de
 var revertLast = new Option<int?>("--last") { Description = "Revert the last N deployed changes." };
 var revertAll = new Option<bool>("--all") { Description = "Revert every deployed change." };
 var allowDrift = new Option<bool>("--allow-variable-drift") { Description = "Revert even if the revert script renders differently than at deploy time." };
-var revert = new Command("revert", "Revert changes using the revert scripts stored in the database at deploy time.") { revertTo, revertLast, revertAll, dryRun, yes, allowDrift };
-revert.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Revert(g, r.GetValue(revertTo), r.GetValue(revertLast), r.GetValue(revertAll), r.GetValue(dryRun), r.GetValue(yes), r.GetValue(allowDrift), ct)));
+var revertRepeatable = new Option<string[]>("--repeatable") { Description = "Restore a repeatable (e.g. views/vCustomer.sql) to its definition before the last apply. Repeatable." };
+var revert = new Command("revert", "Revert changes using the revert scripts stored in the database at deploy time.") { revertTo, revertLast, revertAll, revertRepeatable, dryRun, yes, allowDrift };
+revert.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Revert(g, r.GetValue(revertTo), r.GetValue(revertLast), r.GetValue(revertAll), r.GetValue(revertRepeatable) ?? [], r.GetValue(dryRun), r.GetValue(yes), r.GetValue(allowDrift), ct)));
 root.Subcommands.Add(revert);
 
 // rebase
@@ -91,6 +95,41 @@ var rebaseTo = new Option<string>("--to") { Description = "Revert to this change
 var rebase = new Command("rebase", "Revert to a change, then redeploy to head (handy while iterating on a change).") { rebaseTo, yes, allowDrift };
 rebase.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Rebase(g, r.GetValue(rebaseTo)!, r.GetValue(yes), r.GetValue(allowDrift), ct)));
 root.Subcommands.Add(rebase);
+
+// repair
+var repairNames = new Argument<string[]>("changes") { Description = "Deployed changes whose edited scripts should be accepted.", Arity = ArgumentArity.ZeroOrMore };
+var repairAll = new Option<bool>("--all") { Description = "Repair every deployed change whose hash no longer matches." };
+var repairReason = new Option<string?>("--reason") { Description = "Why the scripts were edited; recorded in the log." };
+var repair = new Command("repair", "Accept edits to deployed changes (e.g. a fixed revert.sql) without running anything; re-certifies the journal.") { repairNames, repairAll, repairReason, dryRun, yes };
+repair.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Repair(g, r.GetValue(repairNames) ?? [], r.GetValue(repairAll), r.GetValue(repairReason), r.GetValue(dryRun), r.GetValue(yes), ct)));
+root.Subcommands.Add(repair);
+
+// rework
+var reworkName = new Argument<string>("change") { Description = "The deployed change to supersede." };
+var reworkAs = new Option<string?>("--as") { Description = "Name of the new change (default: <change>-v2, -v3, ...)." };
+var rework = new Command("rework", "Add a change that supersedes a deployed one: copies its deploy script to edit, with a revert that restores it.") { reworkName, reworkAs, addNote };
+rework.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Rework(g, r.GetValue(reworkName)!, r.GetValue(reworkAs), r.GetValue(addNote))));
+root.Subcommands.Add(rework);
+
+// bundle
+var bundle = new Command("bundle", "Package the project into a hash-verified file to deploy with --bundle.");
+var bundleOutput = new Option<string?>("--output", "-o") { Description = "Bundle file to write (default: bsm-bundle-<plan head>.zip)." };
+var bundleNoConfig = new Option<bool>("--no-config") { Description = "Leave bsm.yaml out; deploys then read it from --project." };
+var bundleCreate = new Command("create", "Write a bundle of the plan, changes, repeatables, environment scripts and bsm.yaml.") { bundleOutput, bundleNoConfig };
+bundleCreate.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.BundleCreate(g, r.GetValue(bundleOutput), r.GetValue(bundleNoConfig))));
+bundle.Subcommands.Add(bundleCreate);
+var bundlePath = new Argument<string>("file") { Description = "Bundle file." };
+var bundleVerify = new Command("verify", "Check every file in a bundle against its manifest hashes.") { bundlePath };
+bundleVerify.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.BundleVerify(g, r.GetValue(bundlePath)!)));
+bundle.Subcommands.Add(bundleVerify);
+root.Subcommands.Add(bundle);
+
+// diff-schema
+var diffAgainst = new Option<string?>("--against") { Description = "Compare with this environment's live database (default: this database's schema as recorded after its last deploy)." };
+var diffExit = new Option<bool>("--exit-code") { Description = "Exit with 3 when the schemas differ." };
+var diffSchema = new Command("diff-schema", "Show schema differences: live vs. last recorded (what drifted), or between two environments.") { diffAgainst, diffExit };
+diffSchema.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.DiffSchema(g, r.GetValue(diffAgainst), r.GetValue(diffExit), ct)));
+root.Subcommands.Add(diffSchema);
 
 // verify
 var verify = new Command("verify", "Check deployed hashes against the working copy, run verify scripts, and detect schema drift.");

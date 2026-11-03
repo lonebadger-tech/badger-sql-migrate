@@ -179,6 +179,33 @@ def releases():
     body = f"""
 <section class="release" id="v{VERSION}">
   <h2>Version {VERSION} <span class="date">{RELEASE_DATE}</span></h2>
+  <h3>Fixing deployed changes</h3>
+  <ul>
+    <li><code>bsm rework</code> adds a change that supersedes a deployed one, with a revert that restores the previous version</li>
+    <li><code>bsm repair</code> accepts harmless edits to deployed changes, such as a fixed revert script, without running SQL, and re-certifies the journal</li>
+    <li><code>bsm revert --repeatable</code> puts a view, procedure or function back to its previous definition</li>
+  </ul>
+  <h3>Build once, deploy everywhere</h3>
+  <ul>
+    <li><code>bsm bundle create</code> packs the plan, scripts and configuration into one byte-reproducible file with SHA-256 hashes</li>
+    <li><code>--bundle</code> runs any command from a bundle after checking every hash and the plan head</li>
+  </ul>
+  <h3>Schema drift</h3>
+  <ul>
+    <li><code>bsm diff-schema</code> lists the objects changed since the last deploy, or the differences between two environments, with line diffs for modules</li>
+  </ul>
+  <h3>System-versioned tables and partitions</h3>
+  <ul>
+    <li>The schema fingerprint records system versioning (period columns, history table, retention) and partitioning (functions, boundaries, schemes, partitioned tables and indexes)</li>
+    <li>History tables named by SQL Server fingerprint the same on every server</li>
+    <li><code>schemaFingerprint.partitionBoundaries: ignore</code> for partitions maintained by a sliding-window job</li>
+    <li>Lint rule BSM004: system versioning switched off and not back on</li>
+    <li>Databases with these features deployed by 0.1 get a warning instead of a drift error until their next deploy</li>
+  </ul>
+</section>
+
+<section class="release" id="v0.1.0">
+  <h2>Version 0.1.0 <span class="date">November 2026</span></h2>
   <p>The first release.</p>
   <h3>Migrations</h3>
   <ul>
@@ -339,6 +366,41 @@ GO
 IF EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = N'ftCatalog')
     DROP FULLTEXT CATALOG ftCatalog;''', "changes/product-fulltext/revert.sql"),
        code('''product-fulltext [create-product] !notx''', "", "bsm.plan"))
+
+    ex("temporal", "A system-versioned (temporal) table", "<p>Name the history table so it is the same on every server and the revert can drop it. To change the table later, switch versioning off, change both tables and switch it on again in one change (lint rule BSM004 catches a missing ON).</p>",
+       sql('''CREATE TABLE dbo.Price (
+    Id int NOT NULL CONSTRAINT PK_Price PRIMARY KEY,
+    ProductId int NOT NULL,
+    Amount money NOT NULL,
+    ValidFrom datetime2 GENERATED ALWAYS AS ROW START HIDDEN NOT NULL,
+    ValidTo datetime2 GENERATED ALWAYS AS ROW END HIDDEN NOT NULL,
+    PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo))
+WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.PriceHistory, HISTORY_RETENTION_PERIOD = 2 YEARS));''', "changes/create-price/deploy.sql"),
+       sql('''ALTER TABLE dbo.Price SET (SYSTEM_VERSIONING = OFF);
+DROP TABLE dbo.Price, dbo.PriceHistory;''', "changes/create-price/revert.sql"),
+       sql('''IF OBJECTPROPERTY(OBJECT_ID(N'dbo.Price'), 'TableTemporalType') <> 2
+    THROW 50000, N'dbo.Price is not system-versioned', 1;''', "changes/create-price/verify.sql"))
+
+    ex("partitions", "A partitioned table", "<p>The function, scheme and table go in one change. Filegroups come from a variable because they differ per environment. If a job adds partitions in production, set <code>schemaFingerprint.partitionBoundaries: ignore</code> for that environment so its splits are not reported as drift.</p>",
+       sql('''CREATE PARTITION FUNCTION pfOrderDate (date) AS RANGE RIGHT FOR VALUES ('2026-01-01', '2026-04-01', '2026-07-01', '2026-10-01');
+CREATE PARTITION SCHEME psOrderDate AS PARTITION pfOrderDate ALL TO ({OrderFilegroup});
+CREATE TABLE dbo.[Order] (
+    OrderDate date NOT NULL,
+    Id bigint NOT NULL,
+    CustomerId int NOT NULL,
+    CONSTRAINT PK_Order PRIMARY KEY (OrderDate, Id)) ON psOrderDate (OrderDate);
+CREATE INDEX IX_Order_Customer ON dbo.[Order] (CustomerId) ON psOrderDate (OrderDate);''', "changes/create-order/deploy.sql"),
+       sql('''DROP TABLE dbo.[Order];
+DROP PARTITION SCHEME psOrderDate;
+DROP PARTITION FUNCTION pfOrderDate;''', "changes/create-order/revert.sql"),
+       yaml('''variables:
+  OrderFilegroup: "[PRIMARY]"          # Azure SQL Database has only PRIMARY
+environments:
+  onprem-prod:
+    variables:
+      OrderFilegroup: "[FG_Orders]"
+    schemaFingerprint:
+      partitionBoundaries: ignore      # a job splits new partitions every month''', "bsm.yaml"))
 
     ex("repeatable", "Views, procedures and functions (repeatables)", "<p>Programmable objects live in <code>repeatable/</code> and use <code>CREATE OR ALTER</code>. Badger SQL Migrate re-applies one only when its hash changes, after all changes, in dependency order. Declare dependencies with a header.</p>",
        sql('''CREATE OR ALTER VIEW dbo.vActiveCustomer

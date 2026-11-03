@@ -19,7 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 RELEASE_DATE = "November 2026"
 BASE = "/badger-sql-migrate"
 # Where release files are downloaded from: the public Azure blob container build/upload-release.sh fills.

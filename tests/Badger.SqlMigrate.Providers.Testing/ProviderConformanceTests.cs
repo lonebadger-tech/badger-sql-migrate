@@ -173,6 +173,82 @@ public abstract class ProviderConformanceTests
         }
     }
 
+    [SkippableFact]
+    public async Task Diff_schema_names_the_objects_changed_outside_badger()
+    {
+        await using var db = await RequireDatabaseAsync();
+        using var project = NewProject();
+        project.Change("t1", Dialect.CreateTable("t1"), Dialect.DropTable("t1"));
+        await using var e = await EngineAsync(db, project);
+        await e.Engine.DeployAsync(new DeployOptions());
+
+        await e.Session.ExecuteAsync(Dialect.CreateTable("hotfix"), null, CancellationToken.None);
+
+        var recorded = (await e.Engine.GetRecordedSchemaAsync())!.Dump;
+        var live = await e.Engine.CaptureSchemaAsync();
+        var differences = SchemaDiff.Compare(Provider.Schema.Parse(recorded), Provider.Schema.Parse(live));
+        Assert.NotEmpty(differences);
+        Assert.All(differences, d => Assert.Equal(SchemaDifferenceKind.Added, d.Kind));
+        Assert.All(differences, d => Assert.Contains("hotfix", d.Key, StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(SchemaDiff.Compare(Provider.Schema.Parse(recorded), Provider.Schema.Parse(recorded)));
+    }
+
+    [SkippableFact]
+    public async Task Repair_accepts_an_edited_revert_script_and_recertifies()
+    {
+        await using var db = await RequireDatabaseAsync();
+        using var project = NewProject();
+        project.Change("t1", Dialect.CreateTable("t1"), Dialect.DropTable("t1"));
+        project.Change("t2", Dialect.CreateTable("t2"), Dialect.Failing);
+        await using (var e = await EngineAsync(db, project))
+        {
+            await e.Engine.DeployAsync(new DeployOptions());
+        }
+
+        project.Write($"{MigrationProject.ChangesFolder}/t2/{MigrationProject.RevertFile}", Dialect.DropTable("t2"));
+        await using (var e = await EngineAsync(db, project))
+        {
+            Assert.False((await e.Engine.StatusAsync()).UpToDate);
+            var result = await e.Engine.RepairAsync(new RepairOptions { Names = ["t2"] });
+            Assert.Equal([MigrationProject.RevertFile], result.Repaired.Single().Scripts);
+
+            var status = await e.Engine.StatusAsync();
+            Assert.True(status.UpToDate);
+            Assert.True(status.Certified);
+            Assert.Equal(project.Load(Provider.Id).HeadChainId, status.DatabaseHeadChainId);
+            Assert.Equal(["t2", "t1"], (await e.Engine.RevertAsync(new RevertOptions { All = true })).Reverted);
+        }
+    }
+
+    [SkippableFact]
+    public async Task Repeatable_revert_restores_the_previous_definition()
+    {
+        await using var db = await RequireDatabaseAsync();
+        using var project = NewProject();
+        project.Change("t1", Dialect.CreateTable("t1"), Dialect.DropTable("t1"));
+        project.Repeatable("views/v1.sql", Dialect.Repeatable("v1", 1));
+        string first;
+        await using (var e = await EngineAsync(db, project))
+        {
+            await e.Engine.DeployAsync(new DeployOptions());
+            first = await e.Engine.CaptureSchemaAsync();
+            await Assert.ThrowsAsync<MigrationException>(() => e.Engine.RevertAsync(new RevertOptions { Repeatables = ["views/v1.sql"] }));
+        }
+
+        project.Repeatable("views/v1.sql", Dialect.Repeatable("v1", 2));
+        await using (var e = await EngineAsync(db, project))
+        {
+            await e.Engine.DeployAsync(new DeployOptions());
+            Assert.NotEqual(first, await e.Engine.CaptureSchemaAsync());
+
+            var result = await e.Engine.RevertAsync(new RevertOptions { Repeatables = ["views/v1.sql"] });
+            Assert.Equal(["views/v1.sql"], result.Repeatables);
+            Assert.Equal(first, await e.Engine.CaptureSchemaAsync());
+            Assert.True((await e.Engine.VerifyAsync()).Ok);
+            Assert.Equal(["views/v1.sql"], (await e.Engine.DeployAsync(new DeployOptions { DryRun = true })).Repeatables);
+        }
+    }
+
     private async Task<IConformanceDatabase> RequireDatabaseAsync()
     {
         var db = await CreateDatabaseAsync();

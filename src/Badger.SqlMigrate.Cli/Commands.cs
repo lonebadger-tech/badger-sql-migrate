@@ -2,8 +2,10 @@ using System.Reflection;
 using System.Text;
 using Badger.SqlMigrate.Connectivity;
 using Badger.SqlMigrate.Core;
+using Badger.SqlMigrate.Core.Bundles;
 using Badger.SqlMigrate.Core.Configuration;
 using Badger.SqlMigrate.Core.Engine;
+using Badger.SqlMigrate.Core.Hashing;
 using Badger.SqlMigrate.Core.Plan;
 using Badger.SqlMigrate.Core.Preprocessing;
 using Badger.SqlMigrate.Core.Project;
@@ -12,7 +14,13 @@ using Badger.SqlMigrate.Providers.SqlServer;
 
 namespace Badger.SqlMigrate.Cli;
 
-public sealed record GlobalOptions(string ProjectDir, string? Environment, string? ConnectionString, string[] Variables, bool ClaimEnvironment, ConsoleOutput Out);
+public sealed record GlobalOptions(string ProjectDir, string? Environment, string? ConnectionString, string[] Variables, bool ClaimEnvironment, ConsoleOutput Out, string? Bundle = null);
+
+/// <summary>
+/// Where a command reads its project from. Normally both are --project; with --bundle the scripts come from the
+/// verified, extracted bundle, and so does bsm.yaml when the bundle includes it.
+/// </summary>
+public sealed record Workspace(string ProjectDir, string ConfigDir, string BaseDir, BundleManifest? Bundle);
 
 public static class Commands
 {
@@ -49,6 +57,7 @@ public static class Commands
 
     public static int Init(GlobalOptions g, string providerId)
     {
+        RequireWorkingCopy(g, "init");
         var provider = Providers.Resolve(providerId);
         var dir = Path.GetFullPath(g.ProjectDir);
         Directory.CreateDirectory(dir);
@@ -133,6 +142,7 @@ public static class Commands
 
     public static int Add(GlobalOptions g, string name, string[] requires, string? note, bool noTx, bool irreversible)
     {
+        RequireWorkingCopy(g, "add");
         var dir = Path.GetFullPath(g.ProjectDir);
         var config = BsmConfig.Load(dir);
         var provider = Providers.Resolve(config.Provider);
@@ -189,6 +199,7 @@ public static class Commands
 
     public static int Tag(GlobalOptions g, string name)
     {
+        RequireWorkingCopy(g, "tag");
         var dir = Path.GetFullPath(g.ProjectDir);
         if (!PlanFile.IsValidName(name))
         {
@@ -255,7 +266,7 @@ public static class Commands
     /// </summary>
     private static void CheckVariableReferences(GlobalOptions g, MigrationProject project, List<string> errors, List<string> warnings)
     {
-        var config = BsmConfig.Load(Path.GetFullPath(g.ProjectDir));
+        var config = BsmConfig.Load(Open(g).ConfigDir);
         if (config.Preprocessor.Unknown == UnknownVariablePolicy.Keep)
         {
             return;
@@ -393,11 +404,11 @@ public static class Commands
     /// <summary>An engine for the selected environment without a database connection (vars, render).</summary>
     private static (MigrationEngine Engine, MigrationProject Project) OfflineEngine(GlobalOptions g)
     {
-        var dir = Path.GetFullPath(g.ProjectDir);
-        var config = BsmConfig.Load(dir);
+        var ws = Open(g);
+        var config = BsmConfig.Load(ws.ConfigDir);
         var provider = Providers.Resolve(config.Provider);
         var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
-        var project = MigrationProject.Load(dir, provider.Id, environment.Name);
+        var project = MigrationProject.Load(ws.ProjectDir, provider.Id, environment.Name);
         var engine = new MigrationEngine(project, provider, environment, OfflineSession.Instance, Actor.Current(ToolVersion), g.Out, ParseVariables(g.Variables))
         {
             Preprocessing = config.Preprocessor,
@@ -543,20 +554,22 @@ public static class Commands
         return Ok;
     }
 
-    public static async Task<int> Revert(GlobalOptions g, string? to, int? last, bool all, bool dryRun, bool yes, bool allowVariableDrift, CancellationToken ct)
+    public static async Task<int> Revert(GlobalOptions g, string? to, int? last, bool all, string[] repeatables, bool dryRun, bool yes, bool allowVariableDrift, CancellationToken ct)
     {
         await using var ctx = await Connect(g, ct);
-        var options = new RevertOptions { To = to, Last = last, All = all, AllowVariableDrift = allowVariableDrift };
+        var options = new RevertOptions { To = to, Last = last, All = all, Repeatables = repeatables, AllowVariableDrift = allowVariableDrift };
         if (!dryRun)
         {
             var preview = await ctx.Engine.RevertAsync(options with { DryRun = true }, ct);
-            if (preview.Reverted.Count == 0)
+            var names = preview.Reverted.Concat(preview.Repeatables).ToList();
+            if (names.Count == 0)
             {
                 g.Out.Success("nothing to revert.");
                 return Ok;
             }
 
-            Confirm(g, yes, ctx.Environment, $"Revert {preview.Reverted.Count} change(s) from '{ctx.Environment.Name}' ({ctx.Session.Description}): {string.Join(", ", preview.Reverted)}?");
+            var what = repeatables.Length > 0 ? $"Restore the previous definition of {names.Count} repeatable(s) in" : $"Revert {names.Count} change(s) from";
+            Confirm(g, yes, ctx.Environment, $"{what} '{ctx.Environment.Name}' ({ctx.Session.Description}): {string.Join(", ", names)}?");
         }
 
         var result = await ctx.Engine.RevertAsync(options with { DryRun = dryRun }, ct);
@@ -564,12 +577,282 @@ public static class Commands
         {
             g.Out.WriteJson(result);
         }
+        else if (repeatables.Length > 0)
+        {
+            g.Out.Success($"{(dryRun ? "would restore" : "restored")} {result.Repeatables.Count} repeatable(s) to their previous definition.");
+            g.Out.Info("the working copy still has the newer version, so the next deploy re-applies it unless you change it too.");
+        }
         else
         {
             g.Out.Success($"{(dryRun ? "would revert" : "reverted")} {result.Reverted.Count} change(s).");
         }
 
         return Ok;
+    }
+
+    public static async Task<int> Repair(GlobalOptions g, string[] names, bool all, string? reason, bool dryRun, bool yes, CancellationToken ct)
+    {
+        await using var ctx = await Connect(g, ct);
+        var options = new RepairOptions { Names = names, All = all, Reason = reason };
+        var preview = await ctx.Engine.RepairAsync(options with { DryRun = true }, ct);
+        if (preview.Repaired.Count == 0)
+        {
+            if (g.Out.Json)
+            {
+                g.Out.WriteJson(preview);
+            }
+            else
+            {
+                g.Out.Success("nothing to repair; deployed changes match the working copy.");
+            }
+
+            return Ok;
+        }
+
+        foreach (var item in preview.Repaired)
+        {
+            g.Out.Info($"  {item.Name}: {string.Join(", ", item.Scripts)} differ from what was deployed");
+        }
+
+        var deployEdited = preview.Repaired.Where(r => r.Scripts.Contains(MigrationProject.DeployFile)).Select(r => r.Name).ToList();
+        if (deployEdited.Count > 0)
+        {
+            g.Out.Warn($"{string.Join(", ", deployEdited)}: {MigrationProject.DeployFile} was edited. Repair does not run it, so other databases that already have the change keep the old version. Only repair edits that change nothing (comments, formatting); put real changes in a new change with 'bsm rework'.");
+        }
+
+        if (dryRun)
+        {
+            if (g.Out.Json)
+            {
+                g.Out.WriteJson(preview);
+            }
+            else
+            {
+                g.Out.Success($"would repair {preview.Repaired.Count} change(s).");
+            }
+
+            return Ok;
+        }
+
+        Confirm(g, yes, ctx.Environment, $"Record the working copy of {string.Join(", ", preview.Repaired.Select(r => r.Name))} as deployed to '{ctx.Environment.Name}' ({ctx.Session.Description}) without running anything?", force: deployEdited.Count > 0);
+        var result = await ctx.Engine.RepairAsync(options, ct);
+        if (g.Out.Json)
+        {
+            g.Out.WriteJson(result);
+        }
+        else
+        {
+            g.Out.Success($"repaired {result.Repaired.Count} change(s); the journal now matches the working copy.");
+        }
+
+        return Ok;
+    }
+
+    /// <summary>
+    /// Adds a new change that supersedes a deployed one: deploy.sql starts as a copy of the old deploy.sql (edit it),
+    /// revert.sql restores the old definition, and the new change requires the old one.
+    /// </summary>
+    public static int Rework(GlobalOptions g, string name, string? newName, string? note)
+    {
+        RequireWorkingCopy(g, "rework");
+        var dir = Path.GetFullPath(g.ProjectDir);
+        var config = BsmConfig.Load(dir);
+        var provider = Providers.Resolve(config.Provider);
+        var planPath = Path.Combine(dir, PlanFile.FileName);
+        var plan = PlanFile.Load(planPath);
+        var index = plan.IndexOf(name);
+        if (index < 0)
+        {
+            throw new MigrationException($"Change '{name}' is not in the plan.");
+        }
+
+        var oldDir = Path.Combine(dir, MigrationProject.ChangesFolder, name);
+        var oldDeploy = Path.Combine(oldDir, MigrationProject.DeployFile);
+        if (!File.Exists(oldDeploy))
+        {
+            throw new MigrationException($"{MigrationProject.ChangesFolder}/{name}/{MigrationProject.DeployFile} does not exist.");
+        }
+
+        newName ??= NextRevisionName(name, n => plan.IndexOf(n) >= 0 || Directory.Exists(Path.Combine(dir, MigrationProject.ChangesFolder, n)));
+        if (!PlanFile.IsValidName(newName))
+        {
+            throw new MigrationException($"Invalid change name '{newName}'. Use letters, digits, '-', '_' or '.'.");
+        }
+
+        if (plan.IndexOf(newName) >= 0 || Directory.Exists(Path.Combine(dir, MigrationProject.ChangesFolder, newName)))
+        {
+            throw new MigrationException($"Change '{newName}' already exists.");
+        }
+
+        var deploy = ContentHasher.ReadNormalized(oldDeploy);
+        var newDir = Path.Combine(dir, MigrationProject.ChangesFolder, newName);
+        Directory.CreateDirectory(newDir);
+        File.WriteAllText(Path.Combine(newDir, MigrationProject.DeployFile), deploy, Utf8NoBom);
+        File.WriteAllText(
+            Path.Combine(newDir, MigrationProject.RevertFile),
+            provider.FormatComment($"Revert {newName}: restore what {name} deployed.") + "\n" +
+            provider.FormatComment($"Copied from {MigrationProject.ChangesFolder}/{name}/{MigrationProject.DeployFile}; edit it if that script cannot simply be run again.") + "\n\n" + deploy,
+            Utf8NoBom);
+        var oldVerify = Path.Combine(oldDir, MigrationProject.VerifyFile);
+        if (File.Exists(oldVerify))
+        {
+            File.Copy(oldVerify, Path.Combine(newDir, MigrationProject.VerifyFile));
+        }
+
+        var old = plan.Changes[index];
+        var author = Environment.GetEnvironmentVariable("BSM_AUTHOR") ?? Environment.UserName.Replace(' ', '_');
+        AppendLine(planPath, PlanFile.FormatChange(new PlanChange(newName, [name], old.Flags & ChangeFlags.NoTransaction, DateTimeOffset.UtcNow, author, note ?? $"rework of {name}", 0)));
+
+        g.Out.Success($"added {newName} (rework of {name})");
+        g.Out.Info($"  {MigrationProject.ChangesFolder}/{newName}/{MigrationProject.DeployFile}   copy of {name}'s deploy script: edit this");
+        g.Out.Info($"  {MigrationProject.ChangesFolder}/{newName}/{MigrationProject.RevertFile}   restores {name}'s version");
+        if (File.Exists(oldVerify))
+        {
+            g.Out.Info($"  {MigrationProject.ChangesFolder}/{newName}/{MigrationProject.VerifyFile}");
+        }
+
+        g.Out.Muted($"leave {MigrationProject.ChangesFolder}/{name}/ as it was deployed. If you already edited it, move those edits here and restore it (e.g. git checkout -- {MigrationProject.ChangesFolder}/{name}).");
+        return Ok;
+    }
+
+    /// <summary>name → name-v2; name-v2 → name-v3; skipping names already taken.</summary>
+    public static string NextRevisionName(string name, Func<string, bool> taken)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(name, @"^(?<base>.+)-v(?<n>\d+)$");
+        var stem = match.Success ? match.Groups["base"].Value : name;
+        var n = match.Success ? int.Parse(match.Groups["n"].Value, System.Globalization.CultureInfo.InvariantCulture) + 1 : 2;
+        while (taken($"{stem}-v{n}"))
+        {
+            n++;
+        }
+
+        return $"{stem}-v{n}";
+    }
+
+    public static int BundleCreate(GlobalOptions g, string? output, bool noConfig)
+    {
+        RequireWorkingCopy(g, "bundle create");
+        var dir = Path.GetFullPath(g.ProjectDir);
+        var config = BsmConfig.Load(dir);
+        var provider = Providers.Resolve(config.Provider);
+        var head = MigrationProject.Load(dir, provider.Id).HeadChainId;
+        output ??= $"bsm-bundle-{(head is null ? "empty" : head[..12])}.zip";
+        var manifest = ProjectBundle.Create(dir, provider.Id, output, includeConfig: !noConfig, ToolVersion);
+        if (g.Out.Json)
+        {
+            g.Out.WriteJson(new { path = Path.GetFullPath(output), manifest });
+            return Ok;
+        }
+
+        g.Out.Success($"wrote {output}");
+        PrintManifest(g, manifest);
+        if (!noConfig)
+        {
+            g.Out.Muted($"includes {BsmConfig.FileName}; keep secrets out of it (use ${{env:NAME}} or ${{file:path}}), or bundle with --no-config.");
+        }
+
+        return Ok;
+    }
+
+    public static int BundleVerify(GlobalOptions g, string path)
+    {
+        var manifest = ProjectBundle.Verify(path);
+        if (g.Out.Json)
+        {
+            g.Out.WriteJson(new { ok = true, manifest });
+            return Ok;
+        }
+
+        PrintManifest(g, manifest);
+        g.Out.Success("bundle verified: every file matches its hash.");
+        return Ok;
+    }
+
+    private static void PrintManifest(GlobalOptions g, BundleManifest manifest)
+    {
+        g.Out.Line("bundle", manifest.ContentHash);
+        g.Out.Line("provider", manifest.Provider);
+        g.Out.Line("plan head", manifest.PlanHead ?? "(empty)");
+        g.Out.Line("contents", $"{manifest.Changes} change(s), {manifest.Repeatables} repeatable(s), {manifest.Files.Count} file(s){(manifest.IncludesConfig ? $", {BsmConfig.FileName}" : string.Empty)}");
+        g.Out.Line("made by", $"Badger SQL Migrate {manifest.ToolVersion}");
+    }
+
+    public static async Task<int> DiffSchema(GlobalOptions g, string? against, bool exitCode, CancellationToken ct)
+    {
+        await using var ctx = await Connect(g, ct);
+        string leftLabel, rightLabel, leftDump, rightDump;
+        if (against is null)
+        {
+            var recorded = await ctx.Engine.GetRecordedSchemaAsync(ct)
+                ?? throw new MigrationException($"No schema has been recorded for '{ctx.Environment.Name}' yet (bsm records it after each deploy). Use --against <environment> to compare two databases.");
+            leftDump = recorded.Dump;
+            leftLabel = $"{ctx.Environment.Name} as recorded {recorded.CapturedAtUtc:yyyy-MM-dd HH:mm}Z";
+            if (await ctx.Engine.RecordedWithOtherSchemaFormatAsync(ct))
+            {
+                g.Out.Warn("the recorded schema was captured by an older version of bsm with a different format; some differences may only be format (e.g. system-versioned tables, partitions).");
+            }
+            rightDump = await ctx.Engine.CaptureSchemaAsync(ct);
+            rightLabel = $"{ctx.Environment.Name} live";
+        }
+        else
+        {
+            await using var other = await Connect(g with { Environment = against, ConnectionString = null }, ct);
+            leftDump = await ctx.Engine.CaptureSchemaAsync(ct);
+            leftLabel = $"{ctx.Environment.Name} ({ctx.Session.Description})";
+            rightDump = await other.Engine.CaptureSchemaAsync(ct);
+            rightLabel = $"{other.Environment.Name} ({other.Session.Description})";
+        }
+
+        var differences = SchemaDiff.Compare(ctx.Provider.Schema.Parse(leftDump), ctx.Provider.Schema.Parse(rightDump));
+        if (g.Out.Json)
+        {
+            g.Out.WriteJson(new
+            {
+                left = leftLabel,
+                right = rightLabel,
+                leftFingerprint = ContentHasher.Hash(leftDump),
+                rightFingerprint = ContentHasher.Hash(rightDump),
+                identical = differences.Count == 0,
+                differences = differences.Select(d => new { kind = d.Kind.ToString().ToLowerInvariant(), d.Key, d.Left, d.Right }),
+            });
+        }
+        else
+        {
+            g.Out.Line("-", leftLabel);
+            g.Out.Line("+", rightLabel);
+            foreach (var d in differences)
+            {
+                switch (d.Kind)
+                {
+                    case SchemaDifferenceKind.Added:
+                        Console.WriteLine($"{g.Out.Paint("+", "[32m")} {d.Key}");
+                        break;
+                    case SchemaDifferenceKind.Removed:
+                        Console.WriteLine($"{g.Out.Paint("-", "[31m")} {d.Key}");
+                        break;
+                    default:
+                        Console.WriteLine($"{g.Out.Paint("~", "[33m")} {d.Key}");
+                        foreach (var (op, line) in SchemaDiff.Lines(d.Left!, d.Right!))
+                        {
+                            var ansi = op switch { '+' => "[32m", '-' => "[31m", _ => "[90m" };
+                            Console.WriteLine("    " + g.Out.Paint($"{op} {line}", ansi));
+                        }
+
+                        break;
+                }
+            }
+
+            if (differences.Count == 0)
+            {
+                g.Out.Success($"schemas are identical (fingerprint {Short(ContentHasher.Hash(rightDump))}).");
+            }
+            else
+            {
+                g.Out.Info($"{differences.Count(d => d.Kind == SchemaDifferenceKind.Added)} added, {differences.Count(d => d.Kind == SchemaDifferenceKind.Removed)} removed, {differences.Count(d => d.Kind == SchemaDifferenceKind.Changed)} changed.");
+            }
+        }
+
+        return exitCode && differences.Count > 0 ? NotUpToDate : Ok;
     }
 
     public static async Task<int> Rebase(GlobalOptions g, string to, bool yes, bool allowVariableDrift, CancellationToken ct)
@@ -657,8 +940,7 @@ public static class Commands
 
     public static async Task<int> Doctor(GlobalOptions g, CancellationToken ct)
     {
-        var dir = Path.GetFullPath(g.ProjectDir);
-        var config = BsmConfig.Load(dir);
+        var config = BsmConfig.Load(Open(g).ConfigDir);
         var provider = Providers.Resolve(config.Provider);
         var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
         g.Out.Line("provider", provider.DisplayName);
@@ -711,7 +993,7 @@ public static class Commands
 
     public static int EnvList(GlobalOptions g)
     {
-        var config = BsmConfig.Load(Path.GetFullPath(g.ProjectDir));
+        var config = BsmConfig.Load(Open(g).ConfigDir);
         var rows = config.Environments.Keys.Order(StringComparer.Ordinal).Select(name =>
         {
             var merged = config.Merge(name);
@@ -747,7 +1029,7 @@ public static class Commands
 
     public static int EnvShow(GlobalOptions g)
     {
-        var config = BsmConfig.Load(Path.GetFullPath(g.ProjectDir));
+        var config = BsmConfig.Load(Open(g).ConfigDir);
         var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
         var node = System.Text.Json.JsonSerializer.SerializeToNode(environment, ShowJsonOptions)!;
         Mask(node);
@@ -862,16 +1144,70 @@ public static class Commands
 
     private static (MigrationProject Project, IDatabaseProvider Provider) LoadProject(GlobalOptions g)
     {
-        var dir = Path.GetFullPath(g.ProjectDir);
-        var config = BsmConfig.Load(dir);
+        var ws = Open(g);
+        var config = BsmConfig.Load(ws.ConfigDir);
         var provider = Providers.Resolve(config.Provider);
-        return (MigrationProject.Load(dir, provider.Id), provider);
+        return (MigrationProject.Load(ws.ProjectDir, provider.Id), provider);
+    }
+
+    private static readonly Dictionary<string, Workspace> OpenedBundles = new(StringComparer.Ordinal);
+
+    /// <summary>Resolves --project / --bundle. A bundle is verified and extracted once per process, then deleted on exit.</summary>
+    private static Workspace Open(GlobalOptions g)
+    {
+        var dir = Path.GetFullPath(g.ProjectDir);
+        if (g.Bundle is null)
+        {
+            return new Workspace(dir, dir, dir, null);
+        }
+
+        var bundle = Path.GetFullPath(g.Bundle);
+        if (OpenedBundles.TryGetValue(bundle, out var opened))
+        {
+            return opened;
+        }
+
+        var extracted = Path.Combine(Path.GetTempPath(), "bsm-bundle-" + Guid.NewGuid().ToString("N"));
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            try
+            {
+                Directory.Delete(extracted, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        };
+
+        var manifest = ProjectBundle.Extract(bundle, extracted);
+        if (!manifest.IncludesConfig && !File.Exists(Path.Combine(dir, BsmConfig.FileName)))
+        {
+            throw new MigrationException($"The bundle has no {BsmConfig.FileName} and there is none in '{dir}'. Pass --project <dir with {BsmConfig.FileName}>.");
+        }
+
+        g.Out.Muted($"bundle {Short(manifest.ContentHash)}: {manifest.Changes} change(s), plan head {Short(manifest.PlanHead)}, verified");
+        opened = new Workspace(extracted, manifest.IncludesConfig ? extracted : dir, dir, manifest);
+        OpenedBundles[bundle] = opened;
+        return opened;
+    }
+
+    /// <summary>Commands that write project files cannot work on a bundle.</summary>
+    private static void RequireWorkingCopy(GlobalOptions g, string command)
+    {
+        if (g.Bundle is not null)
+        {
+            throw new MigrationException($"'bsm {command}' changes project files and cannot be used with --bundle.");
+        }
     }
 
     private static async Task<ConnectedContext> Connect(GlobalOptions g, CancellationToken ct)
     {
-        var dir = Path.GetFullPath(g.ProjectDir);
-        var config = BsmConfig.Load(dir);
+        var ws = Open(g);
+        var dir = ws.ProjectDir;
+        var config = BsmConfig.Load(ws.ConfigDir);
         var provider = Providers.Resolve(config.Provider);
         var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
         var problems = provider.ValidateEnvironment(environment);
@@ -897,7 +1233,7 @@ public static class Commands
                 Tokens = EntraTokenProvider.Create(environment.Authentication, environment.Entra, environment.Name, prompt),
                 CreateTokenProvider = (kind, options) => EntraTokenProvider.Create(kind, options, environment.Name + ":keyvault", prompt),
                 Warn = g.Out.Warn,
-                BaseDirectory = dir,
+                BaseDirectory = ws.BaseDir,
             };
             var session = await provider.OpenSessionAsync(environment, context, ct);
             var engine = new MigrationEngine(project, provider, environment, session, Actor.Current(ToolVersion), g.Out, ParseVariables(g.Variables))
@@ -905,7 +1241,7 @@ public static class Commands
                 AllowEnvironmentMismatch = g.ClaimEnvironment,
                 Preprocessing = config.Preprocessor,
             };
-            return new ConnectedContext(environment, session, engine, tunnel);
+            return new ConnectedContext(environment, provider, session, engine, tunnel);
         }
         catch
         {
@@ -986,7 +1322,7 @@ public static class Commands
 
     private static readonly UTF8Encoding Utf8NoBom = new(false);
 
-    private sealed record ConnectedContext(DeploymentEnvironment Environment, IDatabaseSession Session, MigrationEngine Engine, SshTunnel? Tunnel) : IAsyncDisposable
+    private sealed record ConnectedContext(DeploymentEnvironment Environment, IDatabaseProvider Provider, IDatabaseSession Session, MigrationEngine Engine, SshTunnel? Tunnel) : IAsyncDisposable
     {
         public async ValueTask DisposeAsync()
         {

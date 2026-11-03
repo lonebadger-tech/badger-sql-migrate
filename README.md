@@ -85,6 +85,11 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 | `deploy [--to x] [--dry-run] [--script file] [--ordering strict]` | Deploy pending changes and repeatables |
 | `revert --to x \| --last n \| --all [-y]` | Revert using the scripts stored in the database |
 | `rebase --to x` | Revert to x, then redeploy to head |
+| `revert --repeatable views/v.sql` | Put a repeatable back to its previous definition |
+| `rework <change> [--as name]` | Add a change that supersedes a deployed one (copy of its deploy script; revert restores it) |
+| `repair <change>… \| --all [--reason text]` | Accept harmless edits to deployed changes (e.g. a fixed revert.sql) without running SQL; re-certifies |
+| `bundle create [-o file] [--no-config]` / `bundle verify <file>` | Hash-verified, byte-reproducible project bundle / check one |
+| `diff-schema [--against env] [--exit-code]` | What changed since the last deploy, or how two environments differ |
 | `verify` | Hash check, run verify scripts, detect schema drift |
 | `log` | Deploy/revert/failure history from the database |
 | `baseline --to x` | Adopt an existing database without running scripts |
@@ -95,7 +100,11 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 | `render <change> [--kind revert]` | The exact SQL a script becomes for an environment |
 | `auth clear` | Forget saved Entra sign-ins |
 
-Global options: `-C <dir>`, `-e <environment>`, `--var name=value`, `--connection-string`, `--claim-environment`, `--json`, `-v`, `--no-color`. Exit codes: `0` ok, `1` failure, `3` not up to date (`status --exit-code`).
+Global options: `-C <dir>`, `--bundle <file>`, `-e <environment>`, `--var name=value`, `--connection-string`, `--claim-environment`, `--json`, `-v`, `--no-color`. Exit codes: `0` ok, `1` failure, `3` not up to date (`status --exit-code`) or schemas differ (`diff-schema --exit-code`).
+
+### System-versioned tables and partitions
+
+Write them in changes like any other schema. The schema fingerprint records system versioning (period columns, history table, retention) and partitioning (functions, boundaries, schemes, partitioned indexes); history tables SQL Server names itself fingerprint the same on every server. Lint rule BSM004 warns when a script turns `SYSTEM_VERSIONING` off without turning it back on. If a job maintains partitions, set `schemaFingerprint: { partitionBoundaries: ignore }` on that environment so its splits are not drift.
 
 ## Configuration
 
