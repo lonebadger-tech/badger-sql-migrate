@@ -27,7 +27,7 @@ public sealed class SqlServerDeployLock : IDeployLock
             if (result < 0)
             {
                 throw new MigrationException(result == -1
-                    ? $"Timed out after {timeout.TotalSeconds:0}s waiting for the deploy lock '{resource}'. Another badger deploy is running against this database."
+                    ? $"Timed out after {timeout.TotalSeconds:0}s waiting for the deploy lock '{resource}'. Another bsm deploy is running against this database."
                     : $"Could not acquire the deploy lock '{resource}' (sp_getapplock returned {result}).");
             }
         }

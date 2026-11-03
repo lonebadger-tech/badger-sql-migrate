@@ -7,7 +7,7 @@ Please report security problems privately, not in a public issue:
 - Use GitHub's [private vulnerability reporting](https://github.com/lonebadger-tech/badger-sql-migrate/security/advisories/new), or
 - email [support@lonebadger.tech](mailto:support@lonebadger.tech) with "Security" in the subject.
 
-Include the version (`badger --version`), what an attacker could do, and steps to reproduce. We'll acknowledge the report within 5 business days and keep you updated until it's fixed. With your permission we'll credit you in the advisory.
+Include the version (`bsm --version`), what an attacker could do, and steps to reproduce. We'll acknowledge the report within 5 business days and keep you updated until it's fixed. With your permission we'll credit you in the advisory.
 
 ## Supported versions
 

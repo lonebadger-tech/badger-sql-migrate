@@ -113,7 +113,7 @@ public static class Commands
             #   name [requires ...] !notx !irreversible @timestamp author  # note
             #   @tag                                                       (tags the change above)
             # Merged with git's union driver (see .gitattributes), so concurrent additions never conflict.
-            # Run 'badger plan check' after merging.
+            # Run 'bsm plan check' after merging.
 
 
             """);
@@ -127,7 +127,7 @@ public static class Commands
         }
 
         g.Out.Success($"initialized {provider.DisplayName} project in {dir}");
-        g.Out.Info("next: badger add <change-name>");
+        g.Out.Info("next: bsm add <change-name>");
         return Ok;
     }
 

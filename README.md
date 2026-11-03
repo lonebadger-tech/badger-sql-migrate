@@ -20,7 +20,7 @@ Day one ships the **SQL Server / Azure SQL** provider. The engine is vendor-neut
 | Two developers both create `V12__...sql` | Changes are **named**; `badger.plan` is merged with git's union driver, so concurrent additions never conflict |
 | Rollback depends on the scripts in your current checkout | Deploy, revert and verify scripts are **stored in the database** at deploy time; revert works from any branch or machine |
 | Weak checksums (CRC32) or none (DbUp) | SHA-256 per change plus a **Merkle chain** over the plan: equal head hash = identical history |
-| "Did someone hotfix prod?" | Schema fingerprint after every run; `badger verify` reports drift |
+| "Did someone hotfix prod?" | Schema fingerprint after every run; `bsm verify` reports drift |
 | Two pipelines deploying at once | Exclusive deploy lock (`sp_getapplock`) for the whole run |
 | sqlcmd/Perl/JVM installs | One .NET tool, no shelling out |
 
@@ -35,12 +35,12 @@ No .NET SDK? Self-contained executables for Windows, macOS and Linux are on the 
 ## Quick start
 
 ```bash
-badger init -C db
-badger add create-customer -C db
+bsm init -C db
+bsm add create-customer -C db
 # edit db/changes/create-customer/deploy.sql, revert.sql, verify.sql
-badger plan check -C db
-badger status -C db
-badger deploy -C db
+bsm plan check -C db
+bsm status -C db
+bsm deploy -C db
 ```
 
 A project looks like this:
@@ -71,7 +71,7 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 
 - `[a b]` dependencies, `!notx` (no transaction), `!irreversible` (no revert), `# note`.
 - `@tag` lines tag the change above; use them as `--to @release-1.4`.
-- `badger init` adds `badger.plan merge=union` to `.gitattributes`. Run `badger plan check` in CI to catch duplicate names or broken dependencies after a merge.
+- `bsm init` adds `badger.plan merge=union` to `.gitattributes`. Run `bsm plan check` in CI to catch duplicate names or broken dependencies after a merge.
 
 ### Commands
 
@@ -144,7 +144,7 @@ Full reference: [docs/configuration.md](docs/configuration.md).
 
 ## How certification works
 
-See [docs/methodology.md](docs/methodology.md). In short: every change's script hash is SHA-256 over its normalized deploy/revert/verify scripts (BOM stripped, CRLF→LF, so Windows and macOS checkouts agree). Each change's chain id is SHA-256 of `(provider, name, scriptHash, parentChainId)`. A database that received exactly the plan, in order, reports the same head chain id as `badger plan show`.
+See [docs/methodology.md](docs/methodology.md). In short: every change's script hash is SHA-256 over its normalized deploy/revert/verify scripts (BOM stripped, CRLF→LF, so Windows and macOS checkouts agree). Each change's chain id is SHA-256 of `(provider, name, scriptHash, parentChainId)`. A database that received exactly the plan, in order, reports the same head chain id as `bsm plan show`.
 
 ## Building
 
@@ -172,7 +172,7 @@ Adding a database vendor: see [docs/writing-a-provider.md](docs/writing-a-provid
 | `src/Badger.SqlMigrate.Core` | Plan, hashing and certification, preprocessor, engine. No database driver |
 | `src/Badger.SqlMigrate.Connectivity` | Entra ID tokens, SSH tunnels, secrets (vendor-neutral) |
 | `src/Badger.SqlMigrate.Providers.SqlServer` | The SQL Server / Azure SQL provider |
-| `src/Badger.SqlMigrate.Cli` | The `badger` command (packaged as the `Badger.SqlMigrate` .NET tool) |
+| `src/Badger.SqlMigrate.Cli` | The `bsm` command (packaged as the `Badger.SqlMigrate` .NET tool) |
 | `tests/` | Unit tests, the shared provider conformance suite, architecture tests |
 | `samples/demo-db` | A runnable sample project |
 | `docs/` | Configuration reference, methodology, provider guide, and the website generator (`docs/website/`) |

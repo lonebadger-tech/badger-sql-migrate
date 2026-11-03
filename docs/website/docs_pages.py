@@ -54,7 +54,7 @@ def pages():
 
 def overview():
     return doc("docs/", "Documentation", "Everything about Badger SQL Migrate, from the first change to production pipelines.", f"""
-<p>Badger SQL Migrate deploys hand-written SQL changes to SQL Server and Azure SQL, in an order you control, and proves afterwards that every database received exactly what you intended. It is a single command-line tool, <code>badger</code>, for Windows, macOS and Linux.</p>
+<p>Badger SQL Migrate deploys hand-written SQL changes to SQL Server and Azure SQL, in an order you control, and proves afterwards that every database received exactly what you intended. It is a single command-line tool, <code>bsm</code>, for Windows, macOS and Linux.</p>
 
 <h2>Five ideas</h2>
 <ol>
@@ -82,19 +82,19 @@ def install():
     return doc("docs/install/", "Install", "A .NET tool, or a single executable for your platform.", f"""
 <h2>.NET tool</h2>
 {sh('''dotnet tool install --global Badger.SqlMigrate
-badger --version''')}
-<p>Requires the .NET 10 SDK. Pin a version per repository with a local tool manifest (<code>dotnet new tool-manifest</code>, then <code>dotnet tool install Badger.SqlMigrate</code>) and run it as <code>dotnet badger</code>.</p>
+bsm --version''')}
+<p>Requires the .NET 10 SDK. Pin a version per repository with a local tool manifest (<code>dotnet new tool-manifest</code>, then <code>dotnet tool install Badger.SqlMigrate</code>) and run it as <code>dotnet bsm</code>.</p>
 
 <h2>Standalone executable</h2>
-<p>{link("download/", "Download")} the archive for your platform and put <code>badger</code> on your <code>PATH</code>. The executables are self-contained: no .NET runtime needed. Builds exist for Windows (x64, Arm64), macOS (Apple silicon, Intel) and Linux (x64, Arm64, Alpine x64), plus a portable build for any OS with the .NET 10 runtime.</p>
+<p>{link("download/", "Download")} the archive for your platform and put <code>bsm</code> on your <code>PATH</code>. The executables are self-contained: no .NET runtime needed. Builds exist for Windows (x64, Arm64), macOS (Apple silicon, Intel) and Linux (x64, Arm64, Alpine x64), plus a portable build for any OS with the .NET 10 runtime.</p>
 
 <h2>Check it works</h2>
-{sh('''badger --help
-badger doctor -C path/to/project -e dev     # configuration, sign-in, connection, journal''')}
+{sh('''bsm --help
+bsm doctor -C path/to/project -e dev     # configuration, sign-in, connection, journal''')}
 
 <h2>Platform notes</h2>
 <ul>
-  <li><strong>macOS:</strong> binaries are signed ad hoc but not notarized; clear the quarantine flag once with <code>xattr -d com.apple.quarantine badger</code>.</li>
+  <li><strong>macOS:</strong> binaries are signed ad hoc but not notarized; clear the quarantine flag once with <code>xattr -d com.apple.quarantine bsm</code>.</li>
   <li><strong>Linux:</strong> Kerberos (integrated) authentication needs the system GSSAPI library. Entra interactive sign-in caches tokens with libsecret; without it, use device code or set <code>entra.allowUnencryptedTokenCache</code>.</li>
   <li><strong>Windows:</strong> Windows authentication uses SSPI; the Windows certificate store, CNG and CSP key stores for Always Encrypted are available.</li>
 </ul>
@@ -108,12 +108,12 @@ def quick_start():
 export BADGER_LOCAL_PASSWORD="Your_str0ng_password"''')}
 
 <h2>1. Create a project</h2>
-{sh('''badger init -C db
+{sh('''bsm init -C db
 cd db''')}
 <p>This writes <code>badger.yaml</code>, an empty <code>badger.plan</code>, the <code>changes/</code>, <code>repeatable/</code> and <code>environments/</code> folders, and a <code>.gitattributes</code> rule that lets git merge the plan. Edit the <code>local</code> environment in <code>badger.yaml</code> so <code>database:</code> names a database that exists.</p>
 
 <h2>2. Add a change</h2>
-{sh('''badger add create-customer''')}
+{sh('''bsm add create-customer''')}
 {sql('''CREATE TABLE dbo.Customer (
     Id int IDENTITY NOT NULL CONSTRAINT PK_Customer PRIMARY KEY,
     Name nvarchar(200) NOT NULL
@@ -122,13 +122,13 @@ cd db''')}
 {sql('''IF OBJECT_ID(N'dbo.Customer', N'U') IS NULL THROW 50000, N'Customer missing', 1;''', "changes/create-customer/verify.sql")}
 
 <h2>3. Check, then deploy</h2>
-{sh('''badger plan check          # no database needed: plan, folders, lint, variables
-badger doctor              # can we sign in and connect?
-badger deploy --dry-run
-badger deploy''')}
+{sh('''bsm plan check          # no database needed: plan, folders, lint, variables
+bsm doctor              # can we sign in and connect?
+bsm deploy --dry-run
+bsm deploy''')}
 
 <h2>4. Look at the result</h2>
-{sh('''badger status''')}
+{sh('''bsm status''')}
 {code('''environment    local
 target         sqlserver://localhost:1433/App
   + create-customer                          2026-11-03 18:03Z you
@@ -138,24 +138,24 @@ plan head      0e21ef9c72f3
 up to date and certified: database history is identical to the plan.''')}
 
 <h2>5. Change your mind</h2>
-{sh('''badger add add-customer-email --requires create-customer
+{sh('''bsm add add-customer-email --requires create-customer
 # write deploy.sql / revert.sql
-badger deploy
-badger revert --last 1        # runs the revert.sql stored at deploy time
-badger deploy                 # and forward again
-badger log                    # who did what, when, from where''')}
+bsm deploy
+bsm revert --last 1        # runs the revert.sql stored at deploy time
+bsm deploy                 # and forward again
+bsm log                    # who did what, when, from where''')}
 
 <h2>Next</h2>
 <ul>
   <li>Add a test and a production environment: {link("docs/environments/", "Environments")}.</li>
   <li>Sign in with Entra ID: {link("docs/authentication/", "Authentication")}.</li>
-  <li>Commit <code>db/</code> to git and add <code>badger plan check</code> to CI: {link("docs/ci-cd/", "CI/CD")}.</li>
+  <li>Commit <code>db/</code> to git and add <code>bsm plan check</code> to CI: {link("docs/ci-cd/", "CI/CD")}.</li>
 </ul>
 """)
 
 
 def project():
-    return doc("docs/project/", "Project layout", "Files badger reads, and what each is for.", f"""
+    return doc("docs/project/", "Project layout", "Files bsm reads, and what each is for.", f"""
 {code('''db/
   badger.yaml                   provider, environments, variables, preprocessor settings
   badger.plan                   ordered list of changes and tags
@@ -173,14 +173,14 @@ def project():
       seed.sql''')}
 <p>Pass the project folder with <code>-C</code> / <code>--project</code> (default: the current folder).</p>
 
-<h2>Rules badger checks</h2>
+<h2>Rules bsm checks</h2>
 <ul>
   <li>Every change in the plan has a folder with <code>deploy.sql</code>, and every folder in <code>changes/</code> is in the plan.</li>
   <li>Change names use letters, digits, <code>-</code>, <code>_</code> and <code>.</code>, starting with a letter or digit. Names are case-sensitive.</li>
   <li>A missing <code>revert.sql</code> is an error unless the plan marks the change <code>!irreversible</code>.</li>
   <li>Scripts are read as UTF-8. A byte-order mark and Windows line endings are ignored for hashing.</li>
 </ul>
-<p><code>badger plan check</code> reports all of these without a database. Put it in a pre-commit hook and in CI.</p>
+<p><code>bsm plan check</code> reports all of these without a database. Put it in a pre-commit hook and in CI.</p>
 """)
 
 
@@ -206,15 +206,15 @@ drop-legacy !irreversible                       @2026-11-05T08:00Z alice
 <tr><td><code># note</code></td><td>A note. Not hashed.</td></tr>
 <tr><td><code>@tag</code> (own line)</td><td>Tags the change above it. Use as <code>--to @tag</code>.</td></tr>
 </table>
-<p><code>badger add</code> and <code>badger tag</code> write these lines for you. The name, dependencies and flags are part of the change's hash; notes, authors and timestamps are not.</p>
+<p><code>bsm add</code> and <code>bsm tag</code> write these lines for you. The name, dependencies and flags are part of the change's hash; notes, authors and timestamps are not.</p>
 
 <h2>Why one change per line</h2>
-<p>When two developers each append a change on their branches, git's <code>union</code> merge driver keeps both lines instead of reporting a conflict. <code>badger init</code> adds the rule to <code>.gitattributes</code>:</p>
+<p>When two developers each append a change on their branches, git's <code>union</code> merge driver keeps both lines instead of reporting a conflict. <code>bsm init</code> adds the rule to <code>.gitattributes</code>:</p>
 {code('''badger.plan merge=union''', "", ".gitattributes")}
-<p>Run <code>badger plan check</code> after merging. It catches the cases a union merge cannot judge: the same name added twice, a dependency on a change that was removed, or a folder without a plan line. See {link("docs/teamwork/", "Teams and ordering")}.</p>
+<p>Run <code>bsm plan check</code> after merging. It catches the cases a union merge cannot judge: the same name added twice, a dependency on a change that was removed, or a folder without a plan line. See {link("docs/teamwork/", "Teams and ordering")}.</p>
 
 <h2>Targets</h2>
-<p><code>--to</code> accepts a change name or a tag: <code>badger deploy --to @release-1.4</code> deploys up to and including the tagged change.</p>
+<p><code>--to</code> accepts a change name or a tag: <code>bsm deploy --to @release-1.4</code> deploys up to and including the tagged change.</p>
 """)
 
 
@@ -223,9 +223,9 @@ def changes():
 <h2>The three scripts</h2>
 <table>
 <tr><th>Script</th><th>Runs</th><th>Purpose</th></tr>
-<tr><td><code>deploy.sql</code></td><td><code>badger deploy</code></td><td>Make the change.</td></tr>
-<tr><td><code>revert.sql</code></td><td><code>badger revert</code>, <code>rebase</code></td><td>Undo exactly what deploy did.</td></tr>
-<tr><td><code>verify.sql</code></td><td>After deploy, and in <code>badger verify</code></td><td>Raise an error if the change is not in effect.</td></tr>
+<tr><td><code>deploy.sql</code></td><td><code>bsm deploy</code></td><td>Make the change.</td></tr>
+<tr><td><code>revert.sql</code></td><td><code>bsm revert</code>, <code>rebase</code></td><td>Undo exactly what deploy did.</td></tr>
+<tr><td><code>verify.sql</code></td><td>After deploy, and in <code>bsm verify</code></td><td>Raise an error if the change is not in effect.</td></tr>
 </table>
 
 <h2>Batches</h2>
@@ -240,8 +240,8 @@ def changes():
 <table>
 <tr><th>Code</th><th>Severity</th><th>Finding</th></tr>
 <tr><td><code>BSM001</code></td><td>Error</td><td>Statement cannot run in a transaction (ALTER/CREATE/DROP DATABASE, BACKUP, RESTORE, full-text catalog and index DDL, RECONFIGURE, resumable online index) and the change is not <code>!notx</code>.</td></tr>
-<tr><td><code>BSM002</code></td><td>Error</td><td><code>USE</code>: badger deploys to the environment's database; switching databases inside a script breaks that.</td></tr>
-<tr><td><code>BSM003</code></td><td>Warning</td><td>Explicit <code>BEGIN TRANSACTION</code> inside a transactional change. A <code>ROLLBACK</code> there would abort badger's transaction.</td></tr>
+<tr><td><code>BSM002</code></td><td>Error</td><td><code>USE</code>: bsm deploys to the environment's database; switching databases inside a script breaks that.</td></tr>
+<tr><td><code>BSM003</code></td><td>Warning</td><td>Explicit <code>BEGIN TRANSACTION</code> inside a transactional change. A <code>ROLLBACK</code> there would abort bsm's transaction.</td></tr>
 <tr><td><code>BSM000</code></td><td>Warning</td><td>The script did not parse; lint skipped (SQL Server may still accept it).</td></tr>
 </table>
 
@@ -254,19 +254,19 @@ def changes():
 
 
 def certification():
-    return doc("docs/certification/", "Hash certification", "How badger proves two databases got identical changes in the same order.", f"""
+    return doc("docs/certification/", "Hash certification", "How bsm proves two databases got identical changes in the same order.", f"""
 <h2>Script hash</h2>
 <p>Each change's script hash is SHA-256 over its name, dependencies, flags, and the text of deploy, revert and verify, each part length-prefixed so text cannot move between scripts without changing the hash. Before hashing, a UTF-8 byte-order mark is removed and CRLF/CR become LF: a Windows checkout and a macOS checkout of the same commit hash identically. Every other difference, including whitespace, changes the hash.</p>
 
 <h2>Chain id</h2>
-<p>Each change also gets a chain id: SHA-256 of the provider, the change name, its script hash and the chain id of the change before it. Like a git commit id, it depends on everything earlier. The chain id of the last change is the <strong>plan head</strong> (<code>badger plan show</code>).</p>
-<p>When a database deploys a change, it records a chain id computed from <em>its own</em> deploy order. If the database received a prefix of the plan, in plan order, with identical scripts, its head equals the plan's chain id at that position, and <code>badger status</code> reports it as <strong>certified</strong>. Two databases with the same head received byte-identical history.</p>
+<p>Each change also gets a chain id: SHA-256 of the provider, the change name, its script hash and the chain id of the change before it. Like a git commit id, it depends on everything earlier. The chain id of the last change is the <strong>plan head</strong> (<code>bsm plan show</code>).</p>
+<p>When a database deploys a change, it records a chain id computed from <em>its own</em> deploy order. If the database received a prefix of the plan, in plan order, with identical scripts, its head equals the plan's chain id at that position, and <code>bsm status</code> reports it as <strong>certified</strong>. Two databases with the same head received byte-identical history.</p>
 
 <h2>Rendered hash</h2>
-<p>Scripts can contain {link("docs/variables/", "variables")} that differ per environment, so the SQL that runs in test and prod is not the same text. Badger therefore stores a second hash per change: SHA-256 of deploy and verify as rendered for that environment, plus one for the rendered revert. That separates "same change" (chain id, equal across environments) from "same SQL executed here" (rendered hash). <code>badger verify</code> reports changes whose variables now render differently; <code>revert</code> refuses to run a revert script that no longer matches.</p>
+<p>Scripts can contain {link("docs/variables/", "variables")} that differ per environment, so the SQL that runs in test and prod is not the same text. Badger therefore stores a second hash per change: SHA-256 of deploy and verify as rendered for that environment, plus one for the rendered revert. That separates "same change" (chain id, equal across environments) from "same SQL executed here" (rendered hash). <code>bsm verify</code> reports changes whose variables now render differently; <code>revert</code> refuses to run a revert script that no longer matches.</p>
 
 <h2>Schema fingerprint</h2>
-<p>After each run badger records a fingerprint: a hash of a canonical, sorted description of the schema (tables, columns, types, defaults, indexes, keys, constraints, module definitions, types, sequences, synonyms). System-generated constraint names, which differ from server to server, are masked; badger's own schema is excluded. <code>badger verify</code> compares the live schema with the last fingerprint, so a hotfix made outside badger shows up as drift.</p>
+<p>After each run bsm records a fingerprint: a hash of a canonical, sorted description of the schema (tables, columns, types, defaults, indexes, keys, constraints, module definitions, types, sequences, synonyms). System-generated constraint names, which differ from server to server, are masked; the <code>badger</code> journal schema is excluded. <code>bsm verify</code> compares the live schema with the last fingerprint, so a hotfix made outside bsm shows up as drift.</p>
 
 <h2>What status tells you</h2>
 <table>
@@ -276,28 +276,28 @@ def certification():
 <tr><td>edited after deploy</td><td>The working copy's scripts differ from what this database ran.</td></tr>
 <tr><td>deployed but not in plan</td><td>An orphan: removed from the plan, or from another branch. It can still be reverted.</td></tr>
 </table>
-<p>Releases of badger itself publish SHA-256 sums for every download, so the tool can be verified the same way.</p>
+<p>Releases of bsm itself publish SHA-256 sums for every download, so the tool can be verified the same way.</p>
 """)
 
 
 def revert():
     return doc("docs/revert/", "Revert (down)", "Rolling back with the scripts the database stored at deploy time.", f"""
-{sh('''badger revert --last 1               # the most recently deployed change
-badger revert --to create-customer    # everything deployed after it (it stays)
-badger revert --to @release-1.4
-badger revert --all
-badger revert --to x --dry-run        # list, change nothing
-badger rebase --to x                  # revert to x, then deploy to the head again''')}
+{sh('''bsm revert --last 1               # the most recently deployed change
+bsm revert --to create-customer    # everything deployed after it (it stays)
+bsm revert --to @release-1.4
+bsm revert --all
+bsm revert --to x --dry-run        # list, change nothing
+bsm rebase --to x                  # revert to x, then deploy to the head again''')}
 <p>Changes are reverted in reverse deploy order, each in its own transaction (unless <code>!notx</code>), with a <code>revert</code> event in the log. Revert asks for confirmation; pass <code>--yes</code> in scripts.</p>
 
 <h2>Stored scripts</h2>
-<p>When a change is deployed, its deploy, revert and verify scripts are saved in the journal. Revert runs the <em>saved</em> revert script. You can switch branches, delete the change, or roll back from a machine that never had the code, and the database still knows how to undo itself. If your working copy's revert script differs from the saved one, badger says so and uses the saved one.</p>
+<p>When a change is deployed, its deploy, revert and verify scripts are saved in the journal. Revert runs the <em>saved</em> revert script. You can switch branches, delete the change, or roll back from a machine that never had the code, and the database still knows how to undo itself. If your working copy's revert script differs from the saved one, bsm says so and uses the saved one.</p>
 
 <h2>Guards</h2>
 <ul>
   <li><code>!irreversible</code> changes stop the revert before anything runs.</li>
   <li>Environments with <code>allowRevert: false</code> refuse revert and rebase. Use it for production and fix forward.</li>
-  <li>If a variable used by the revert script changed since deploy, revert refuses (it would undo something other than what was done). Check <code>badger vars</code>; override with <code>--allow-variable-drift</code>.</li>
+  <li>If a variable used by the revert script changed since deploy, revert refuses (it would undo something other than what was done). Check <code>bsm vars</code>; override with <code>--allow-variable-drift</code>.</li>
   <li>Protected environments ask you to type the environment name.</li>
 </ul>
 
@@ -305,7 +305,7 @@ badger rebase --to x                  # revert to x, then deploy to the head aga
 <ul>
   <li>Undo in reverse order of the deploy.</li>
   <li>Drop what you created; restore what you changed. For data changes, keep enough information in the deploy (for example a backup table) to restore it.</li>
-  <li>Test the pair: <code>badger rebase --to &lt;previous change&gt;</code> on a dev database runs revert and deploy back to back. <code>badger verify</code> afterwards should match the original fingerprint.</li>
+  <li>Test the pair: <code>bsm rebase --to &lt;previous change&gt;</code> on a dev database runs revert and deploy back to back. <code>bsm verify</code> afterwards should match the original fingerprint.</li>
 </ul>
 """)
 
@@ -313,7 +313,7 @@ badger rebase --to x                  # revert to x, then deploy to the head aga
 def teamwork():
     return doc("docs/teamwork/", "Teams and ordering", "Concurrent development without version collisions, and deploys that cannot interleave.", f"""
 <h2>Two developers, same day</h2>
-<p>Alice adds <code>add-customer-email</code> and Bob adds <code>add-order-index</code> on separate branches. Each appends a line to <code>badger.plan</code>. With version numbers they would both have picked <code>V12</code>; with names there is nothing to collide on, and git's union merge keeps both lines. <code>badger plan check</code> in CI verifies the merged plan.</p>
+<p>Alice adds <code>add-customer-email</code> and Bob adds <code>add-order-index</code> on separate branches. Each appends a line to <code>badger.plan</code>. With version numbers they would both have picked <code>V12</code>; with names there is nothing to collide on, and git's union merge keeps both lines. <code>bsm plan check</code> in CI verifies the merged plan.</p>
 
 <h2>Shared databases and out-of-order changes</h2>
 <p>Bob's change reached the shared dev database first. After the merge, Alice's line sits above Bob's in the plan, but Bob's change is already deployed. What happens next is the environment's <code>ordering</code>:</p>
@@ -322,7 +322,7 @@ def teamwork():
 <tr><td><code>dependency</code> (default)</td><td>Deploy Alice's change now (its dependencies are satisfied), flagged out of order. The database is up to date but not certified.</td><td>Shared dev and test databases</td></tr>
 <tr><td><code>strict</code></td><td>Refuse. The database must receive changes in exact plan order.</td><td>Production</td></tr>
 </table>
-<p>Production databases only ever see the merged plan, in order, so they certify. Bring a dev database back to plan order with <code>badger rebase --to &lt;last common change&gt;</code>. Override per run with <code>--ordering strict|dependency</code>.</p>
+<p>Production databases only ever see the merged plan, in order, so they certify. Bring a dev database back to plan order with <code>bsm rebase --to &lt;last common change&gt;</code>. Override per run with <code>--ordering strict|dependency</code>.</p>
 
 <h2>Concurrent deploys</h2>
 <p>Deploy, revert, baseline and provisioning hold an exclusive lock on the database for the whole run (<code>sp_getapplock</code>, session-owned, works on Azure SQL). A second pipeline waits up to <code>lockTimeoutSeconds</code> (default 300) and then fails with a message naming the lock. Read-only commands (<code>status</code>, <code>verify</code>, <code>log</code>) do not take the lock.</p>
@@ -330,16 +330,16 @@ def teamwork():
 <h2>Recommended workflow</h2>
 <ol>
   <li>Each developer works against their own database (<code>local</code> environment).</li>
-  <li><code>badger plan check</code> runs on every pull request.</li>
+  <li><code>bsm plan check</code> runs on every pull request.</li>
   <li>Merges deploy to a shared test environment (<code>ordering: dependency</code>).</li>
-  <li>Releases deploy to production (<code>ordering: strict</code>, <code>protected: true</code>, <code>allowRevert: false</code>) and run <code>badger verify</code>.</li>
+  <li>Releases deploy to production (<code>ordering: strict</code>, <code>protected: true</code>, <code>allowRevert: false</code>) and run <code>bsm verify</code>.</li>
 </ol>
 """)
 
 
 def repeatables():
     return doc("docs/repeatables/", "Repeatables", "Views, procedures, functions and environment-only scripts that re-run when they change.", f"""
-<p>Objects that are defined rather than migrated, such as views, stored procedures, functions and triggers, belong in <code>repeatable/</code>. Write them with <code>CREATE OR ALTER</code>. After the changes in a deploy, badger applies every repeatable whose hash differs from the one it last applied, each in its own transaction.</p>
+<p>Objects that are defined rather than migrated, such as views, stored procedures, functions and triggers, belong in <code>repeatable/</code>. Write them with <code>CREATE OR ALTER</code>. After the changes in a deploy, bsm applies every repeatable whose hash differs from the one it last applied, each in its own transaction.</p>
 
 <h2>Order</h2>
 <p>Repeatables run in path order (ordinal), with declared dependencies first:</p>
@@ -391,7 +391,7 @@ environments:
     ordering: strict''', "badger.yaml")}
 
 <h2>Inheritance</h2>
-<p><code>extends</code> names another environment (or template) to start from. Maps merge key by key, so <code>entra:</code> in a child adds to the template's <code>entra:</code>; values and lists are replaced. Chains are allowed, cycles are errors. <code>badger env show -e prod</code> prints the merged result with secrets masked; <code>badger env list</code> shows every environment.</p>
+<p><code>extends</code> names another environment (or template) to start from. Maps merge key by key, so <code>entra:</code> in a child adds to the template's <code>entra:</code>; values and lists are replaced. Chains are allowed, cycles are errors. <code>bsm env show -e prod</code> prints the merged result with secrets masked; <code>bsm env list</code> shows every environment.</p>
 
 <h2>Settings</h2>
 <table>
@@ -416,7 +416,7 @@ environments:
 <p>Any value can reference <code>${{env:NAME}}</code> (an environment variable) or <code>${{file:path}}</code> (a file, such as a mounted secret). They are resolved only for the environment being used, so a missing production secret never breaks a dev run. Never commit passwords; <code>badger.yaml</code> belongs in source control.</p>
 
 <h2>Database ownership</h2>
-<p>The first deploy records the environment name in the database. If you later run as a different environment against that database (for example prod settings pointing at a test server after a copy-paste mistake), badger refuses:</p>
+<p>The first deploy records the environment name in the database. If you later run as a different environment against that database (for example prod settings pointing at a test server after a copy-paste mistake), bsm refuses:</p>
 {code('''error: This database belongs to environment 'test', but you are running as 'prod'. Check --env and the
 connection settings. If the database was intentionally copied (e.g. prod restored into test), pass --claim-environment.''')}
 <p><code>--claim-environment</code> re-records the database under the new name. Every journal event also records the environment that wrote it.</p>
@@ -461,7 +461,7 @@ def authentication():
     entra:
       tenantId: 7f3c1e2a-0000-0000-0000-000000000000
       loginHint: you@contoso.com''', "badger.yaml")}
-<p>The first run opens a browser for sign-in, MFA included. The token is kept in the operating system's encrypted store (Keychain on macOS, DPAPI on Windows, libsecret on Linux) and a small sign-in record (account and tenant ids, no tokens) is saved in <code>~/.badger/auth/</code>, so later runs are silent until the refresh token expires. <code>badger auth clear</code> forgets saved sign-ins. Set <code>entra.tokenCache: memory</code> to sign in on every run. Without a browser (SSH sessions), use <code>entraDeviceCode</code>.</p>
+<p>The first run opens a browser for sign-in, MFA included. The token is kept in the operating system's encrypted store (Keychain on macOS, DPAPI on Windows, libsecret on Linux) and a small sign-in record (account and tenant ids, no tokens) is saved in <code>~/.badger/auth/</code>, so later runs are silent until the refresh token expires. <code>bsm auth clear</code> forgets saved sign-ins. Set <code>entra.tokenCache: memory</code> to sign in on every run. Without a browser (SSH sessions), use <code>entraDeviceCode</code>.</p>
 
 <h2>More <code>entra</code> settings</h2>
 <table>
@@ -497,10 +497,10 @@ def authentication():
     authentication: integrated''')}
 
 <h2>Raw connection strings</h2>
-<p>A <code>connectionString</code> with <code>Authentication=Active Directory Interactive</code> (or any other SqlClient Entra mode) also works; badger registers SqlClient's own Entra provider. Setting <code>authentication:</code> takes precedence and removes conflicting keywords from the string.</p>
+<p>A <code>connectionString</code> with <code>Authentication=Active Directory Interactive</code> (or any other SqlClient Entra mode) also works; bsm registers SqlClient's own Entra provider. Setting <code>authentication:</code> takes precedence and removes conflicting keywords from the string.</p>
 
 <h2>Checking sign-in</h2>
-<p><code>badger doctor</code> gets a token before connecting, so you can tell an identity problem from a network or permission problem:</p>
+<p><code>bsm doctor</code> gets a token before connecting, so you can tell an identity problem from a network or permission problem:</p>
 {code('''provider       SQL Server / Azure SQL
 environment    prod (protected)
 auth           EntraInteractive
@@ -526,7 +526,7 @@ def connections():
   trustServerCertificate: false      # true only for local development''')}
 
 <h2>Any SqlClient setting</h2>
-<p><code>connectionProperties</code> accepts every keyword SqlClient understands and applies them last, over everything else. Invalid keywords or values are reported by <code>badger doctor</code> and before connecting.</p>
+<p><code>connectionProperties</code> accepts every keyword SqlClient understands and applies them last, over everything else. Invalid keywords or values are reported by <code>bsm doctor</code> and before connecting.</p>
 {yaml('''connectionProperties:
   Connect Retry Count: 3
   Connect Retry Interval: 10
@@ -566,13 +566,13 @@ def variables():
         ("{change}", "{change.name}", "Current change or repeatable"), ("{change.kind}", "", "deploy, revert, verify or repeatable"),
         ("{change.hash}", "", "The change's script hash"), ("{badger.provider}", "", "Provider id (sqlserver)"),
         ("{badger.version}", "", "Tool version"), ("{badger.schema}", "", "Journal schema"), ("{plan.head}", "", "Plan head chain id"),
-        ("{deploy.user}", "", "OS user running badger *"), ("{deploy.host}", "", "Machine running badger *"),
+        ("{deploy.user}", "", "OS user running bsm *"), ("{deploy.host}", "", "Machine running bsm *"),
         ("{deploy.utc}", "", "Run start, ISO 8601 UTC *"), ("{deploy.date}", "", "Run start date, UTC *"), ("{deploy.id}", "", "Unique id of the run *"),
     ]
     table = "<table><tr><th>Variable</th><th>Also</th><th>Value</th></tr>" + "".join(
         f"<tr><td><code>{a}</code></td><td>{f'<code>{b}</code>' if b else ''}</td><td>{c}</td></tr>" for a, b, c in builtins) + "</table>"
     return doc("docs/variables/", "Variables", "Scripts are preprocessed: {env}, {db}, your own variables, and $(sqlcmd) syntax.", f"""
-<p>Before a script reaches the database, badger replaces variables in it:</p>
+<p>Before a script reaches the database, bsm replaces variables in it:</p>
 {sql('''SELECT * FROM [calc_{env}].[table1];       -- test:  SELECT * FROM [calc_test].[table1];
 SELECT * FROM [calc_$(env)].[table1];      -- the same, sqlcmd syntax''')}
 
@@ -612,13 +612,13 @@ environments:
 {yaml('''preprocessor:
   unknown: error        # error (default) | keep
   sqlcmdSyntax: true    # expand $(name) too (default)''', "badger.yaml")}
-<p><code>badger plan check</code> also fails when a script uses a variable that some environment does not define, and names those environments.</p>
+<p><code>bsm plan check</code> also fails when a script uses a variable that some environment does not define, and names those environments.</p>
 
 <h2>Seeing the result</h2>
-{sh('''badger vars -e prod                        # every variable: value, source, description
-badger render create-calc-schema -e prod   # the exact SQL prod will receive
-badger render create-calc-schema -e prod --kind revert
-badger deploy -e prod --script review.sql  # all pending changes, rendered, for review''')}
+{sh('''bsm vars -e prod                        # every variable: value, source, description
+bsm render create-calc-schema -e prod   # the exact SQL prod will receive
+bsm render create-calc-schema -e prod --kind revert
+bsm deploy -e prod --script review.sql  # all pending changes, rendered, for review''')}
 
 <h2>Variables and certification</h2>
 <p>Raw scripts are hashed and certified, so the same change certifies identically in every environment. The rendered SQL is hashed separately per environment (see {link("docs/certification/", "Hash certification")}). If a variable's value changes after a change was deployed, <code>verify</code> reports it and <code>revert</code> refuses unless you pass <code>--allow-variable-drift</code>.</p>
@@ -626,12 +626,12 @@ badger deploy -e prod --script review.sql  # all pending changes, rendered, for 
 
 
 def always_encrypted():
-    return doc("docs/always-encrypted/", "Always Encrypted", "Column master keys and column encryption keys per environment, provisioned and rotated by badger.", f"""
+    return doc("docs/always-encrypted/", "Always Encrypted", "Column master keys and column encryption keys per environment, provisioned and rotated by bsm.", f"""
 <p>Always Encrypted keys are a classic per-environment difference: production's column master key lives in production's Key Vault, test's somewhere else. Change scripts should not contain key paths or encrypted key values. Badger splits it cleanly:</p>
 <ul>
   <li>Scripts reference a <strong>column encryption key name</strong> (the same in every environment).</li>
   <li>Each environment maps that name to <strong>its own column master key</strong> in <code>badger.yaml</code>.</li>
-  <li>Before changes run, badger <strong>creates</strong> missing keys and <strong>rotates</strong> keys whose master key changed.</li>
+  <li>Before changes run, bsm <strong>creates</strong> missing keys and <strong>rotates</strong> keys whose master key changed.</li>
 </ul>
 
 {sql('''ALTER TABLE dbo.Customer ADD Ssn char(11) COLLATE Latin1_General_BIN2
@@ -688,17 +688,17 @@ def always_encrypted():
 <ol>
   <li>Create the new key in Key Vault and add it under <code>columnMasterKeys</code> with a new name.</li>
   <li>Point the column encryption key at it: <code>CEK_Customer: {{ columnMasterKey: CMK_Prod_2027 }}</code>.</li>
-  <li><code>badger deploy</code> (or <code>badger env provision</code>) adds a second value to the CEK: the same data key, decrypted with the old CMK and re-encrypted with the new one. Data does not change; both keys work.</li>
-  <li>When every application can reach the new key, run <code>badger env provision --allow-destructive</code> to drop the value protected by the old CMK. This asks for confirmation.</li>
+  <li><code>bsm deploy</code> (or <code>bsm env provision</code>) adds a second value to the CEK: the same data key, decrypted with the old CMK and re-encrypted with the new one. Data does not change; both keys work.</li>
+  <li>When every application can reach the new key, run <code>bsm env provision --allow-destructive</code> to drop the value protected by the old CMK. This asks for confirmation.</li>
 </ol>
-{sh('''badger env status -e prod''')}
+{sh('''bsm env status -e prod''')}
 {code('''  = column master key CMK_Prod_2026: AZURE_KEY_VAULT key path matches
   + column master key CMK_Prod_2027: create column master key in AZURE_KEY_VAULT
   + column encryption key CEK_Customer: add value protected by CMK_Prod_2027 (rotation from CMK_Prod_2026)
   - column encryption key CEK_Customer: drop value protected by old column master key CMK_Prod_2026 (rotation complete)''')}
 
 <h2>Conflicts</h2>
-<p>SQL Server cannot change a column master key's key path. If the database has <code>CMK_Prod_2026</code> pointing somewhere other than your configuration, badger stops with a conflict instead of guessing. Define a new CMK name and rotate. Keys that exist in the database but not in your configuration are reported for information and never dropped.</p>
+<p>SQL Server cannot change a column master key's key path. If the database has <code>CMK_Prod_2026</code> pointing somewhere other than your configuration, bsm stops with a conflict instead of guessing. Define a new CMK name and rotate. Keys that exist in the database but not in your configuration are reported for information and never dropped.</p>
 
 <h2>Fingerprints across environments</h2>
 <p>The schema fingerprint records which CEK name protects each encrypted column, never key paths or values, so environments with different keys still produce the same fingerprint for the same schema.</p>
@@ -731,8 +731,8 @@ def commands():
         ("doctor", "", "Configuration, Entra token, connection, server facts, journal, resources."),
     ]
     table = "<table><tr><th>Command</th><th>Options</th><th>Does</th></tr>" + "".join(
-        f"<tr><td><code>badger {c}</code></td><td>{f'<code>{o}</code>' if o else ''}</td><td>{d}</td></tr>" for c, o, d in cmds) + "</table>"
-    return doc("docs/commands/", "Command reference", f"Every badger command and option (version {VERSION}).", f"""
+        f"<tr><td><code>bsm {c}</code></td><td>{f'<code>{o}</code>' if o else ''}</td><td>{d}</td></tr>" for c, o, d in cmds) + "</table>"
+    return doc("docs/commands/", "Command reference", f"Every bsm command and option (version {VERSION}).", f"""
 {table}
 
 <h2>Global options</h2>
@@ -761,7 +761,7 @@ def commands():
 <table>
 <tr><th>Variable</th><th>Meaning</th></tr>
 <tr><td><code>BADGER_ENV</code></td><td>Default environment</td></tr>
-<tr><td><code>BADGER_AUTHOR</code></td><td>Author written by <code>badger add</code> (default: OS user)</td></tr>
+<tr><td><code>BADGER_AUTHOR</code></td><td>Author written by <code>bsm add</code> (default: OS user)</td></tr>
 <tr><td><code>BADGER_HOME</code></td><td>Where saved sign-ins live (default <code>~/.badger</code>)</td></tr>
 <tr><td><code>NO_COLOR</code></td><td>Disable colors</td></tr>
 </table>
@@ -770,21 +770,21 @@ def commands():
 <p>Revert, rebase, baseline and destructive provisioning ask for confirmation. In a protected environment, so does deploy, and you must type the environment name. Non-interactive runs (redirected input, <code>--json</code>) fail instead of hanging unless you pass <code>--yes</code>.</p>
 
 <h2>JSON output</h2>
-{sh('''badger status -e prod --json | jq '.certified, .databaseHead'
-badger log --json -n 20''')}
+{sh('''bsm status -e prod --json | jq '.certified, .databaseHead'
+bsm log --json -n 20''')}
 """)
 
 
 def ci_cd():
     return doc("docs/ci-cd/", "CI/CD", "Checks on every pull request, gated deploys, no stored secrets.", f"""
 <h2>On every pull request</h2>
-{sh('''badger plan check -C db''')}
+{sh('''bsm plan check -C db''')}
 <p>Needs no database. Fails on plan problems, missing folders or reverts, lint errors, and variables missing in any environment.</p>
 
 <h2>On merge and release</h2>
-{sh('''badger deploy -C db -e test --json
-badger deploy -C db -e prod --yes --json     # --yes: protected environment, no prompt in CI
-badger verify -C db -e prod''')}
+{sh('''bsm deploy -C db -e test --json
+bsm deploy -C db -e prod --yes --json     # --yes: protected environment, no prompt in CI
+bsm verify -C db -e prod''')}
 <p>Two pipelines cannot interleave: the second waits for the deploy lock. Use <code>--script review.sql</code> to attach the exact SQL to an approval step, then <code>deploy</code> after approval.</p>
 
 <h2>Identity without secrets</h2>
@@ -802,10 +802,10 @@ badger verify -C db -e prod''')}
 
 <h2>Containers</h2>
 {code(f'''FROM mcr.microsoft.com/dotnet/runtime-deps:10.0
-ADD https://lonebadgerdownloads.blob.core.windows.net/badger-sql-migrate/v{VERSION}/badger-sql-migrate-{VERSION}-linux-x64.tar.gz /tmp/badger.tgz
-RUN tar -xzf /tmp/badger.tgz -C /usr/local/bin badger && rm /tmp/badger.tgz
+ADD https://lonebadgerdownloads.blob.core.windows.net/badger-sql-migrate/v{VERSION}/badger-sql-migrate-{VERSION}-linux-x64.tar.gz /tmp/bsm.tgz
+RUN tar -xzf /tmp/bsm.tgz -C /usr/local/bin bsm && rm /tmp/bsm.tgz
 COPY db /db
-ENTRYPOINT ["badger", "-C", "/db"]''', "", "Dockerfile")}
+ENTRYPOINT ["bsm", "-C", "/db"]''', "", "Dockerfile")}
 
 <h2>Applications that migrate themselves</h2>
 <p>The engine is also a .NET library; see {link("docs/extending/", "Library and providers")}.</p>
@@ -817,14 +817,14 @@ def baseline():
 <p>When a database already has its schema, you do not want to run your initial changes against it. Baseline records them as applied without executing them.</p>
 <ol>
   <li>Script the current schema as your first change(s), e.g. with SSMS, SqlPackage or Badger SQL. Keep them as the real history for new environments.</li>
-  <li>Tag that point: <code>badger tag baseline</code>.</li>
-  <li>For each existing database: <code>badger baseline --to @baseline -e prod</code>.</li>
+  <li>Tag that point: <code>bsm tag baseline</code>.</li>
+  <li>For each existing database: <code>bsm baseline --to @baseline -e prod</code>.</li>
   <li>From here on, add changes normally. New, empty databases run the full plan, including the initial changes.</li>
 </ol>
-{sh('''badger add initial-schema --irreversible     # paste the scripted schema into deploy.sql
-badger tag baseline
-badger baseline --to @baseline -e prod
-badger status -e prod                          # initial-schema shown as (baseline)''')}
+{sh('''bsm add initial-schema --irreversible     # paste the scripted schema into deploy.sql
+bsm tag baseline
+bsm baseline --to @baseline -e prod
+bsm status -e prod                          # initial-schema shown as (baseline)''')}
 <p>Baseline only works on a database with no deployed changes, takes the deploy lock, records the environment, and writes a schema fingerprint so later drift is detected.</p>
 
 <h2>Coming from Flyway, DbUp or grate</h2>
@@ -833,13 +833,13 @@ badger status -e prod                          # initial-schema shown as (baseli
   <li>Write revert scripts for the changes you might want to undo; mark the rest <code>!irreversible</code>.</li>
   <li>Move repeatable/"anytime" scripts into <code>repeatable/</code>.</li>
   <li>Replace placeholders such as <code>${{name}}</code> (Flyway) with <code>{{name}}</code> or keep <code>$(name)</code>.</li>
-  <li>Baseline each existing database. The old tool's history table can stay; badger uses its own <code>badger</code> schema.</li>
+  <li>Baseline each existing database. The old tool's history table can stay; bsm uses its own <code>badger</code> schema.</li>
 </ul>
 """)
 
 
 def journal():
-    return doc("docs/journal/", "Journal tables", "What badger stores in each database (schema badger, configurable).", f"""
+    return doc("docs/journal/", "Journal tables", "What bsm stores in each database (schema badger, configurable).", f"""
 <table>
 <tr><th>Table</th><th>Contents</th></tr>
 <tr><td><code>badger.changes</code></td><td>One row per applied change: sequence, name, script hash, chain id, deploy/revert/verify scripts, flags, deployed at/by/host, tool version, duration, out-of-order and baseline flags, rendered hashes</td></tr>
@@ -864,23 +864,23 @@ def troubleshooting():
         ("“Timed out … waiting for the deploy lock”", "Another deploy is running against the database. Wait, or raise <code>lockTimeoutSeconds</code>."),
         ("“… cannot run inside a transaction”", "Lint BSM001. Mark the change <code>!notx</code> in the plan and make the script re-runnable."),
         ("“unknown variable {x}”", "Define it under <code>variables:</code>, pass <code>--var x=…</code>, write <code>{{x}}</code> for a literal, or set <code>preprocessor.unknown: keep</code>."),
-        ("“renders differently than when it was deployed”", "A variable used by the change changed value. Run <code>badger vars</code>; restore the value, or use <code>--allow-variable-drift</code> if the change is intended."),
+        ("“renders differently than when it was deployed”", "A variable used by the change changed value. Run <code>bsm vars</code>; restore the value, or use <code>--allow-variable-drift</code> if the change is intended."),
         ("“Changes … come before changes already deployed” (strict ordering)", "A change merged above changes already in this database. In dev, use <code>--ordering dependency</code> or <code>rebase</code>; production should never see this if it only receives released plans."),
-        ("“schema drift”", "Something changed the schema outside badger. Find it (compare with a fresh database built from the plan), then either revert it or capture it as a new change."),
-        ("Entra: “credential unavailable” or browser does not open", "On SSH or headless machines use <code>entraDeviceCode</code>. For CLI credentials, sign in with <code>az login</code> first. <code>badger auth clear</code> resets saved sign-ins."),
+        ("“schema drift”", "Something changed the schema outside bsm. Find it (compare with a fresh database built from the plan), then either revert it or capture it as a new change."),
+        ("Entra: “credential unavailable” or browser does not open", "On SSH or headless machines use <code>entraDeviceCode</code>. For CLI credentials, sign in with <code>az login</code> first. <code>bsm auth clear</code> resets saved sign-ins."),
         ("Linux: token cache error", "Install libsecret (and a keyring), use <code>entra.tokenCache: memory</code>, or set <code>allowUnencryptedTokenCache: true</code>."),
         ("Kerberos on macOS/Linux fails", "Run <code>kinit user@REALM</code>, check <code>klist</code>, and set <code>connectionProperties: { Server SPN: MSSQLSvc/host:1433 }</code> if the SPN differs."),
-        ("“column master key … cannot be changed”", "The database's CMK points to a different key path. Add a new CMK name and rotate; badger never rewrites CMK metadata."),
-        ("macOS: “badger cannot be opened”", "Run <code>xattr -d com.apple.quarantine badger</code> once, or install the .NET tool."),
+        ("“column master key … cannot be changed”", "The database's CMK points to a different key path. Add a new CMK name and rotate; bsm never rewrites CMK metadata."),
+        ("macOS: “bsm cannot be opened”", "Run <code>xattr -d com.apple.quarantine bsm</code> once, or install the .NET tool."),
     ]
     rows = "".join(f"<h3>{q}</h3><p>{a}</p>" for q, a in items)
     return doc("docs/troubleshooting/", "Troubleshooting", "Common messages and what to do about them.", f"""
 <p>Start with:</p>
-{sh('''badger doctor -e <environment> -v''')}
+{sh('''bsm doctor -e <environment> -v''')}
 <p>It checks configuration, Entra sign-in, the connection, server facts, the journal and environment resources, and reports each separately.</p>
 {rows}
 <h2>Support</h2>
-<p>Email <a href="mailto:support@lonebadger.tech">support@lonebadger.tech</a> or open an issue on <a href="https://github.com/lonebadger-tech/badger-sql-migrate/issues">GitHub</a>. Include <code>badger --version</code>, the command, and the output of <code>badger doctor</code>. Never send passwords or tokens.</p>
+<p>Email <a href="mailto:support@lonebadger.tech">support@lonebadger.tech</a> or open an issue on <a href="https://github.com/lonebadger-tech/badger-sql-migrate/issues">GitHub</a>. Include <code>bsm --version</code>, the command, and the output of <code>bsm doctor</code>. Never send passwords or tokens.</p>
 """)
 
 

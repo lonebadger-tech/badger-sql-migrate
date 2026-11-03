@@ -4,7 +4,7 @@
 
 Flyway and DbUp order scripts by a number or name in the file name. Two developers who pick the same next number on two branches collide, and the tool can only either refuse or run "out of order" globally.
 
-Badger identifies a change by its **name** (its folder under `changes/`). Order comes from `badger.plan`, one change per line. Because the plan is line-based, git's `union` merge driver merges two developers' appended lines without a conflict. `badger plan check` then validates the result (unique names, dependencies exist and come earlier, every folder is listed).
+Badger identifies a change by its **name** (its folder under `changes/`). Order comes from `badger.plan`, one change per line. Because the plan is line-based, git's `union` merge driver merges two developers' appended lines without a conflict. `bsm plan check` then validates the result (unique names, dependencies exist and come earlier, every folder is listed).
 
 ## Hash certification
 
@@ -26,7 +26,7 @@ Shared development databases see merges in arbitrary order. Each profile picks a
 - `dependency` (default): a pending change that sits before already-deployed changes is applied if its dependencies are satisfied; it is flagged `applied_out_of_order` and the database is reported as *up to date but not certified*.
 - `strict` (use for production): refuse. Production databases only ever receive exact plan order, so their head hash certifies them.
 
-`badger rebase --to <change>` returns a dev database to plan order.
+`bsm rebase --to <change>` returns a dev database to plan order.
 
 ## Down
 
@@ -62,4 +62,4 @@ Scripts are preprocessed (`{name}`, `$(name)`) before the provider sees them. Th
 
 ## Environment resources
 
-Some objects must exist before changes run but cannot be in hashed scripts because their definitions differ per environment. Providers expose them through `IEnvironmentResources`. On SQL Server these are Always Encrypted keys: scripts name a column encryption key; each environment maps it to its own column master key, and badger provisions the key metadata and material. Safe actions run automatically before a deploy; destructive ones (dropping an old key value after rotation) need `env provision --allow-destructive`; contradictions are conflicts that stop the deploy.
+Some objects must exist before changes run but cannot be in hashed scripts because their definitions differ per environment. Providers expose them through `IEnvironmentResources`. On SQL Server these are Always Encrypted keys: scripts name a column encryption key; each environment maps it to its own column master key, and bsm provisions the key metadata and material. Safe actions run automatically before a deploy; destructive ones (dropping an old key value after rotation) need `env provision --allow-destructive`; contradictions are conflicts that stop the deploy.

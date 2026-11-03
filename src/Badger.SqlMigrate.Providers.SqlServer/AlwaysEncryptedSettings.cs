@@ -9,7 +9,7 @@ namespace Badger.SqlMigrate.Providers.SqlServer;
 /// <summary>
 /// The "alwaysEncrypted:" block of an environment. Change scripts reference stable key names
 /// (ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = CEK_Customer ...)); each environment maps those names to its own
-/// column master key (key store + key path) and badger provisions the key metadata and key material.
+/// column master key (key store + key path) and bsm provisions the key metadata and key material.
 /// <code>
 /// alwaysEncrypted:
 ///   enabled: true                      # sets Column Encryption Setting=Enabled

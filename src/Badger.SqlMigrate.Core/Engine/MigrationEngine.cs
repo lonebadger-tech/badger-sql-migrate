@@ -311,7 +311,7 @@ public sealed class MigrationEngine
                 var now = RenderedHash(row.Name, row.ScriptHash, ("revert", row.RevertScript));
                 if (now is not null && !string.Equals(now, row.RenderedRevertHash, StringComparison.Ordinal))
                 {
-                    throw new MigrationException($"{row.Name}: the revert script renders differently than when it was deployed (a variable it uses changed value). Check 'badger vars', or pass --allow-variable-drift to revert anyway.");
+                    throw new MigrationException($"{row.Name}: the revert script renders differently than when it was deployed (a variable it uses changed value). Check 'bsm vars', or pass --allow-variable-drift to revert anyway.");
                 }
             }
 
@@ -367,7 +367,7 @@ public sealed class MigrationEngine
             live = ContentHasher.Hash(dump);
             if (recorded is not null && !string.Equals(recorded, live, StringComparison.Ordinal))
             {
-                problems.Add($"schema drift: live fingerprint {Short(live)} != recorded {Short(recorded)}. Something changed the schema outside badger.");
+                problems.Add($"schema drift: live fingerprint {Short(live)} != recorded {Short(recorded)}. Something changed the schema outside bsm.");
             }
         }
 
@@ -440,7 +440,7 @@ public sealed class MigrationEngine
 
         var sb = new StringBuilder();
         sb.AppendLine(provider.FormatComment($"Badger SQL Migrate {actor.ToolVersion} - generated {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z for {session.Description}"));
-        sb.AppendLine(provider.FormatComment("Review script only: running it does not record changes in the badger journal. Use 'badger deploy' or 'badger baseline' afterwards."));
+        sb.AppendLine(provider.FormatComment("Review script only: running it does not record changes in the badger journal. Use 'bsm deploy' or 'bsm baseline' afterwards."));
         foreach (var item in status.Changes.Where(c => c.State == ChangeState.Pending && c.PlanIndex <= targetIndex))
         {
             sb.AppendLine();
@@ -650,7 +650,7 @@ public sealed class MigrationEngine
         var toApply = plan.Where(a => a.Kind == ResourceActionKind.Apply || (allowDestructive && a.Kind == ResourceActionKind.Destructive)).ToList();
         foreach (var skipped in plan.Where(a => a.Kind == ResourceActionKind.Destructive && !allowDestructive))
         {
-            log.Warn($"{skipped.ResourceType} {skipped.Name}: {skipped.Description} (run 'badger env provision --allow-destructive' when every client can use the new key)");
+            log.Warn($"{skipped.ResourceType} {skipped.Name}: {skipped.Description} (run 'bsm env provision --allow-destructive' when every client can use the new key)");
         }
 
         foreach (var info in plan.Where(a => a.Kind == ResourceActionKind.Info))

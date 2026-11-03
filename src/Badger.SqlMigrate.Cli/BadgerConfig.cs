@@ -80,7 +80,7 @@ public sealed class BadgerConfig
         var path = Path.Combine(projectDir, FileName);
         if (!File.Exists(path))
         {
-            throw new MigrationException($"No {FileName} found in '{projectDir}'. Run 'badger init' or pass --project <dir>.");
+            throw new MigrationException($"No {FileName} found in '{projectDir}'. Run 'bsm init' or pass --project <dir>.");
         }
 
         JsonObject root;

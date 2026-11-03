@@ -67,13 +67,13 @@ public sealed partial class TSqlLinter : IScriptLinter
         public override void Visit(ReconfigureStatement node) => NotInTransaction(node, "RECONFIGURE");
 
         public override void Visit(UseStatement node) =>
-            diagnostics.Add(new(LintSeverity.Error, "USE changes the database context; badger deploys to the profile's database. Remove it.", node.StartLine, "BSM002"));
+            diagnostics.Add(new(LintSeverity.Error, "USE changes the database context; bsm deploys to the profile's database. Remove it.", node.StartLine, "BSM002"));
 
         public override void Visit(BeginTransactionStatement node)
         {
             if (Transactional)
             {
-                diagnostics.Add(new(LintSeverity.Warning, "Explicit BEGIN TRANSACTION inside a change that badger already wraps in a transaction. A ROLLBACK here would abort badger's transaction; mark the change !notx if you manage transactions yourself.", node.StartLine, "BSM003"));
+                diagnostics.Add(new(LintSeverity.Warning, "Explicit BEGIN TRANSACTION inside a change that bsm already wraps in a transaction. A ROLLBACK here would abort bsm's transaction; mark the change !notx if you manage transactions yourself.", node.StartLine, "BSM003"));
             }
         }
 

@@ -73,7 +73,7 @@ public sealed record AppliedChange
     /// <summary>SHA-256 of the revert script as rendered at deploy time; revert refuses if it now renders differently.</summary>
     public string? RenderedRevertHash { get; init; }
 
-    /// <summary>True when recorded by 'badger baseline' without executing the deploy script.</summary>
+    /// <summary>True when recorded by 'bsm baseline' without executing the deploy script.</summary>
     public bool Baselined { get; init; }
 }
 

@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace Badger.SqlMigrate.Core.Preprocessing;
 
-/// <summary>Where a variable's value comes from, for 'badger vars' and error messages.</summary>
+/// <summary>Where a variable's value comes from, for 'bsm vars' and error messages.</summary>
 public enum VariableSource
 {
     BuiltIn,
@@ -169,8 +169,8 @@ public sealed partial class ScriptPreprocessor
             new("badger.version", toolVersion, VariableSource.BuiltIn, "Badger SQL Migrate version"),
             new("badger.schema", stateSchema, VariableSource.BuiltIn, "schema holding the badger journal"),
             new("plan.head", planHead ?? string.Empty, VariableSource.BuiltIn, "chain id of the last change in the plan"),
-            new("deploy.user", user, VariableSource.BuiltIn, "OS user running badger", Volatile: true),
-            new("deploy.host", machine, VariableSource.BuiltIn, "machine running badger", Volatile: true),
+            new("deploy.user", user, VariableSource.BuiltIn, "OS user running bsm", Volatile: true),
+            new("deploy.host", machine, VariableSource.BuiltIn, "machine running bsm", Volatile: true),
             new("deploy.utc", runStartedUtc.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture), VariableSource.BuiltIn, "run start time, ISO 8601 UTC", Volatile: true),
             new("deploy.date", runStartedUtc.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), VariableSource.BuiltIn, "run start date, UTC", Volatile: true),
             new("deploy.id", runId, VariableSource.BuiltIn, "unique id of this run", Volatile: true),

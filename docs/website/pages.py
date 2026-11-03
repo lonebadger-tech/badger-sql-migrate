@@ -72,11 +72,11 @@ def home():
       verify.sql           proves the deploy worked (optional)
   repeatable/              views, procedures, functions: re-applied when changed
   environments/dev/        scripts that run only in dev (seed data)''')}
-{sh('''badger add add-customer-email --requires create-customer
-badger deploy -e test
-badger status -e prod
-badger revert --to create-customer -e test''')}
-<p>Every deploy records the script hashes, who ran it, where, and a hash chain that certifies the order. <code>badger status</code> tells you when a database is <strong>certified</strong>: it received exactly the plan, in order, byte for byte.</p>
+{sh('''bsm add add-customer-email --requires create-customer
+bsm deploy -e test
+bsm status -e prod
+bsm revert --to create-customer -e test''')}
+<p>Every deploy records the script hashes, who ran it, where, and a hash chain that certifies the order. <code>bsm status</code> tells you when a database is <strong>certified</strong>: it received exactly the plan, in order, byte for byte.</p>
 
 <h2>Why another migration tool?</h2>
 <p>Flyway charges for undo and collides when two branches pick the same version number. DbUp only goes up and ignores edited scripts. SSDT computes a different script on each machine. Sqitch has the right model but a Perl install and weak SQL Server support. Badger SQL Migrate keeps the best ideas of each and fixes the gaps. <a href="{BASE}/compare/">See the comparison →</a></p>
@@ -122,14 +122,14 @@ def download(artifacts):
 <h2>.NET tool</h2>
 <p>If you have the .NET 10 SDK, this is the easiest way to install and update:</p>
 {sh('''dotnet tool install --global Badger.SqlMigrate
-badger --version''')}
+bsm --version''')}
 <p>Update with <code>dotnet tool update --global Badger.SqlMigrate</code>. To pin a version for a repository, use a local tool manifest:</p>
 {sh(f'''dotnet new tool-manifest
 dotnet tool install Badger.SqlMigrate --version {VERSION}
-dotnet badger status''')}
+dotnet bsm status''')}
 
 <h2>Standalone binaries</h2>
-<p>Self-contained single-file executables: nothing else to install. Each archive contains <code>badger</code> (or <code>badger.exe</code>), the license and the readme.</p>
+<p>Self-contained single-file executables: nothing else to install. Each archive contains <code>bsm</code> (or <code>bsm.exe</code>), the license and the readme.</p>
 <table class="downloads">
 <thead><tr><th>Platform</th><th>File</th><th>Size</th><th>SHA-256</th></tr></thead>
 <tbody>{''.join(rows)}</tbody>
@@ -139,22 +139,22 @@ dotnet badger status''')}
 <h3>macOS</h3>
 {sh(f'''curl -LO {DOWNLOAD_BASE}/badger-sql-migrate-{VERSION}-osx-arm64.tar.gz
 tar -xzf badger-sql-migrate-{VERSION}-osx-arm64.tar.gz
-xattr -d com.apple.quarantine badger   # downloaded with a browser? clear Gatekeeper's quarantine flag
-sudo mv badger /usr/local/bin/
-badger --version''')}
+xattr -d com.apple.quarantine bsm   # downloaded with a browser? clear Gatekeeper's quarantine flag
+sudo mv bsm /usr/local/bin/
+bsm --version''')}
 <p class="note">The macOS binaries are signed ad hoc but not notarized, so a copy downloaded with a browser needs the <code>xattr</code> line above (or right-click › Open once). The .NET tool has no such step.</p>
 
 <h3>Linux</h3>
 {sh(f'''curl -LO {DOWNLOAD_BASE}/badger-sql-migrate-{VERSION}-linux-x64.tar.gz
 tar -xzf badger-sql-migrate-{VERSION}-linux-x64.tar.gz
-sudo mv badger /usr/local/bin/''')}
+sudo mv bsm /usr/local/bin/''')}
 <p>Use the <code>linux-musl-x64</code> build on Alpine. Integrated (Kerberos) authentication needs the system's GSSAPI library (<code>libgssapi-krb5-2</code> on Debian/Ubuntu, <code>krb5-libs</code> on RHEL, <code>krb5</code> on Alpine).</p>
 
 <h3>Windows</h3>
-{code(f'''Invoke-WebRequest {DOWNLOAD_BASE}/badger-sql-migrate-{VERSION}-win-x64.zip -OutFile badger.zip
-Expand-Archive badger.zip -DestinationPath "$env:LOCALAPPDATA\\badger"
-# add %LOCALAPPDATA%\\badger to PATH, then:
-badger --version''', "powershell")}
+{code(f'''Invoke-WebRequest {DOWNLOAD_BASE}/badger-sql-migrate-{VERSION}-win-x64.zip -OutFile bsm.zip
+Expand-Archive bsm.zip -DestinationPath "$env:LOCALAPPDATA\\bsm"
+# add %LOCALAPPDATA%\\bsm to PATH, then:
+bsm --version''', "powershell")}
 
 <h3>Verify a download</h3>
 <p>A migration tool that certifies hashes should be verifiable itself:</p>
@@ -250,7 +250,7 @@ def compare():
 
 <h2>What it fixes</h2>
 <ul>
-  <li><strong>Version collisions.</strong> Changes are named; order lives in a line-based plan merged by git's union driver. <code>badger plan check</code> catches the rare real conflict (two changes with the same name).</li>
+  <li><strong>Version collisions.</strong> Changes are named; order lives in a line-based plan merged by git's union driver. <code>bsm plan check</code> catches the rare real conflict (two changes with the same name).</li>
   <li><strong>Paid or lossy down.</strong> Revert scripts are written by you, required by default, free, and stored with the deploy.</li>
   <li><strong>Weak checksums.</strong> SHA-256 over normalized content (CRLF and BOM differences do not matter, everything else does) plus a chain over the order.</li>
   <li><strong>Rollback depending on your checkout.</strong> The database holds the revert script it will need.</li>
@@ -286,7 +286,7 @@ CREATE UNIQUE INDEX UX_Customer_Email ON dbo.Customer (Email) WHERE Email IS NOT
     THROW 50000, N'dbo.Customer was not created', 1;
 IF INDEXPROPERTY(OBJECT_ID(N'dbo.Customer'), N'UX_Customer_Email', 'IsUnique') <> 1
     THROW 50000, N'UX_Customer_Email is missing or not unique', 1;''', "changes/create-customer/verify.sql"),
-       sh('''badger add create-customer --note "customer table"'''))
+       sh('''bsm add create-customer --note "customer table"'''))
 
     ex("add-column", "Add a NOT NULL column to a table with data", "<p>Add it nullable, backfill, then tighten. Batches separated by <code>GO</code> run in order inside the change's transaction. Name constraints explicitly: system-generated names differ between servers.</p>",
        sql('''ALTER TABLE dbo.Customer ADD Status tinyint NULL;
@@ -299,7 +299,7 @@ ALTER TABLE dbo.Customer ADD CONSTRAINT CK_Customer_Status CHECK (Status IN (1, 
        sql('''ALTER TABLE dbo.Customer DROP CONSTRAINT CK_Customer_Status;
 ALTER TABLE dbo.Customer DROP CONSTRAINT DF_Customer_Status;
 ALTER TABLE dbo.Customer DROP COLUMN Status;''', "changes/add-customer-status/revert.sql"),
-       code('''add-customer-status [create-customer] @2026-11-04T09:02Z alice''', "", "badger.plan (line added by badger add -r create-customer)"))
+       code('''add-customer-status [create-customer] @2026-11-04T09:02Z alice''', "", "badger.plan (line added by bsm add -r create-customer)"))
 
     ex("rename", "Rename a column", "<p>Renames are reversible when you write both directions.</p>",
        sql('''EXEC sp_rename N'dbo.Customer.Email', N'EmailAddress', N'COLUMN';''', "changes/rename-customer-email/deploy.sql"),
@@ -322,10 +322,10 @@ END''', "changes/split-customer-name/deploy.sql"),
        sql('''UPDATE dbo.Customer SET Name = CONCAT_WS(N' ', FirstName, NULLIF(LastName, N''));
 ALTER TABLE dbo.Customer DROP COLUMN FirstName, LastName;''', "changes/split-customer-name/revert.sql"))
 
-    ex("irreversible", "An irreversible change", "<p>Some changes cannot be undone, such as dropping data you no longer keep. Mark them <code>!irreversible</code>: no <code>revert.sql</code> is needed and <code>badger revert</code> stops with a clear message instead of guessing. Archiving first is good manners.</p>",
+    ex("irreversible", "An irreversible change", "<p>Some changes cannot be undone, such as dropping data you no longer keep. Mark them <code>!irreversible</code>: no <code>revert.sql</code> is needed and <code>bsm revert</code> stops with a clear message instead of guessing. Archiving first is good manners.</p>",
        sql('''SELECT * INTO archive.LegacyOrder_20261103 FROM dbo.LegacyOrder;
 DROP TABLE dbo.LegacyOrder;''', "changes/drop-legacy-orders/deploy.sql"),
-       sh('''badger add drop-legacy-orders --irreversible'''))
+       sh('''bsm add drop-legacy-orders --irreversible'''))
 
     ex("notx", "Statements that cannot run in a transaction", "<p>SQL Server refuses some statements inside a transaction (<code>ALTER DATABASE</code>, full-text DDL, <code>RECONFIGURE</code>, resumable index operations). The linter catches them; mark the change <code>!notx</code> and make the script safe to re-run, because a failure halfway leaves partial work.</p>",
        sql('''IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = N'ftCatalog')
@@ -391,9 +391,9 @@ CREATE TABLE [{schemas.calc}].[table1] (
 GO
 CREATE ROLE [{AppRole}];
 GRANT SELECT ON SCHEMA::[{schemas.calc}] TO [{AppRole}];
-PRINT 'deployed {change} to {env} ({db}) with badger {badger.version}';''', "changes/create-calc-schema/deploy.sql"),
-       sh('''badger render create-calc-schema -e prod    # prints the exact SQL prod will receive
-badger vars -e prod                          # every variable, its value and where it came from'''),
+PRINT 'deployed {change} to {env} ({db}) with bsm {badger.version}';''', "changes/create-calc-schema/deploy.sql"),
+       sh('''bsm render create-calc-schema -e prod    # prints the exact SQL prod will receive
+bsm vars -e prod                          # every variable, its value and where it came from'''),
        sql('''CREATE SCHEMA [calc_prod];
 GO
 CREATE TABLE [calc_prod].[table1] (
@@ -403,7 +403,7 @@ CREATE TABLE [calc_prod].[table1] (
 GO
 CREATE ROLE [app_reader_prod];
 GRANT SELECT ON SCHEMA::[calc_prod] TO [app_reader_prod];
-PRINT 'deployed create-calc-schema to prod (AppProd) with badger 0.1.0';''', "output of badger render -e prod"))
+PRINT 'deployed create-calc-schema to prod (AppProd) with bsm 0.1.0';''', "output of bsm render -e prod"))
 
     ex("security", "Logins, users and grants that differ per environment", "<p>Principals usually differ per environment. Keep the shape in the change and the names in variables. Secrets come from the environment, never from the file.</p>",
        yaml('''environments:
@@ -440,8 +440,8 @@ DROP USER [{apiIdentity}];''', "changes/grant-api-identity/revert.sql"))
         ENCRYPTION_TYPE = Deterministic,
         ALGORITHM = 'AEAD_AES_256_CBC_HMAC_SHA_256') NULL;''', "changes/add-customer-taxid/deploy.sql"),
        sql('''ALTER TABLE dbo.Customer DROP COLUMN TaxId;''', "changes/add-customer-taxid/revert.sql"),
-       sh('''badger env status -e prod      # keys: in sync, to create, to rotate, conflicting
-badger deploy -e prod           # creates CMK_Prod_2026 and CEK_Customer, then runs the change'''))
+       sh('''bsm env status -e prod      # keys: in sync, to create, to rotate, conflicting
+bsm deploy -e prod           # creates CMK_Prod_2026 and CEK_Customer, then runs the change'''))
 
     ex("config", "A complete badger.yaml", "<p>A realistic configuration: a local container, Azure test and production, a template for shared settings, and production rules.</p>",
        yaml('''provider: sqlserver
@@ -492,7 +492,7 @@ environments:
     connectionProperties:
       Command Timeout: 600''', "badger.yaml"))
 
-    ex("plan", "A plan after two developers merged", "<p>Alice and Bob each appended a line on their branches. Git's union merge driver (set up by <code>badger init</code>) kept both lines without a conflict.</p>",
+    ex("plan", "A plan after two developers merged", "<p>Alice and Bob each appended a line on their branches. Git's union merge driver (set up by <code>bsm init</code>) kept both lines without a conflict.</p>",
        code('''# Badger SQL Migrate plan: one change per line, in deploy order.
 
 create-customer                                  @2026-11-03T14:10Z brock  # customer table
@@ -502,7 +502,7 @@ rename-customer-email [create-customer]          @2026-11-04T09:02Z alice
 add-order-table [create-customer]                @2026-11-04T09:15Z bob
 product-fulltext [create-product] !notx          @2026-11-05T11:30Z bob
 drop-legacy-orders !irreversible                 @2026-11-06T08:00Z alice''', "", "badger.plan"),
-       sh('''badger plan check     # unique names, dependencies, folders, lint, variables in every environment'''))
+       sh('''bsm plan check     # unique names, dependencies, folders, lint, variables in every environment'''))
 
     ex("github-actions", "GitHub Actions", "<p>Check on every pull request; deploy to test on merge; deploy to production with workload identity federation (no secrets).</p>",
        yaml('''name: database
@@ -523,7 +523,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: 10.0.x }
       - run: dotnet tool install --global Badger.SqlMigrate
-      - run: badger plan check -C db
+      - run: bsm plan check -C db
 
   deploy:
     if: github.ref == 'refs/heads/main'
@@ -540,9 +540,9 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           allow-no-subscriptions: true
-      - run: badger deploy -C db -e test --json
-      - run: badger deploy -C db -e prod --yes --json
-      - run: badger verify -C db -e prod''', ".github/workflows/database.yml"),
+      - run: bsm deploy -C db -e test --json
+      - run: bsm deploy -C db -e prod --yes --json
+      - run: bsm verify -C db -e prod''', ".github/workflows/database.yml"),
        yaml('''  prod:
     extends: _azure
     authentication: entraAzureCli      # uses the azure/login session above''', "badger.yaml (prod for this pipeline)"))
@@ -552,7 +552,7 @@ jobs:
   - task: UseDotNet@2
     inputs: { packageType: sdk, version: 10.0.x }
   - script: dotnet tool install --global Badger.SqlMigrate
-  - script: badger deploy -C db -e prod --yes
+  - script: bsm deploy -C db -e prod --yes
     env:
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)''', "azure-pipelines.yml"),
        yaml('''  prod:

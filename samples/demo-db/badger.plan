@@ -2,7 +2,7 @@
 #   name [requires ...] !notx !irreversible @timestamp author  # note
 #   @tag                                                       (tags the change above)
 # Merged with git's union driver (see .gitattributes), so concurrent additions never conflict.
-# Run 'badger plan check' after merging.
+# Run 'bsm plan check' after merging.
 
 create-customer @2026-11-03T12:00Z lonebadger  # customer table
 add-customer-email [create-customer] @2026-11-03T12:00Z lonebadger

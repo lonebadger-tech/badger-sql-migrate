@@ -31,7 +31,7 @@ Secrets never belong in the file: any string may use `${env:NAME}` or `${file:pa
 
 ## Environments
 
-`extends` deep-merges the parent first (maps merge key by key; scalars and lists are replaced). Chains are allowed; cycles are errors. `badger env show -e prod` prints the merged result with secrets masked.
+`extends` deep-merges the parent first (maps merge key by key; scalars and lists are replaced). Chains are allowed; cycles are errors. `bsm env show -e prod` prints the merged result with secrets masked.
 
 | Key | Meaning |
 |---|---|
@@ -47,7 +47,7 @@ Secrets never belong in the file: any string may use `${env:NAME}` or `${file:pa
 | `protected` | Deploy, revert, baseline and destructive provisioning require typing the environment name (or `--yes`) |
 | `allowRevert` | `false` refuses revert and rebase (fix forward) |
 | `ordering` | `dependency` (shared dev databases) or `strict` (exact plan order; certified history) |
-| `stateSchema` | Schema for badger's journal tables (default `badger`) |
+| `stateSchema` | Schema for the journal tables (default `badger`) |
 | `commandTimeoutSeconds`, `lockTimeoutSeconds` | Per-command timeout; how long to wait for another deployer |
 | `variables` | Environment-specific variables (override shared ones) |
 | `alwaysEncrypted` | SQL Server Always Encrypted keys (see below) |
@@ -76,13 +76,13 @@ Secrets never belong in the file: any string may use `${env:NAME}` or `${file:pa
 | `entraIntegrated` | Federated-domain Entra Integrated (native SqlClient) | |
 | `entraPassword` | Entra user + password (native SqlClient) | no MFA; deprecated by Microsoft; prints a warning |
 
-Other `entra` options: `authorityHost` (`azurePublicCloud`, `azureGovernment`, `azureChina`, or a URL), `additionallyAllowedTenants`, `loginHint`, `tokenCache` (`persistent` / `memory`), `allowUnencryptedTokenCache` (Linux without libsecret), `scope` (override the token audience), `timeoutSeconds`. `badger auth clear` forgets saved interactive sign-ins. `badger doctor` acquires a token before connecting, so identity problems and network problems are reported separately.
+Other `entra` options: `authorityHost` (`azurePublicCloud`, `azureGovernment`, `azureChina`, or a URL), `additionallyAllowedTenants`, `loginHint`, `tokenCache` (`persistent` / `memory`), `allowUnencryptedTokenCache` (Linux without libsecret), `scope` (override the token audience), `timeoutSeconds`. `bsm auth clear` forgets saved interactive sign-ins. `bsm doctor` acquires a token before connecting, so identity problems and network problems are reported separately.
 
 A raw `connectionString` with `Authentication=Active Directory ...` also works; SqlClient's own Entra provider is registered.
 
 ## Connection properties (Azure SQL and everything else)
 
-Any SqlClient keyword works under `connectionProperties`, e.g. `Connect Retry Count`, `Connect Retry Interval`, `Connect Timeout`, `Command Timeout`, `ApplicationIntent`, `Multi Subnet Failover`, `Failover Partner`, `Server SPN`, `IP Address Preference`, `Transparent Network IP Resolution`, `Pooling`, `Max Pool Size`, `Packet Size`, `Application Name`, `Workstation ID`, `Current Language`, `Host Name In Certificate`, `Server Certificate`, `Attestation Protocol`, `Enclave Attestation Url`. Unknown or invalid keywords are reported by `badger doctor` and before connecting.
+Any SqlClient keyword works under `connectionProperties`, e.g. `Connect Retry Count`, `Connect Retry Interval`, `Connect Timeout`, `Command Timeout`, `ApplicationIntent`, `Multi Subnet Failover`, `Failover Partner`, `Server SPN`, `IP Address Preference`, `Transparent Network IP Resolution`, `Pooling`, `Max Pool Size`, `Packet Size`, `Application Name`, `Workstation ID`, `Current Language`, `Host Name In Certificate`, `Server Certificate`, `Attestation Protocol`, `Enclave Attestation Url`. Unknown or invalid keywords are reported by `bsm doctor` and before connecting.
 
 ## Always Encrypted keys per environment
 
@@ -120,9 +120,9 @@ environments:
 
 - `keyStore`: `AZURE_KEY_VAULT` (Key Vault and Managed HSM), `MSSQL_CERTIFICATE_STORE`, `MSSQL_CNG_STORE`, `MSSQL_CSP_PROVIDER` (the last three are Windows only), or a custom provider name. Aliases: `azureKeyVault`, `certificateStore`, `cng`, `csp`.
 - Before changes run, `deploy` creates missing column master keys (signed when `enclaveComputations: true`) and column encryption keys (a new random 256-bit key, encrypted by the CMK on the client; key material is never logged).
-- **Rotation:** add a new CMK and point the CEK at it. The next deploy adds a CEK value protected by the new CMK (the key is decrypted with the old CMK and re-encrypted). Once every client can reach the new CMK, run `badger env provision --allow-destructive` to drop the old value.
+- **Rotation:** add a new CMK and point the CEK at it. The next deploy adds a CEK value protected by the new CMK (the key is decrypted with the old CMK and re-encrypted). Once every client can reach the new CMK, run `bsm env provision --allow-destructive` to drop the old value.
 - A CMK whose key path differs from the database is a **conflict**: SQL Server cannot alter CMK metadata, so define a new name and rotate.
-- `badger env status` shows each key as in sync, to create, to rotate, destructive, or conflicting.
+- `bsm env status` shows each key as in sync, to create, to rotate, destructive, or conflicting.
 - Schema fingerprints include the CEK name of encrypted columns, never key paths, so environments with different keys still fingerprint identically.
 - Library users can register a provider instance with `SqlServerProvider.RegisterKeyStoreProvider(name, provider)`.
 
@@ -154,7 +154,7 @@ Only an identifier directly inside braces is a token, so ODBC escapes (`{fn NOW(
 
 **Safety:**
 - An unknown variable is an error with its line number (unless `preprocessor.unknown: keep`).
-- `badger plan check` fails when a script uses a variable that some environment does not define.
-- `badger verify` reports changes that would now render differently than what was deployed.
+- `bsm plan check` fails when a script uses a variable that some environment does not define.
+- `bsm verify` reports changes that would now render differently than what was deployed.
 - `revert` refuses when the stored revert script now renders differently (`--allow-variable-drift` to override).
-- `badger vars -e prod` lists every variable with its value and source. `badger render <change> -e prod [--kind revert]` prints the exact SQL.
+- `bsm vars -e prod` lists every variable with its value and source. `bsm render <change> -e prod [--kind revert]` prints the exact SQL.

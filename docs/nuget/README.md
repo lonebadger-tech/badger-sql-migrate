@@ -16,17 +16,17 @@ To pin a version for a repository (recommended for CI):
 dotnet new tool-manifest
 dotnet tool install Badger.SqlMigrate
 dotnet tool restore        # in CI
-dotnet badger status
+dotnet bsm status
 ```
 
 ## Quick start
 
 ```bash
-badger init -C db
-badger add create-customer -C db
+bsm init -C db
+bsm add create-customer -C db
 # edit db/changes/create-customer/deploy.sql, revert.sql, verify.sql
-badger plan check -C db
-badger deploy -C db
+bsm plan check -C db
+bsm deploy -C db
 ```
 
 - [Quick start](https://lonebadger.tech/badger-sql-migrate/docs/quick-start/)

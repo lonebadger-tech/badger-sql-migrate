@@ -54,7 +54,7 @@ YAML_TOKEN = re.compile(
     r"|(?P<k>^\s*-?\s*[\w .-]+?(?=:(\s|$)))",
     re.M,
 )
-SHELL_TOKEN = re.compile(r"(?P<c>#[^\n]*)|(?P<s>\"[^\"\n]*\"|'[^'\n]*')|(?P<k>^\s*(?:badger|dotnet|tar|curl|xattr|shasum|sha256sum|Get-FileHash|kinit|az|chmod|sudo|mv|Expand-Archive|git)\b)", re.M)
+SHELL_TOKEN = re.compile(r"(?P<c>#[^\n]*)|(?P<s>\"[^\"\n]*\"|'[^'\n]*')|(?P<k>^\s*(?:bsm|dotnet|tar|curl|xattr|shasum|sha256sum|Get-FileHash|kinit|az|chmod|sudo|mv|Expand-Archive|git)\b)", re.M)
 
 
 def highlight(lang, text):

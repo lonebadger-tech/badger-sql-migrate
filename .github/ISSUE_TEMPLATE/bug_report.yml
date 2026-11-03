@@ -9,7 +9,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Output of `badger --version`.
+      description: Output of `bsm --version`.
     validations:
       required: true
   - type: dropdown
@@ -37,5 +37,5 @@ body:
     id: output
     attributes:
       label: Output
-      description: The command's output with `-v`, and `badger doctor` if it's about connecting.
+      description: The command's output with `-v`, and `bsm doctor` if it's about connecting.
       render: text

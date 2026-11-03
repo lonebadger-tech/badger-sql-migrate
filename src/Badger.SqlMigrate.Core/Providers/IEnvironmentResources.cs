@@ -33,7 +33,7 @@ public enum ResourceActionKind
     /// <summary>Informational, nothing to do (e.g. a key exists in the database but not in config).</summary>
     Info,
 
-    /// <summary>The database contradicts the configuration in a way badger will not fix (e.g. a key path differs).</summary>
+    /// <summary>The database contradicts the configuration in a way bsm will not fix (e.g. a key path differs).</summary>
     Conflict,
 }
 

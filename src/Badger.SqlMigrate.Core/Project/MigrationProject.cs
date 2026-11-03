@@ -60,7 +60,7 @@ public sealed partial class MigrationProject
         var planPath = Path.Combine(root, PlanFile.FileName);
         if (!File.Exists(planPath))
         {
-            throw new MigrationException($"No {PlanFile.FileName} found in '{root}'. Run 'badger init' first.");
+            throw new MigrationException($"No {PlanFile.FileName} found in '{root}'. Run 'bsm init' first.");
         }
 
         var plan = PlanFile.Load(planPath);

@@ -26,18 +26,18 @@ for rid in "${rids[@]}"; do
   cp LICENSE README.md "$work/$rid/"
   name="badger-sql-migrate-$version-$rid"
   if [[ "$rid" == win-* ]]; then
-    (cd "$work/$rid" && zip -q -X "$out/$name.zip" badger.exe LICENSE README.md)
+    (cd "$work/$rid" && zip -q -X "$out/$name.zip" bsm.exe LICENSE README.md)
   else
-    chmod +x "$work/$rid/badger"
-    tar -C "$work/$rid" -czf "$out/$name.tar.gz" badger LICENSE README.md
+    chmod +x "$work/$rid/bsm"
+    tar -C "$work/$rid" -czf "$out/$name.tar.gz" bsm LICENSE README.md
   fi
 done
 
 echo "== portable (framework-dependent)"
 dotnet publish "$cli" -c Release -o "$work/portable" -p:Version="$version" --self-contained false -p:UseAppHost=false -p:DebugType=none -v quiet
 cp LICENSE README.md "$work/portable/"
-printf '#!/bin/sh\nexec dotnet "$(dirname "$0")/badger.dll" "$@"\n' > "$work/portable/badger" && chmod +x "$work/portable/badger"
-printf '@dotnet "%%~dp0badger.dll" %%*\r\n' > "$work/portable/badger.cmd"
+printf '#!/bin/sh\nexec dotnet "$(dirname "$0")/bsm.dll" "$@"\n' > "$work/portable/bsm" && chmod +x "$work/portable/bsm"
+printf '@dotnet "%%~dp0bsm.dll" %%*\r\n' > "$work/portable/bsm.cmd"
 (cd "$work/portable" && zip -q -r -X "$out/badger-sql-migrate-$version-portable.zip" .)
 
 echo "== dotnet tool"

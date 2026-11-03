@@ -4,6 +4,7 @@ All notable changes to Badger SQL Migrate. The format follows [Keep a Changelog]
 
 ## Unreleased
 
+- The command is now `bsm` (was `badger`). Project files (`badger.yaml`, `badger.plan`), the `badger` journal schema, `BADGER_*` environment variables and `~/.badger` are unchanged.
 - Open source under the MIT license, with contribution, security and conduct guides.
 - The .NET tool is published to nuget.org from GitHub Actions with Trusted Publishing.
 - Fixed: on Windows, Always Encrypted connections failed with "'MSSQL_' prefix is reserved" because the system key stores were registered on the connection.

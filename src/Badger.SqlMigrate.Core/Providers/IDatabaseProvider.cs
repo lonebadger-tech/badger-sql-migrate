@@ -42,7 +42,7 @@ public interface IDatabaseProvider
     ISchemaInspector Schema { get; }
 
 
-    /// <summary>Server facts for 'badger doctor' (version, login, database, encryption state).</summary>
+    /// <summary>Server facts for 'bsm doctor' (version, login, database, encryption state).</summary>
     Task<IReadOnlyList<KeyValuePair<string, string>>> DescribeAsync(IDatabaseSession session, CancellationToken cancellationToken);
 
     /// <summary>Text shown to separate batches when producing a reviewable script (e.g. "GO").</summary>

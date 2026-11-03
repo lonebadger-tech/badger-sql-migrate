@@ -4,7 +4,7 @@ Thanks for helping. Bug reports, documentation fixes, new providers and features
 
 ## Before you start
 
-- **Bugs:** open an [issue](https://github.com/lonebadger-tech/badger-sql-migrate/issues/new/choose) with `badger --version`, the command you ran, and the output of `badger doctor`. Remove passwords, tokens and server names you don't want public.
+- **Bugs:** open an [issue](https://github.com/lonebadger-tech/badger-sql-migrate/issues/new/choose) with `bsm --version`, the command you ran, and the output of `bsm doctor`. Remove passwords, tokens and server names you don't want public.
 - **Features and larger changes:** open an issue first to agree on the approach, so a pull request doesn't go to waste.
 - **Security problems:** don't open an issue. Follow [SECURITY.md](SECURITY.md).
 
