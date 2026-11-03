@@ -49,7 +49,7 @@ public sealed record VariableReference(string Name, int Line, string Syntax);
 /// format strings (<c>'{0}'</c>) are untouched.</item>
 /// <item><c>{{name}}</c> emits a literal <c>{name}</c>.</item>
 /// <item><c>$(name)</c>: sqlcmd syntax over the same variables.</item>
-/// <item>A script whose first line is <c>-- badger:preprocess off</c> is passed through unchanged.</item>
+/// <item>A script whose first line is <c>-- bsm:preprocess off</c> is passed through unchanged.</item>
 /// </list>
 /// User variable values may reference other variables (<c>calc_db: calc_{env}</c>); cycles are errors.
 /// Raw scripts are what get hashed and certified; rendered text is hashed separately for audit.
@@ -57,9 +57,9 @@ public sealed record VariableReference(string Name, int Line, string Syntax);
 public sealed partial class ScriptPreprocessor
 {
     /// <summary>Namespaces reserved for built-ins. User variables may not start with these.</summary>
-    public static readonly IReadOnlyList<string> ReservedPrefixes = ["env", "db", "change", "badger", "plan", "deploy"];
+    public static readonly IReadOnlyList<string> ReservedPrefixes = ["env", "db", "change", "bsm", "plan", "deploy"];
 
-    private const string OffDirective = "badger:preprocess off";
+    private const string OffDirective = "bsm:preprocess off";
 
     private readonly Dictionary<string, VariableInfo> variables;
     private readonly PreprocessorOptions options;
@@ -165,9 +165,9 @@ public sealed partial class ScriptPreprocessor
             new("db.name", database ?? string.Empty, VariableSource.BuiltIn, "database name"),
             new("db.host", host ?? string.Empty, VariableSource.BuiltIn, "server host"),
             new("db.port", port?.ToString(CultureInfo.InvariantCulture) ?? string.Empty, VariableSource.BuiltIn, "server port"),
-            new("badger.provider", provider, VariableSource.BuiltIn, "provider id"),
-            new("badger.version", toolVersion, VariableSource.BuiltIn, "Badger SQL Migrate version"),
-            new("badger.schema", stateSchema, VariableSource.BuiltIn, "schema holding the badger journal"),
+            new("bsm.provider", provider, VariableSource.BuiltIn, "provider id"),
+            new("bsm.version", toolVersion, VariableSource.BuiltIn, "Badger SQL Migrate version"),
+            new("bsm.schema", stateSchema, VariableSource.BuiltIn, "schema holding the bsm journal"),
             new("plan.head", planHead ?? string.Empty, VariableSource.BuiltIn, "chain id of the last change in the plan"),
             new("deploy.user", user, VariableSource.BuiltIn, "OS user running bsm", Volatile: true),
             new("deploy.host", machine, VariableSource.BuiltIn, "machine running bsm", Volatile: true),
@@ -230,7 +230,7 @@ public sealed partial class ScriptPreprocessor
             else
             {
                 var at = line == 0 ? LineOf(text, m.Index) : line;
-                errors.Add($"line {at}: unknown variable {m.Value}. Define it under 'variables:' in badger.yaml or pass --var {name}=value; write {{{{{name}}}}} for a literal");
+                errors.Add($"line {at}: unknown variable {m.Value}. Define it under 'variables:' in bsm.yaml or pass --var {name}=value; write {{{{{name}}}}} for a literal");
                 sb.Append(m.Value);
             }
         }

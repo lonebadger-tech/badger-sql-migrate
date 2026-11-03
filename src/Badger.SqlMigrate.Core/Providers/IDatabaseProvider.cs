@@ -9,7 +9,7 @@ namespace Badger.SqlMigrate.Core.Providers;
 /// </summary>
 public interface IDatabaseProvider
 {
-    /// <summary>Stable id used in badger.yaml and in change chain ids, e.g. "sqlserver".</summary>
+    /// <summary>Stable id used in bsm.yaml and in change chain ids, e.g. "sqlserver".</summary>
     string Id { get; }
 
     string DisplayName { get; }

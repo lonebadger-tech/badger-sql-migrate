@@ -2,8 +2,8 @@ using System.CommandLine;
 using Badger.SqlMigrate.Cli;
 using Badger.SqlMigrate.Core.Configuration;
 
-var project = new Option<string>("--project", "-C") { Description = "Project directory containing badger.yaml and badger.plan.", Recursive = true, DefaultValueFactory = _ => "." };
-var environment = new Option<string?>("--env", "-e") { Description = "Environment from badger.yaml (or BADGER_ENV; default: defaultEnvironment).", Recursive = true };
+var project = new Option<string>("--project", "-C") { Description = "Project directory containing bsm.yaml and bsm.plan.", Recursive = true, DefaultValueFactory = _ => "." };
+var environment = new Option<string?>("--env", "-e") { Description = "Environment from bsm.yaml (or BSM_ENV; default: defaultEnvironment).", Recursive = true };
 var connection = new Option<string?>("--connection-string") { Description = "Override the environment's connection string.", Recursive = true };
 var claim = new Option<bool>("--claim-environment") { Description = "Allow a database recorded under another environment name (e.g. restored from prod) and record this one.", Recursive = true };
 var vars = new Option<string[]>("--var") { Description = "Script variable, name=value. Repeatable.", Recursive = true };
@@ -31,7 +31,7 @@ root.Options.Add(noColor);
 
 // init
 var initProvider = new Option<string>("--provider") { Description = "Database provider.", DefaultValueFactory = _ => "sqlserver" };
-var init = new Command("init", "Create badger.yaml, badger.plan and folders in the project directory.") { initProvider };
+var init = new Command("init", "Create bsm.yaml, bsm.plan and folders in the project directory.") { initProvider };
 init.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Init(g, r.GetValue(initProvider)!)));
 root.Subcommands.Add(init);
 
@@ -41,7 +41,7 @@ var addRequires = new Option<string[]>("--requires", "-r") { Description = "Chan
 var addNote = new Option<string?>("--note", "-n") { Description = "Note stored in the plan." };
 var addNoTx = new Option<bool>("--notx") { Description = "Run outside a transaction." };
 var addIrreversible = new Option<bool>("--irreversible") { Description = "No revert script." };
-var add = new Command("add", "Add a change: creates changes/<name>/ scripts and appends it to badger.plan.") { addName, addRequires, addNote, addNoTx, addIrreversible };
+var add = new Command("add", "Add a change: creates changes/<name>/ scripts and appends it to bsm.plan.") { addName, addRequires, addNote, addNoTx, addIrreversible };
 add.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Add(g, r.GetValue(addName)!, r.GetValue(addRequires) ?? [], r.GetValue(addNote), r.GetValue(addNoTx), r.GetValue(addIrreversible))));
 root.Subcommands.Add(add);
 

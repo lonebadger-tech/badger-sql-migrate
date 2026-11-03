@@ -196,12 +196,12 @@ public abstract class ProviderConformanceTests
 
     private sealed class ConformanceProject : IDisposable
     {
-        public string Root { get; } = Path.Combine(Path.GetTempPath(), "badger-conformance", Guid.NewGuid().ToString("N"));
+        public string Root { get; } = Path.Combine(Path.GetTempPath(), "bsm-conformance", Guid.NewGuid().ToString("N"));
 
         public ConformanceProject()
         {
             Directory.CreateDirectory(Path.Combine(Root, MigrationProject.ChangesFolder));
-            File.WriteAllText(Path.Combine(Root, "badger.plan"), string.Empty);
+            File.WriteAllText(Path.Combine(Root, "bsm.plan"), string.Empty);
         }
 
         public void Change(string name, string deploy, string revert, string? verify = null)
@@ -215,7 +215,7 @@ public abstract class ProviderConformanceTests
                 File.WriteAllText(Path.Combine(dir, MigrationProject.VerifyFile), verify);
             }
 
-            File.AppendAllText(Path.Combine(Root, "badger.plan"), name + "\n");
+            File.AppendAllText(Path.Combine(Root, "bsm.plan"), name + "\n");
         }
 
         public void Repeatable(string name, string script)
@@ -227,7 +227,7 @@ public abstract class ProviderConformanceTests
 
         public void Write(string relative, string text) => File.WriteAllText(Path.Combine(Root, relative), text);
 
-        public void WritePlan(string text) => File.WriteAllText(Path.Combine(Root, "badger.plan"), text);
+        public void WritePlan(string text) => File.WriteAllText(Path.Combine(Root, "bsm.plan"), text);
 
         public void DeleteChange(string name) => Directory.Delete(Path.Combine(Root, MigrationProject.ChangesFolder, name), true);
 

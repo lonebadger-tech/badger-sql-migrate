@@ -7,8 +7,8 @@ namespace Badger.SqlMigrate.Core.Project;
 /// <summary>
 /// A migration project on disk:
 /// <code>
-/// badger.yaml
-/// badger.plan
+/// bsm.yaml
+/// bsm.plan
 /// changes/&lt;name&gt;/deploy.sql | revert.sql | verify.sql
 /// repeatable/**/*.sql
 /// </code>
@@ -136,7 +136,7 @@ public sealed partial class MigrationProject
     }
 
     /// <summary>
-    /// Orders repeatables by declared "-- badger:requires a.sql b.sql" headers, then by path (ordinal).
+    /// Orders repeatables by declared "-- bsm:requires a.sql b.sql" headers, then by path (ordinal).
     /// Environment scripts may also require shared repeatables, which always run first.
     /// </summary>
     private static List<RepeatableScript> OrderRepeatables(List<RepeatableScript> scripts, string prefix, List<string> problems, IReadOnlySet<string> runEarlier)
@@ -184,6 +184,6 @@ public sealed partial class MigrationProject
 
     private static string? ReadOptional(string path) => File.Exists(path) ? ContentHasher.ReadNormalized(path) : null;
 
-    [GeneratedRegex(@"^\s*--\s*badger:requires\s+(.+)$", RegexOptions.Multiline)]
+    [GeneratedRegex(@"^\s*--\s*bsm:requires\s+(.+)$", RegexOptions.Multiline)]
     private static partial Regex RequiresHeader();
 }

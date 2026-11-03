@@ -8,7 +8,7 @@ public sealed class SqlServerDeployLock : IDeployLock
 {
     public async Task<IAsyncDisposable> AcquireAsync(IDatabaseSession session, string stateSchema, TimeSpan timeout, CancellationToken cancellationToken)
     {
-        var resource = $"badger:{stateSchema}";
+        var resource = $"bsm:{stateSchema}";
         const string sql = """
             DECLARE @result int;
             EXEC @result = sp_getapplock @Resource = @resource, @LockMode = 'Exclusive', @LockOwner = 'Session', @LockTimeout = @timeout, @DbPrincipal = 'public';

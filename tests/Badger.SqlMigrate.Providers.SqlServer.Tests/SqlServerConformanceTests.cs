@@ -8,7 +8,7 @@ using Testcontainers.MsSql;
 namespace Badger.SqlMigrate.Providers.SqlServer.Tests;
 
 /// <summary>
-/// One SQL Server for the whole test run: BADGER_TEST_SQLSERVER (a connection string to an existing server)
+/// One SQL Server for the whole test run: BSM_TEST_SQLSERVER (a connection string to an existing server)
 /// or a Testcontainers SQL Server 2022 container. When neither is available the conformance tests skip.
 /// </summary>
 public sealed class SqlServerFixture : IAsyncLifetime
@@ -21,7 +21,7 @@ public sealed class SqlServerFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var configured = Environment.GetEnvironmentVariable("BADGER_TEST_SQLSERVER");
+        var configured = Environment.GetEnvironmentVariable("BSM_TEST_SQLSERVER");
         if (!string.IsNullOrWhiteSpace(configured))
         {
             MasterConnectionString = configured;
@@ -36,7 +36,7 @@ public sealed class SqlServerFixture : IAsyncLifetime
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            UnavailableReason = $"SQL Server container could not start ({ex.GetType().Name}: {ex.Message.Split('\n')[0]}). Start Docker or set BADGER_TEST_SQLSERVER.";
+            UnavailableReason = $"SQL Server container could not start ({ex.GetType().Name}: {ex.Message.Split('\n')[0]}). Start Docker or set BSM_TEST_SQLSERVER.";
         }
     }
 
@@ -68,7 +68,7 @@ public sealed class SqlServerConformanceTests(SqlServerFixture fixture) : Provid
             return null;
         }
 
-        var name = "badger_test_" + Guid.NewGuid().ToString("N")[..12];
+        var name = "bsm_test_" + Guid.NewGuid().ToString("N")[..12];
         await using (var master = new SqlConnection(fixture.MasterConnectionString))
         {
             await master.OpenAsync();

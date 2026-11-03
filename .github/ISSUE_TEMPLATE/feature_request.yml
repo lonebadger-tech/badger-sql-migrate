@@ -13,7 +13,7 @@ body:
     id: idea
     attributes:
       label: Your idea
-      description: How you'd like it to work. Example commands or `badger.yaml` are welcome.
+      description: How you'd like it to work. Example commands or `bsm.yaml` are welcome.
   - type: checkboxes
     id: contribute
     attributes:

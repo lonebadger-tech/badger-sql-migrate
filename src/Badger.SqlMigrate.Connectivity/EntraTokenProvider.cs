@@ -17,7 +17,7 @@ namespace Badger.SqlMigrate.Connectivity;
 /// </summary>
 public sealed class EntraTokenProvider : IAccessTokenProvider
 {
-    private const string CacheName = "badger-sql-migrate";
+    private const string CacheName = "bsm";
 
     private readonly TokenCredential credential;
     private readonly EntraOptions options;
@@ -297,7 +297,7 @@ public sealed class EntraTokenProvider : IAccessTokenProvider
         string.IsNullOrWhiteSpace(value) ? throw new MigrationException($"This Entra authentication mode requires entra.{name}.") : value;
 
     private static string AuthDirectory() =>
-        Path.Combine(Environment.GetEnvironmentVariable("BADGER_HOME") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".badger"), "auth");
+        Path.Combine(Environment.GetEnvironmentVariable("BSM_HOME") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".bsm"), "auth");
 
     private static string RecordPath(string cacheKey, EntraOptions o)
     {

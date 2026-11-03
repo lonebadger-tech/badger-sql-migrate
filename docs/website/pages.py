@@ -54,17 +54,17 @@ def home():
   <div><h3>Real down, for free</h3><p>Revert scripts are first-class. They are stored in the database at deploy time, so rollback works from any branch, even after the change is gone.</p></div>
   <div><h3>Environments built in</h3><p>dev, test, prod with inheritance, protected environments, fix-forward production, and a database that remembers which environment owns it.</p></div>
   <div><h3>Every Entra ID flow</h3><p>Browser and device code with MFA (cached between runs), managed identity, service principals, workload identity, Azure CLI, pipelines, plus SQL and Windows auth.</p></div>
-  <div><h3>Always Encrypted keys</h3><p>Scripts use the same key names everywhere; each environment brings its own column master keys. Badger provisions and rotates them.</p></div>
+  <div><h3>Always Encrypted keys</h3><p>Scripts use the same key names everywhere; each environment brings its own column master keys. Badger SQL Migrate provisions and rotates them.</p></div>
   <div><h3>Variables that render</h3><p><code>[calc_{{env}}]</code> becomes <code>[calc_test]</code> in test. Built-ins, nested variables, per-environment values, and a hash of the SQL that actually ran.</p></div>
   <div><h3>Safe by default</h3><p>A deploy lock for concurrent pipelines, transactional changes with verify scripts, a T-SQL linter, drift detection, and edited-after-deploy detection.</p></div>
   <div><h3>One binary, any OS</h3><p>Windows, macOS and Linux (x64 and Arm), or a .NET tool. No Java, no Perl, no sqlcmd. Connects through SSH bastions too.</p></div>
 </div>
 
 <h2>How it works</h2>
-<p>A project is a folder with a <code>badger.plan</code> (the order), one folder per change with <code>deploy.sql</code>, <code>revert.sql</code> and an optional <code>verify.sql</code>, and a <code>badger.yaml</code> describing your environments.</p>
+<p>A project is a folder with a <code>bsm.plan</code> (the order), one folder per change with <code>deploy.sql</code>, <code>revert.sql</code> and an optional <code>verify.sql</code>, and a <code>bsm.yaml</code> describing your environments.</p>
 {code('''db/
-  badger.yaml              environments, authentication, variables, keys
-  badger.plan              one change per line, in deploy order
+  bsm.yaml              environments, authentication, variables, keys
+  bsm.plan              one change per line, in deploy order
   changes/
     create-customer/
       deploy.sql           up
@@ -182,7 +182,7 @@ def releases():
   <p>The first release.</p>
   <h3>Migrations</h3>
   <ul>
-    <li>Named changes ordered by <code>badger.plan</code>, with dependencies, tags, <code>!notx</code> and <code>!irreversible</code>; merges cleanly with git's union driver</li>
+    <li>Named changes ordered by <code>bsm.plan</code>, with dependencies, tags, <code>!notx</code> and <code>!irreversible</code>; merges cleanly with git's union driver</li>
     <li>Deploy, revert and verify scripts; each change, its verify script and its journal row commit in one transaction</li>
     <li>Revert runs the scripts stored in the database at deploy time; <code>--to</code>, <code>--last</code>, <code>--all</code> and <code>rebase</code></li>
     <li>Repeatable scripts (views, procedures, functions) with dependency ordering, and environment-only scripts</li>
@@ -299,7 +299,7 @@ ALTER TABLE dbo.Customer ADD CONSTRAINT CK_Customer_Status CHECK (Status IN (1, 
        sql('''ALTER TABLE dbo.Customer DROP CONSTRAINT CK_Customer_Status;
 ALTER TABLE dbo.Customer DROP CONSTRAINT DF_Customer_Status;
 ALTER TABLE dbo.Customer DROP COLUMN Status;''', "changes/add-customer-status/revert.sql"),
-       code('''add-customer-status [create-customer] @2026-11-04T09:02Z alice''', "", "badger.plan (line added by bsm add -r create-customer)"))
+       code('''add-customer-status [create-customer] @2026-11-04T09:02Z alice''', "", "bsm.plan (line added by bsm add -r create-customer)"))
 
     ex("rename", "Rename a column", "<p>Renames are reversible when you write both directions.</p>",
        sql('''EXEC sp_rename N'dbo.Customer.Email', N'EmailAddress', N'COLUMN';''', "changes/rename-customer-email/deploy.sql"),
@@ -338,15 +338,15 @@ IF NOT EXISTS (SELECT 1 FROM sys.fulltext_indexes WHERE object_id = OBJECT_ID(N'
 GO
 IF EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = N'ftCatalog')
     DROP FULLTEXT CATALOG ftCatalog;''', "changes/product-fulltext/revert.sql"),
-       code('''product-fulltext [create-product] !notx''', "", "badger.plan"))
+       code('''product-fulltext [create-product] !notx''', "", "bsm.plan"))
 
-    ex("repeatable", "Views, procedures and functions (repeatables)", "<p>Programmable objects live in <code>repeatable/</code> and use <code>CREATE OR ALTER</code>. Badger re-applies one only when its hash changes, after all changes, in dependency order. Declare dependencies with a header.</p>",
+    ex("repeatable", "Views, procedures and functions (repeatables)", "<p>Programmable objects live in <code>repeatable/</code> and use <code>CREATE OR ALTER</code>. Badger SQL Migrate re-applies one only when its hash changes, after all changes, in dependency order. Declare dependencies with a header.</p>",
        sql('''CREATE OR ALTER VIEW dbo.vActiveCustomer
 AS
 SELECT Id, Name, EmailAddress
 FROM dbo.Customer
 WHERE Status = 1;''', "repeatable/views/vActiveCustomer.sql"),
-       sql('''-- badger:requires views/vActiveCustomer.sql
+       sql('''-- bsm:requires views/vActiveCustomer.sql
 CREATE OR ALTER PROCEDURE dbo.usp_FindCustomer
     @search nvarchar(200)
 AS
@@ -359,7 +359,7 @@ BEGIN
 END''', "repeatable/procedures/usp_FindCustomer.sql"))
 
     ex("seed", "Seed data for one environment", "<p>Scripts under <code>environments/&lt;name&gt;/</code> run only in that environment, after the shared repeatables. Write them idempotently; they re-run when they change.</p>",
-       sql('''-- badger:requires views/vActiveCustomer.sql
+       sql('''-- bsm:requires views/vActiveCustomer.sql
 MERGE dbo.Customer AS t
 USING (VALUES
     (N'Ada Lovelace', N'ada@example.com', 1),
@@ -369,7 +369,7 @@ USING (VALUES
 WHEN NOT MATCHED THEN
     INSERT (Name, EmailAddress, Status) VALUES (s.Name, s.EmailAddress, s.Status);''', "environments/dev/seed-customers.sql"))
 
-    ex("variables", "Environment-specific names with variables", "<p>The same script targets <code>calc_test</code> in test and <code>calc_prod</code> in prod. Built-ins like <code>{env}</code> and <code>{db}</code> are always available; your own variables live in <code>badger.yaml</code>.</p>",
+    ex("variables", "Environment-specific names with variables", "<p>The same script targets <code>calc_test</code> in test and <code>calc_prod</code> in prod. Built-ins like <code>{env}</code> and <code>{db}</code> are always available; your own variables live in <code>bsm.yaml</code>.</p>",
        yaml('''variables:
   schemas:
     calc: calc_{env}
@@ -381,7 +381,7 @@ environments:
     database: AppProd
     variables:
       AppRole: app_reader_prod
-      linkedServer: REPORTING01''', "badger.yaml"),
+      linkedServer: REPORTING01''', "bsm.yaml"),
        sql('''CREATE SCHEMA [{schemas.calc}];
 GO
 CREATE TABLE [{schemas.calc}].[table1] (
@@ -391,7 +391,7 @@ CREATE TABLE [{schemas.calc}].[table1] (
 GO
 CREATE ROLE [{AppRole}];
 GRANT SELECT ON SCHEMA::[{schemas.calc}] TO [{AppRole}];
-PRINT 'deployed {change} to {env} ({db}) with bsm {badger.version}';''', "changes/create-calc-schema/deploy.sql"),
+PRINT 'deployed {change} to {env} ({db}) with bsm {bsm.version}';''', "changes/create-calc-schema/deploy.sql"),
        sh('''bsm render create-calc-schema -e prod    # prints the exact SQL prod will receive
 bsm vars -e prod                          # every variable, its value and where it came from'''),
        sql('''CREATE SCHEMA [calc_prod];
@@ -412,7 +412,7 @@ PRINT 'deployed create-calc-schema to prod (AppProd) with bsm 0.1.0';''', "outpu
       apiIdentity: myapp-api-prod          # Entra managed identity name
   test:
     variables:
-      apiIdentity: myapp-api-test''', "badger.yaml"),
+      apiIdentity: myapp-api-test''', "bsm.yaml"),
        sql('''CREATE USER [{apiIdentity}] FROM EXTERNAL PROVIDER;
 ALTER ROLE db_datareader ADD MEMBER [{apiIdentity}];
 GRANT EXECUTE ON SCHEMA::dbo TO [{apiIdentity}];''', "changes/grant-api-identity/deploy.sql"),
@@ -420,7 +420,7 @@ GRANT EXECUTE ON SCHEMA::dbo TO [{apiIdentity}];''', "changes/grant-api-identity
 ALTER ROLE db_datareader DROP MEMBER [{apiIdentity}];
 DROP USER [{apiIdentity}];''', "changes/grant-api-identity/revert.sql"))
 
-    ex("always-encrypted", "An Always Encrypted column", "<p>The change names a column encryption key; each environment decides which column master key protects it. Badger creates the keys before the change runs.</p>",
+    ex("always-encrypted", "An Always Encrypted column", "<p>The change names a column encryption key; each environment decides which column master key protects it. Badger SQL Migrate creates the keys before the change runs.</p>",
        yaml('''environments:
   test:
     alwaysEncrypted:
@@ -433,7 +433,7 @@ DROP USER [{apiIdentity}];''', "changes/grant-api-identity/revert.sql"))
       columnMasterKeys:
         CMK_Prod_2026: { keyStore: AZURE_KEY_VAULT, keyPath: "https://myapp-prod-kv.vault.azure.net/keys/cmk/9f8e7d" }
       columnEncryptionKeys:
-        CEK_Customer: { columnMasterKey: CMK_Prod_2026 }''', "badger.yaml"),
+        CEK_Customer: { columnMasterKey: CMK_Prod_2026 }''', "bsm.yaml"),
        sql('''ALTER TABLE dbo.Customer ADD TaxId char(11) COLLATE Latin1_General_BIN2
     ENCRYPTED WITH (
         COLUMN_ENCRYPTION_KEY = CEK_Customer,
@@ -443,7 +443,7 @@ DROP USER [{apiIdentity}];''', "changes/grant-api-identity/revert.sql"))
        sh('''bsm env status -e prod      # keys: in sync, to create, to rotate, conflicting
 bsm deploy -e prod           # creates CMK_Prod_2026 and CEK_Customer, then runs the change'''))
 
-    ex("config", "A complete badger.yaml", "<p>A realistic configuration: a local container, Azure test and production, a template for shared settings, and production rules.</p>",
+    ex("config", "A complete bsm.yaml", "<p>A realistic configuration: a local container, Azure test and production, a template for shared settings, and production rules.</p>",
        yaml('''provider: sqlserver
 defaultEnvironment: local
 
@@ -471,7 +471,7 @@ environments:
     database: App
     authentication: password
     user: sa
-    password: ${env:BADGER_LOCAL_PASSWORD}
+    password: ${env:BSM_LOCAL_PASSWORD}
     tls: { mode: mandatory, trustServerCertificate: true }
 
   test:
@@ -490,7 +490,7 @@ environments:
     variables:
       AppRole: app_reader_prod
     connectionProperties:
-      Command Timeout: 600''', "badger.yaml"))
+      Command Timeout: 600''', "bsm.yaml"))
 
     ex("plan", "A plan after two developers merged", "<p>Alice and Bob each appended a line on their branches. Git's union merge driver (set up by <code>bsm init</code>) kept both lines without a conflict.</p>",
        code('''# Badger SQL Migrate plan: one change per line, in deploy order.
@@ -501,7 +501,7 @@ add-customer-status [create-customer]            @2026-11-03T16:42Z brock
 rename-customer-email [create-customer]          @2026-11-04T09:02Z alice
 add-order-table [create-customer]                @2026-11-04T09:15Z bob
 product-fulltext [create-product] !notx          @2026-11-05T11:30Z bob
-drop-legacy-orders !irreversible                 @2026-11-06T08:00Z alice''', "", "badger.plan"),
+drop-legacy-orders !irreversible                 @2026-11-06T08:00Z alice''', "", "bsm.plan"),
        sh('''bsm plan check     # unique names, dependencies, folders, lint, variables in every environment'''))
 
     ex("github-actions", "GitHub Actions", "<p>Check on every pull request; deploy to test on merge; deploy to production with workload identity federation (no secrets).</p>",
@@ -545,7 +545,7 @@ jobs:
       - run: bsm verify -C db -e prod''', ".github/workflows/database.yml"),
        yaml('''  prod:
     extends: _azure
-    authentication: entraAzureCli      # uses the azure/login session above''', "badger.yaml (prod for this pipeline)"))
+    authentication: entraAzureCli      # uses the azure/login session above''', "bsm.yaml (prod for this pipeline)"))
 
     ex("azure-pipelines", "Azure Pipelines", "<p>With a workload-identity service connection, use <code>entraAzurePipelines</code>, or run inside an AzureCLI task with <code>entraAzureCli</code>.</p>",
        yaml('''steps:
@@ -562,7 +562,7 @@ jobs:
       tenantId: 7f3c1e2a-0000-0000-0000-000000000000
       clientId: 0a1b2c3d-0000-0000-0000-000000000000
       serviceConnectionId: 5e6f7a8b-0000-0000-0000-000000000000
-      systemAccessToken: ${env:SYSTEM_ACCESSTOKEN}''', "badger.yaml"))
+      systemAccessToken: ${env:SYSTEM_ACCESSTOKEN}''', "bsm.yaml"))
 
     toc = '<div class="toc"><strong>Examples</strong><ul>' + "".join(f'<li><a href="#{a}">{t}</a></li>' for a, t, _ in sections) + "</ul></div>"
     body = toc + "".join(s for _, _, s in sections) + f'<p>A runnable sample project is in the repository under <a href="https://github.com/lonebadger-tech/badger-sql-migrate/tree/dev/samples/demo-db">samples/demo-db</a>. For every option, see the <a href="{BASE}/docs/">documentation</a>.</p>'

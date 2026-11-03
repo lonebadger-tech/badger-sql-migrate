@@ -18,7 +18,7 @@ dotnet test
 dotnet run --project src/Badger.SqlMigrate.Cli -- plan check -C samples/demo-db
 ```
 
-- The SQL Server conformance tests start SQL Server 2022 in Docker with Testcontainers, or use the server in `BADGER_TEST_SQLSERVER=<connection string>`. Without either they're skipped, and CI runs them on Linux.
+- The SQL Server conformance tests start SQL Server 2022 in Docker with Testcontainers, or use the server in `BSM_TEST_SQLSERVER=<connection string>`. Without either they're skipped, and CI runs them on Linux.
 - Warnings are errors (`TreatWarningsAsErrors`), so the build must be clean.
 - `tests/Badger.SqlMigrate.ArchitectureTests` fails the build if the engine, connectivity or CLI reference a database driver directly. Vendor code belongs in a provider.
 
@@ -40,7 +40,7 @@ These are what make certification trustworthy, so changes to them need extra car
 
 - **Script hashes and chain ids** ([docs/methodology.md](docs/methodology.md)): changing how they're computed changes every existing database's history. Never change them silently.
 - **Journal tables:** schema changes need a migration path for databases deployed by earlier versions.
-- **`badger.yaml` and `badger.plan`:** existing files must keep working. Deprecate before removing.
+- **`bsm.yaml` and `bsm.plan`:** existing files must keep working. Deprecate before removing.
 - **`--json` output and exit codes:** pipelines parse them.
 
 ## Adding a database provider

@@ -185,7 +185,7 @@ public sealed record SshOptions
 }
 
 /// <summary>
-/// A named deployment environment from badger.yaml (dev, test, staging, prod, ...): where to connect, how to
+/// A named deployment environment from bsm.yaml (dev, test, staging, prod, ...): where to connect, how to
 /// authenticate, and the policies that apply there. Vendor-specific blocks (e.g. SQL Server Always Encrypted keys)
 /// arrive untyped in <see cref="ProviderSettings"/> and are interpreted only by the provider.
 /// Secrets are already resolved by the time an environment reaches a provider.
@@ -228,8 +228,8 @@ public sealed record DeploymentEnvironment
     /// <summary>When false, revert and rebase are refused for this environment.</summary>
     public bool AllowRevert { get; init; } = true;
 
-    /// <summary>Schema (or equivalent namespace) that holds the badger state tables.</summary>
-    public string StateSchema { get; init; } = "badger";
+    /// <summary>Schema (or equivalent namespace) that holds the bsm state tables.</summary>
+    public string StateSchema { get; init; } = "bsm";
 
     public int? CommandTimeoutSeconds { get; init; }
 

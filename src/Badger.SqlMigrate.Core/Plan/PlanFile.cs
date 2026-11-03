@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 namespace Badger.SqlMigrate.Core.Plan;
 
 /// <summary>
-/// The parsed badger.plan file. The format is deliberately one change per line so that git's
+/// The parsed bsm.plan file. The format is deliberately one change per line so that git's
 /// union merge driver can combine two developers' appended lines without a conflict.
 /// <code>
 /// # comment
@@ -17,7 +17,7 @@ namespace Badger.SqlMigrate.Core.Plan;
 /// </summary>
 public sealed partial class PlanFile
 {
-    public const string FileName = "badger.plan";
+    public const string FileName = "bsm.plan";
 
     public PlanFile(IReadOnlyList<PlanChange> changes, IReadOnlyList<PlanParseError> errors)
     {

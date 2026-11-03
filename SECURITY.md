@@ -15,4 +15,4 @@ Security fixes go into the latest release. Upgrade with `dotnet tool update --gl
 
 ## Scope
 
-Badger SQL Migrate handles database credentials, Entra ID tokens, SSH keys and Always Encrypted keys. Reports about any of these leaking (into logs, `--json` output, the journal tables or saved sign-ins under `~/.badger`), about a migration running against the wrong environment, or about the hash certification being bypassed are especially welcome.
+Badger SQL Migrate handles database credentials, Entra ID tokens, SSH keys and Always Encrypted keys. Reports about any of these leaking (into logs, `--json` output, the journal tables or saved sign-ins under `~/.bsm`), about a migration running against the wrong environment, or about the hash certification being bypassed are especially welcome.

@@ -18,7 +18,7 @@ namespace Badger.SqlMigrate.Providers.SqlServer.Tests;
 /// </summary>
 public sealed class TestKeyStoreProvider : SqlColumnEncryptionKeyStoreProvider
 {
-    public const string Name = "BADGER_TEST_STORE";
+    public const string Name = "BSM_TEST_STORE";
 
     private static readonly ConcurrentDictionary<string, RSA> Keys = new(StringComparer.Ordinal);
 
@@ -208,7 +208,7 @@ public sealed class AlwaysEncryptedTests(SqlServerFixture fixture)
 
     private async Task<string> CreateDatabaseAsync()
     {
-        var name = "badger_ae_" + Guid.NewGuid().ToString("N")[..12];
+        var name = "bsm_ae_" + Guid.NewGuid().ToString("N")[..12];
         await using var master = new SqlConnection(fixture.MasterConnectionString);
         await master.OpenAsync();
         await using var create = new SqlCommand($"CREATE DATABASE [{name}];", master);
@@ -223,12 +223,12 @@ public sealed class AlwaysEncryptedTests(SqlServerFixture fixture)
 
     private sealed class ProjectDir : IDisposable
     {
-        public string Root { get; } = Path.Combine(Path.GetTempPath(), "badger-ae", Guid.NewGuid().ToString("N"));
+        public string Root { get; } = Path.Combine(Path.GetTempPath(), "bsm-ae", Guid.NewGuid().ToString("N"));
 
         public ProjectDir()
         {
             Directory.CreateDirectory(Path.Combine(Root, MigrationProject.ChangesFolder));
-            File.WriteAllText(Path.Combine(Root, "badger.plan"), string.Empty);
+            File.WriteAllText(Path.Combine(Root, "bsm.plan"), string.Empty);
         }
 
         public void Change(string name, string deploy, string revert)
@@ -237,7 +237,7 @@ public sealed class AlwaysEncryptedTests(SqlServerFixture fixture)
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, MigrationProject.DeployFile), deploy);
             File.WriteAllText(Path.Combine(dir, MigrationProject.RevertFile), revert);
-            File.AppendAllText(Path.Combine(Root, "badger.plan"), name + "\n");
+            File.AppendAllText(Path.Combine(Root, "bsm.plan"), name + "\n");
         }
 
         public void Dispose()

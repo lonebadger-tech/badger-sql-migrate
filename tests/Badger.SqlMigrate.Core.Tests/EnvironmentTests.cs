@@ -65,7 +65,7 @@ public sealed class EnvironmentTests : IDisposable
     public async Task Environment_scripts_run_only_in_their_environment_after_shared_repeatables()
     {
         project.Change("a", "CREATE A", "DROP A").Repeatable("views/v.sql", "PRINT v");
-        Write("environments/dev/seed.sql", "-- badger:requires views/v.sql\nCREATE SEED");
+        Write("environments/dev/seed.sql", "-- bsm:requires views/v.sql\nCREATE SEED");
         Write("environments/prod/grants.sql", "CREATE GRANTS");
 
         var dev = await Engine("dev").DeployAsync(new DeployOptions());

@@ -4,7 +4,7 @@ using Badger.SqlMigrate.Core;
 namespace Badger.SqlMigrate.Connectivity;
 
 /// <summary>
-/// Expands secret references in config values so secrets never live in badger.yaml:
+/// Expands secret references in config values so secrets never live in bsm.yaml:
 /// <c>${env:NAME}</c> reads an environment variable, <c>${file:path}</c> reads a file (e.g. a mounted secret).
 /// </summary>
 public static partial class SecretResolver
@@ -23,10 +23,10 @@ public static partial class SecretResolver
             return kind switch
             {
                 "env" => Environment.GetEnvironmentVariable(arg)
-                    ?? throw new MigrationException($"Environment variable '{arg}' referenced in badger.yaml is not set."),
+                    ?? throw new MigrationException($"Environment variable '{arg}' referenced in bsm.yaml is not set."),
                 "file" => File.Exists(SshTunnel.ExpandHome(arg))
                     ? File.ReadAllText(SshTunnel.ExpandHome(arg)).TrimEnd('\r', '\n')
-                    : throw new MigrationException($"Secret file '{arg}' referenced in badger.yaml does not exist."),
+                    : throw new MigrationException($"Secret file '{arg}' referenced in bsm.yaml does not exist."),
                 _ => throw new MigrationException($"Unknown secret reference '${{{kind}:...}}'. Use ${{env:NAME}} or ${{file:path}}."),
             };
         });

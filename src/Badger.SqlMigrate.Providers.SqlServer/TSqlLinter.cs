@@ -16,7 +16,7 @@ public sealed partial class TSqlLinter : IScriptLinter
         var diagnostics = new List<LintDiagnostic>();
 
         // Unrendered variables ({name}, $(name)) are not T-SQL; replace them with a harmless identifier so the parser can run.
-        var parseable = VariableRegex().Replace(script, "badger_var");
+        var parseable = VariableRegex().Replace(script, "bsm_var");
         var parser = new TSql170Parser(initialQuotedIdentifiers: true);
         using var reader = new StringReader(parseable);
         var fragment = parser.Parse(reader, out var errors);
@@ -91,7 +91,7 @@ public sealed partial class TSqlLinter : IScriptLinter
         {
             if (Transactional)
             {
-                diagnostics.Add(new(LintSeverity.Error, $"{statement} cannot run inside a transaction. Mark '{context.ChangeName}' with !notx in badger.plan and make the script safe to re-run.", node.StartLine, "BSM001"));
+                diagnostics.Add(new(LintSeverity.Error, $"{statement} cannot run inside a transaction. Mark '{context.ChangeName}' with !notx in bsm.plan and make the script safe to re-run.", node.StartLine, "BSM001"));
             }
         }
     }

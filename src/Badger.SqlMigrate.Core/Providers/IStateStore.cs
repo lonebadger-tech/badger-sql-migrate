@@ -1,6 +1,6 @@
 namespace Badger.SqlMigrate.Core.Providers;
 
-/// <summary>Persists badger's journal in the target database using the vendor's DDL and types.</summary>
+/// <summary>Persists bsm's journal in the target database using the vendor's DDL and types.</summary>
 public interface IStateStore
 {
     /// <summary>Creates or upgrades the state tables. Idempotent.</summary>
@@ -128,7 +128,7 @@ public sealed record MigrationEvent
 
     public required string ToolVersion { get; init; }
 
-    /// <summary>Name of the badger environment that performed the action.</summary>
+    /// <summary>Name of the bsm environment that performed the action.</summary>
     public string? Environment { get; init; }
 }
 

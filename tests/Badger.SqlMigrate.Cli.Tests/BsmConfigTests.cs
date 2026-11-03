@@ -5,18 +5,18 @@ using Badger.SqlMigrate.Core.Preprocessing;
 
 namespace Badger.SqlMigrate.Cli.Tests;
 
-public sealed class BadgerConfigTests : IDisposable
+public sealed class BsmConfigTests : IDisposable
 {
-    private readonly string dir = Path.Combine(Path.GetTempPath(), "badger-config", Guid.NewGuid().ToString("N"));
+    private readonly string dir = Path.Combine(Path.GetTempPath(), "bsm-config", Guid.NewGuid().ToString("N"));
 
-    public BadgerConfigTests() => Directory.CreateDirectory(dir);
+    public BsmConfigTests() => Directory.CreateDirectory(dir);
 
     public void Dispose() => Directory.Delete(dir, true);
 
-    private BadgerConfig Load(string yaml)
+    private BsmConfig Load(string yaml)
     {
-        File.WriteAllText(Path.Combine(dir, BadgerConfig.FileName), yaml);
-        return BadgerConfig.Load(dir);
+        File.WriteAllText(Path.Combine(dir, BsmConfig.FileName), yaml);
+        return BsmConfig.Load(dir);
     }
 
     private const string Sample = """
@@ -47,7 +47,7 @@ public sealed class BadgerConfigTests : IDisposable
             protected: true
             allowRevert: false
             ordering: strict
-            password: ${env:BADGER_TEST_UNSET_SECRET}
+            password: ${env:BSM_TEST_UNSET_SECRET}
             connectionProperties: { Command Timeout: 300 }
             alwaysEncrypted:
               columnMasterKeys:
@@ -77,7 +77,7 @@ public sealed class BadgerConfigTests : IDisposable
     [Fact]
     public void Production_policies_and_provider_settings()
     {
-        Environment.SetEnvironmentVariable("BADGER_TEST_UNSET_SECRET", "s3cret");
+        Environment.SetEnvironmentVariable("BSM_TEST_UNSET_SECRET", "s3cret");
         try
         {
             var prod = Load(Sample).ResolveEnvironment("prod", null);
@@ -91,7 +91,7 @@ public sealed class BadgerConfigTests : IDisposable
         }
         finally
         {
-            Environment.SetEnvironmentVariable("BADGER_TEST_UNSET_SECRET", null);
+            Environment.SetEnvironmentVariable("BSM_TEST_UNSET_SECRET", null);
         }
     }
 
@@ -101,7 +101,7 @@ public sealed class BadgerConfigTests : IDisposable
         var config = Load(Sample);
         _ = config.ResolveEnvironment("dev", null);
         var ex = Assert.Throws<MigrationException>(() => config.ResolveEnvironment("prod", null));
-        Assert.Contains("BADGER_TEST_UNSET_SECRET", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("BSM_TEST_UNSET_SECRET", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

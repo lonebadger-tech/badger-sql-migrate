@@ -49,7 +49,7 @@ public sealed class EngineTests : IDisposable
     public async Task Deploy_to_target_and_tag()
     {
         project.Change("a", "CREATE A", "DROP A").Change("b", "CREATE B", "DROP B").Change("c", "CREATE C", "DROP C");
-        File.AppendAllText(Path.Combine(project.Root, "badger.plan"), "");
+        File.AppendAllText(Path.Combine(project.Root, "bsm.plan"), "");
         project.WritePlan("a\nb\n@v1\nc\n");
 
         Assert.Equal(["a"], (await Engine().DeployAsync(new DeployOptions { To = "a" })).Deployed);
@@ -235,7 +235,7 @@ public sealed class EngineTests : IDisposable
     public async Task Repeatables_apply_in_dependency_order_and_only_when_changed()
     {
         project.Change("a", "CREATE A", "DROP A")
-            .Repeatable("views/b.sql", "-- badger:requires views/c.sql\nPRINT b")
+            .Repeatable("views/b.sql", "-- bsm:requires views/c.sql\nPRINT b")
             .Repeatable("views/c.sql", "PRINT c");
 
         var first = await Engine().DeployAsync(new DeployOptions());

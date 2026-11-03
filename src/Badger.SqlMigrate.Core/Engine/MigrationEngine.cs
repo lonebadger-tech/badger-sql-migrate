@@ -112,7 +112,7 @@ public sealed class MigrationEngine
 
     public DeploymentEnvironment Environment => environment;
 
-    /// <summary>How {name} and $(name) are expanded. Set from badger.yaml 'preprocessor:'.</summary>
+    /// <summary>How {name} and $(name) are expanded. Set from bsm.yaml 'preprocessor:'.</summary>
     public PreprocessorOptions Preprocessing { get; init; } = new();
 
     /// <summary>Built-in and user variables for this environment and run.</summary>
@@ -440,7 +440,7 @@ public sealed class MigrationEngine
 
         var sb = new StringBuilder();
         sb.AppendLine(provider.FormatComment($"Badger SQL Migrate {actor.ToolVersion} - generated {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z for {session.Description}"));
-        sb.AppendLine(provider.FormatComment("Review script only: running it does not record changes in the badger journal. Use 'bsm deploy' or 'bsm baseline' afterwards."));
+        sb.AppendLine(provider.FormatComment("Review script only: running it does not record changes in the bsm journal. Use 'bsm deploy' or 'bsm baseline' afterwards."));
         foreach (var item in status.Changes.Where(c => c.State == ChangeState.Pending && c.PlanIndex <= targetIndex))
         {
             sb.AppendLine();

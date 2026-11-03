@@ -7,7 +7,7 @@ namespace Badger.SqlMigrate.Providers.SqlServer;
 /// System-generated constraint names (DF__Orders__Statu__3B75D760) differ between servers, so they are
 /// replaced with a placeholder; otherwise identical schemas would never fingerprint the same.
 /// Always Encrypted columns record the CEK name but never key paths or values, which differ per environment,
-/// so identical schemas fingerprint the same in every environment. The badger state schema is excluded. Catalog views mix collations, so each line is forced to a binary collation.
+/// so identical schemas fingerprint the same in every environment. The bsm state schema is excluded. Catalog views mix collations, so each line is forced to a binary collation.
 /// </summary>
 public sealed class SqlServerSchemaInspector : ISchemaInspector
 {

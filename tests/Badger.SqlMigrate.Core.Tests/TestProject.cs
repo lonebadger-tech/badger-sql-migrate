@@ -8,9 +8,9 @@ public sealed class TestProject : IDisposable
 {
     public TestProject()
     {
-        Root = Path.Combine(Path.GetTempPath(), "badger-tests", Guid.NewGuid().ToString("N"));
+        Root = Path.Combine(Path.GetTempPath(), "bsm-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(Root, MigrationProject.ChangesFolder));
-        File.WriteAllText(Path.Combine(Root, "badger.plan"), string.Empty);
+        File.WriteAllText(Path.Combine(Root, "bsm.plan"), string.Empty);
     }
 
     public string Root { get; }
@@ -31,7 +31,7 @@ public sealed class TestProject : IDisposable
             File.WriteAllText(Path.Combine(dir, MigrationProject.VerifyFile), verify, Encoding.UTF8);
         }
 
-        File.AppendAllText(Path.Combine(Root, "badger.plan"), planLine + "\n");
+        File.AppendAllText(Path.Combine(Root, "bsm.plan"), planLine + "\n");
         return this;
     }
 
@@ -43,7 +43,7 @@ public sealed class TestProject : IDisposable
         return this;
     }
 
-    public void WritePlan(string text) => File.WriteAllText(Path.Combine(Root, "badger.plan"), text);
+    public void WritePlan(string text) => File.WriteAllText(Path.Combine(Root, "bsm.plan"), text);
 
     public void Write(string relativePath, string text) => File.WriteAllText(Path.Combine(Root, relativePath), text);
 

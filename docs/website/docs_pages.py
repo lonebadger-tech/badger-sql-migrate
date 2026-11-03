@@ -59,7 +59,7 @@ def overview():
 <h2>Five ideas</h2>
 <ol>
   <li><strong>Changes have names.</strong> A change is a folder (<code>changes/add-customer-email/</code>) with a <code>deploy.sql</code>, a <code>revert.sql</code> and an optional <code>verify.sql</code>. No version numbers to collide.</li>
-  <li><strong>The plan decides the order.</strong> <code>badger.plan</code> lists changes one per line. Git merges it without conflicts. {link("docs/plan/", "The plan")}</li>
+  <li><strong>The plan decides the order.</strong> <code>bsm.plan</code> lists changes one per line. Git merges it without conflicts. {link("docs/plan/", "The plan")}</li>
   <li><strong>Everything is hashed.</strong> Each change has a SHA-256 hash, and each position in the plan a chain hash over everything before it. Identical head hash, identical history. {link("docs/certification/", "Hash certification")}</li>
   <li><strong>Down is real.</strong> The database stores the revert script at deploy time and uses it to roll back. {link("docs/revert/", "Revert")}</li>
   <li><strong>Environments hold the differences.</strong> Servers, identities, variables and encryption keys differ per environment; change scripts do not. {link("docs/environments/", "Environments")}</li>
@@ -105,12 +105,12 @@ def quick_start():
     return doc("docs/quick-start/", "Quick start", "From an empty folder to a certified database in ten minutes.", f"""
 <p>You need a SQL Server you can reach. A local container works:</p>
 {sh('''docker run -d --name sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="Your_str0ng_password" -p 1433:1433 mcr.microsoft.com/mssql/server:2022-latest
-export BADGER_LOCAL_PASSWORD="Your_str0ng_password"''')}
+export BSM_LOCAL_PASSWORD="Your_str0ng_password"''')}
 
 <h2>1. Create a project</h2>
 {sh('''bsm init -C db
 cd db''')}
-<p>This writes <code>badger.yaml</code>, an empty <code>badger.plan</code>, the <code>changes/</code>, <code>repeatable/</code> and <code>environments/</code> folders, and a <code>.gitattributes</code> rule that lets git merge the plan. Edit the <code>local</code> environment in <code>badger.yaml</code> so <code>database:</code> names a database that exists.</p>
+<p>This writes <code>bsm.yaml</code>, an empty <code>bsm.plan</code>, the <code>changes/</code>, <code>repeatable/</code> and <code>environments/</code> folders, and a <code>.gitattributes</code> rule that lets git merge the plan. Edit the <code>local</code> environment in <code>bsm.yaml</code> so <code>database:</code> names a database that exists.</p>
 
 <h2>2. Add a change</h2>
 {sh('''bsm add create-customer''')}
@@ -157,9 +157,9 @@ bsm log                    # who did what, when, from where''')}
 def project():
     return doc("docs/project/", "Project layout", "Files bsm reads, and what each is for.", f"""
 {code('''db/
-  badger.yaml                   provider, environments, variables, preprocessor settings
-  badger.plan                   ordered list of changes and tags
-  .gitattributes                badger.plan merge=union, *.sql text eol=lf
+  bsm.yaml                   provider, environments, variables, preprocessor settings
+  bsm.plan                   ordered list of changes and tags
+  .gitattributes                bsm.plan merge=union, *.sql text eol=lf
   changes/
     <change-name>/
       deploy.sql                required
@@ -187,13 +187,13 @@ def project():
 # ---------------------------------------------------------------- concepts
 
 def plan():
-    return doc("docs/plan/", "The plan", "badger.plan is the single source of deploy order.", f"""
+    return doc("docs/plan/", "The plan", "bsm.plan is the single source of deploy order.", f"""
 {code('''# comments start with #
 create-customer                                 @2026-11-03T14:10Z brock  # a note
 add-customer-email [create-customer]            @2026-11-04T09:02Z alice
 rebuild-fulltext [create-product] !notx         @2026-11-04T09:15Z bob
 drop-legacy !irreversible                       @2026-11-05T08:00Z alice
-@release-1.4''', "", "badger.plan")}
+@release-1.4''', "", "bsm.plan")}
 
 <h2>Line syntax</h2>
 <table>
@@ -210,7 +210,7 @@ drop-legacy !irreversible                       @2026-11-05T08:00Z alice
 
 <h2>Why one change per line</h2>
 <p>When two developers each append a change on their branches, git's <code>union</code> merge driver keeps both lines instead of reporting a conflict. <code>bsm init</code> adds the rule to <code>.gitattributes</code>:</p>
-{code('''badger.plan merge=union''', "", ".gitattributes")}
+{code('''bsm.plan merge=union''', "", ".gitattributes")}
 <p>Run <code>bsm plan check</code> after merging. It catches the cases a union merge cannot judge: the same name added twice, a dependency on a change that was removed, or a folder without a plan line. See {link("docs/teamwork/", "Teams and ordering")}.</p>
 
 <h2>Targets</h2>
@@ -263,10 +263,10 @@ def certification():
 <p>When a database deploys a change, it records a chain id computed from <em>its own</em> deploy order. If the database received a prefix of the plan, in plan order, with identical scripts, its head equals the plan's chain id at that position, and <code>bsm status</code> reports it as <strong>certified</strong>. Two databases with the same head received byte-identical history.</p>
 
 <h2>Rendered hash</h2>
-<p>Scripts can contain {link("docs/variables/", "variables")} that differ per environment, so the SQL that runs in test and prod is not the same text. Badger therefore stores a second hash per change: SHA-256 of deploy and verify as rendered for that environment, plus one for the rendered revert. That separates "same change" (chain id, equal across environments) from "same SQL executed here" (rendered hash). <code>bsm verify</code> reports changes whose variables now render differently; <code>revert</code> refuses to run a revert script that no longer matches.</p>
+<p>Scripts can contain {link("docs/variables/", "variables")} that differ per environment, so the SQL that runs in test and prod is not the same text. Badger SQL Migrate therefore stores a second hash per change: SHA-256 of deploy and verify as rendered for that environment, plus one for the rendered revert. That separates "same change" (chain id, equal across environments) from "same SQL executed here" (rendered hash). <code>bsm verify</code> reports changes whose variables now render differently; <code>revert</code> refuses to run a revert script that no longer matches.</p>
 
 <h2>Schema fingerprint</h2>
-<p>After each run bsm records a fingerprint: a hash of a canonical, sorted description of the schema (tables, columns, types, defaults, indexes, keys, constraints, module definitions, types, sequences, synonyms). System-generated constraint names, which differ from server to server, are masked; the <code>badger</code> journal schema is excluded. <code>bsm verify</code> compares the live schema with the last fingerprint, so a hotfix made outside bsm shows up as drift.</p>
+<p>After each run bsm records a fingerprint: a hash of a canonical, sorted description of the schema (tables, columns, types, defaults, indexes, keys, constraints, module definitions, types, sequences, synonyms). System-generated constraint names, which differ from server to server, are masked; the <code>bsm</code> journal schema is excluded. <code>bsm verify</code> compares the live schema with the last fingerprint, so a hotfix made outside bsm shows up as drift.</p>
 
 <h2>What status tells you</h2>
 <table>
@@ -313,7 +313,7 @@ bsm rebase --to x                  # revert to x, then deploy to the head again'
 def teamwork():
     return doc("docs/teamwork/", "Teams and ordering", "Concurrent development without version collisions, and deploys that cannot interleave.", f"""
 <h2>Two developers, same day</h2>
-<p>Alice adds <code>add-customer-email</code> and Bob adds <code>add-order-index</code> on separate branches. Each appends a line to <code>badger.plan</code>. With version numbers they would both have picked <code>V12</code>; with names there is nothing to collide on, and git's union merge keeps both lines. <code>bsm plan check</code> in CI verifies the merged plan.</p>
+<p>Alice adds <code>add-customer-email</code> and Bob adds <code>add-order-index</code> on separate branches. Each appends a line to <code>bsm.plan</code>. With version numbers they would both have picked <code>V12</code>; with names there is nothing to collide on, and git's union merge keeps both lines. <code>bsm plan check</code> in CI verifies the merged plan.</p>
 
 <h2>Shared databases and out-of-order changes</h2>
 <p>Bob's change reached the shared dev database first. After the merge, Alice's line sits above Bob's in the plan, but Bob's change is already deployed. What happens next is the environment's <code>ordering</code>:</p>
@@ -343,7 +343,7 @@ def repeatables():
 
 <h2>Order</h2>
 <p>Repeatables run in path order (ordinal), with declared dependencies first:</p>
-{sql('''-- badger:requires views/vActiveCustomer.sql functions/fnFullName.sql
+{sql('''-- bsm:requires views/vActiveCustomer.sql functions/fnFullName.sql
 CREATE OR ALTER PROCEDURE dbo.usp_FindCustomer ...''', "repeatable/procedures/usp_FindCustomer.sql")}
 <p>Names are paths relative to <code>repeatable/</code>, with forward slashes. Cycles and unknown names are reported by <code>plan check</code>.</p>
 
@@ -365,9 +365,9 @@ CREATE OR ALTER PROCEDURE dbo.usp_FindCustomer ...''', "repeatable/procedures/us
 # ---------------------------------------------------------------- configure
 
 def environments():
-    return doc("docs/environments/", "Environments", "badger.yaml: dev, test, prod and everything that differs between them.", f"""
+    return doc("docs/environments/", "Environments", "bsm.yaml: dev, test, prod and everything that differs between them.", f"""
 {yaml('''provider: sqlserver
-defaultEnvironment: dev                # also: BADGER_ENV, or --env / -e
+defaultEnvironment: dev                # also: BSM_ENV, or --env / -e
 
 variables: {}                         # see Variables
 
@@ -388,7 +388,7 @@ environments:
     host: myapp-prod.database.windows.net
     protected: true
     allowRevert: false
-    ordering: strict''', "badger.yaml")}
+    ordering: strict''', "bsm.yaml")}
 
 <h2>Inheritance</h2>
 <p><code>extends</code> names another environment (or template) to start from. Maps merge key by key, so <code>entra:</code> in a child adds to the template's <code>entra:</code>; values and lists are replaced. Chains are allowed, cycles are errors. <code>bsm env show -e prod</code> prints the merged result with secrets masked; <code>bsm env list</code> shows every environment.</p>
@@ -404,7 +404,7 @@ environments:
 <tr><td><code>protected</code></td><td><code>false</code></td><td>Deploy, revert, rebase, baseline and destructive provisioning require typing the environment name, or <code>--yes</code></td></tr>
 <tr><td><code>allowRevert</code></td><td><code>true</code></td><td><code>false</code> refuses revert and rebase</td></tr>
 <tr><td><code>ordering</code></td><td><code>dependency</code></td><td><code>dependency</code> or <code>strict</code> ({link("docs/teamwork/", "Teams")})</td></tr>
-<tr><td><code>stateSchema</code></td><td><code>badger</code></td><td>Schema for the {link("docs/journal/", "journal tables")}</td></tr>
+<tr><td><code>stateSchema</code></td><td><code>bsm</code></td><td>Schema for the {link("docs/journal/", "journal tables")}</td></tr>
 <tr><td><code>commandTimeoutSeconds</code></td><td>driver default (30)</td><td>Per-batch timeout</td></tr>
 <tr><td><code>lockTimeoutSeconds</code></td><td><code>300</code></td><td>Wait for another deployer</td></tr>
 <tr><td><code>variables</code></td><td></td><td>Environment-specific {link("docs/variables/", "variables")}</td></tr>
@@ -413,7 +413,7 @@ environments:
 <p>Unknown keys inside known blocks (for example a misspelled <code>entra.tennantId</code>) are errors, so typos never silently fall back to defaults.</p>
 
 <h2>Secrets</h2>
-<p>Any value can reference <code>${{env:NAME}}</code> (an environment variable) or <code>${{file:path}}</code> (a file, such as a mounted secret). They are resolved only for the environment being used, so a missing production secret never breaks a dev run. Never commit passwords; <code>badger.yaml</code> belongs in source control.</p>
+<p>Any value can reference <code>${{env:NAME}}</code> (an environment variable) or <code>${{file:path}}</code> (a file, such as a mounted secret). They are resolved only for the environment being used, so a missing production secret never breaks a dev run. Never commit passwords; <code>bsm.yaml</code> belongs in source control.</p>
 
 <h2>Database ownership</h2>
 <p>The first deploy records the environment name in the database. If you later run as a different environment against that database (for example prod settings pointing at a test server after a copy-paste mistake), bsm refuses:</p>
@@ -460,8 +460,8 @@ def authentication():
     authentication: entraInteractive
     entra:
       tenantId: 7f3c1e2a-0000-0000-0000-000000000000
-      loginHint: you@contoso.com''', "badger.yaml")}
-<p>The first run opens a browser for sign-in, MFA included. The token is kept in the operating system's encrypted store (Keychain on macOS, DPAPI on Windows, libsecret on Linux) and a small sign-in record (account and tenant ids, no tokens) is saved in <code>~/.badger/auth/</code>, so later runs are silent until the refresh token expires. <code>bsm auth clear</code> forgets saved sign-ins. Set <code>entra.tokenCache: memory</code> to sign in on every run. Without a browser (SSH sessions), use <code>entraDeviceCode</code>.</p>
+      loginHint: you@contoso.com''', "bsm.yaml")}
+<p>The first run opens a browser for sign-in, MFA included. The token is kept in the operating system's encrypted store (Keychain on macOS, DPAPI on Windows, libsecret on Linux) and a small sign-in record (account and tenant ids, no tokens) is saved in <code>~/.bsm/auth/</code>, so later runs are silent until the refresh token expires. <code>bsm auth clear</code> forgets saved sign-ins. Set <code>entra.tokenCache: memory</code> to sign in on every run. Without a browser (SSH sessions), use <code>entraDeviceCode</code>.</p>
 
 <h2>More <code>entra</code> settings</h2>
 <table>
@@ -512,7 +512,7 @@ encrypted      TRUE
 recorded env   prod
 journal        14 change(s) deployed
 connection ok.''')}
-<p>The Entra identity needs a database user (<code>CREATE USER [you@contoso.com] FROM EXTERNAL PROVIDER</code>) with rights to run your changes and to create the <code>badger</code> schema on first deploy.</p>
+<p>The Entra identity needs a database user (<code>CREATE USER [you@contoso.com] FROM EXTERNAL PROVIDER</code>) with rights to run your changes and to create the <code>bsm</code> schema on first deploy.</p>
 """)
 
 
@@ -542,7 +542,7 @@ def connections():
 <p>Common Azure SQL choices: <code>Connect Retry Count</code> and <code>Connect Retry Interval</code> for transient faults, <code>Multi Subnet Failover</code> for failover groups, <code>tls.mode: strict</code> where supported.</p>
 
 <h2>SSH tunnels</h2>
-<p>Reach a database behind a bastion host. Badger opens a local port forward and connects through it; TLS is still validated against the real server name.</p>
+<p>Reach a database behind a bastion host. Badger SQL Migrate opens a local port forward and connects through it; TLS is still validated against the real server name.</p>
 {yaml('''ssh:
   host: bastion.example.com
   port: 22
@@ -564,8 +564,8 @@ def variables():
         ("{env}", "{env.name}", "Environment name"), ("{env.description}", "", "Environment description"),
         ("{db}", "{db.name}", "Database name"), ("{db.host}", "", "Server host"), ("{db.port}", "", "Server port"),
         ("{change}", "{change.name}", "Current change or repeatable"), ("{change.kind}", "", "deploy, revert, verify or repeatable"),
-        ("{change.hash}", "", "The change's script hash"), ("{badger.provider}", "", "Provider id (sqlserver)"),
-        ("{badger.version}", "", "Tool version"), ("{badger.schema}", "", "Journal schema"), ("{plan.head}", "", "Plan head chain id"),
+        ("{change.hash}", "", "The change's script hash"), ("{bsm.provider}", "", "Provider id (sqlserver)"),
+        ("{bsm.version}", "", "Tool version"), ("{bsm.schema}", "", "Journal schema"), ("{plan.head}", "", "Plan head chain id"),
         ("{deploy.user}", "", "OS user running bsm *"), ("{deploy.host}", "", "Machine running bsm *"),
         ("{deploy.utc}", "", "Run start, ISO 8601 UTC *"), ("{deploy.date}", "", "Run start date, UTC *"), ("{deploy.id}", "", "Unique id of the run *"),
     ]
@@ -583,13 +583,13 @@ SELECT * FROM [calc_$(env)].[table1];      -- the same, sqlcmd syntax''')}
 <tr><td><code>{{var.name}}</code></td><td>A user variable, explicitly</td></tr>
 <tr><td><code>$(name)</code></td><td>The same variables, sqlcmd style</td></tr>
 <tr><td><code>{{{{name}}}}</code></td><td>A literal <code>{{name}}</code></td></tr>
-<tr><td><code>-- badger:preprocess off</code> as the first line</td><td>The script untouched</td></tr>
+<tr><td><code>-- bsm:preprocess off</code> as the first line</td><td>The script untouched</td></tr>
 </table>
 <p>Only an identifier directly inside the braces is a variable. ODBC escapes (<code>{{fn NOW()}}</code>, <code>{{d '2026-01-01'}}</code>), JSON (<code>'{{"a":1}}'</code>) and format strings (<code>'{{0}}'</code>) are left alone. Names are case-insensitive.</p>
 
 <h2>Built-in variables</h2>
 {table}
-<p>* Per-run values: a script that uses them renders differently on every run, so it is not tracked by rendered hash. The names <code>env</code>, <code>db</code>, <code>change</code>, <code>badger</code>, <code>plan</code> and <code>deploy</code> (and anything under them) are reserved.</p>
+<p>* Per-run values: a script that uses them renders differently on every run, so it is not tracked by rendered hash. The names <code>env</code>, <code>db</code>, <code>change</code>, <code>bsm</code>, <code>plan</code> and <code>deploy</code> (and anything under them) are reserved.</p>
 
 <h2>Your variables</h2>
 {yaml('''variables:                       # every environment
@@ -603,7 +603,7 @@ environments:
   prod:
     variables:                   # this environment only; wins over the shared ones
       AppRole: app_reader_prod
-      Region: ${env:DEPLOY_REGION} # secrets and env vars work here too''', "badger.yaml")}
+      Region: ${env:DEPLOY_REGION} # secrets and env vars work here too''', "bsm.yaml")}
 <p>Precedence, lowest to highest: shared <code>variables</code>, the environment's <code>variables</code> (including what it inherits through <code>extends</code>), then <code>--var name=value</code> on the command line. Circular references are errors.</p>
 <p class="callout"><strong>YAML tip:</strong> in an inline map (<code>{{ a: b }}</code>), braces are YAML syntax, so quote values that contain variables: <code>{{ calc: "calc_{{env}}" }}</code>. In block style (one key per line) no quotes are needed.</p>
 
@@ -611,7 +611,7 @@ environments:
 <p>An unknown <code>{{name}}</code> or <code>$(name)</code> is an error that names the script and line, so a typo never reaches the database. If your scripts contain many literal braces, set <code>preprocessor.unknown: keep</code> to leave unknown <code>{{name}}</code> tokens as they are (unknown built-ins such as <code>{{env.nmae}}</code> are still errors).</p>
 {yaml('''preprocessor:
   unknown: error        # error (default) | keep
-  sqlcmdSyntax: true    # expand $(name) too (default)''', "badger.yaml")}
+  sqlcmdSyntax: true    # expand $(name) too (default)''', "bsm.yaml")}
 <p><code>bsm plan check</code> also fails when a script uses a variable that some environment does not define, and names those environments.</p>
 
 <h2>Seeing the result</h2>
@@ -627,10 +627,10 @@ bsm deploy -e prod --script review.sql  # all pending changes, rendered, for rev
 
 def always_encrypted():
     return doc("docs/always-encrypted/", "Always Encrypted", "Column master keys and column encryption keys per environment, provisioned and rotated by bsm.", f"""
-<p>Always Encrypted keys are a classic per-environment difference: production's column master key lives in production's Key Vault, test's somewhere else. Change scripts should not contain key paths or encrypted key values. Badger splits it cleanly:</p>
+<p>Always Encrypted keys are a classic per-environment difference: production's column master key lives in production's Key Vault, test's somewhere else. Change scripts should not contain key paths or encrypted key values. Badger SQL Migrate splits it cleanly:</p>
 <ul>
   <li>Scripts reference a <strong>column encryption key name</strong> (the same in every environment).</li>
-  <li>Each environment maps that name to <strong>its own column master key</strong> in <code>badger.yaml</code>.</li>
+  <li>Each environment maps that name to <strong>its own column master key</strong> in <code>bsm.yaml</code>.</li>
   <li>Before changes run, bsm <strong>creates</strong> missing keys and <strong>rotates</strong> keys whose master key changed.</li>
 </ul>
 
@@ -661,7 +661,7 @@ def always_encrypted():
           keyPath: https://myapp-prod-kv.vault.azure.net/keys/cmk/9f8e7d6c
           enclaveComputations: true
       columnEncryptionKeys:
-        CEK_Customer: { columnMasterKey: CMK_Prod_2026 }''', "badger.yaml")}
+        CEK_Customer: { columnMasterKey: CMK_Prod_2026 }''', "bsm.yaml")}
 
 <h2>Settings</h2>
 <table>
@@ -709,7 +709,7 @@ def always_encrypted():
 
 def commands():
     cmds = [
-        ("init", "[--provider sqlserver]", "Create badger.yaml, badger.plan, folders and .gitattributes."),
+        ("init", "[--provider sqlserver]", "Create bsm.yaml, bsm.plan, folders and .gitattributes."),
         ("add &lt;name&gt;", "[-r|--requires a b] [-n|--note text] [--notx] [--irreversible]", "Scaffold changes/&lt;name&gt;/ and append it to the plan."),
         ("tag &lt;name&gt;", "", "Tag the last change in the plan (use as @name)."),
         ("plan check", "", "Validate plan, folders, lint and variable definitions. No database."),
@@ -739,8 +739,8 @@ def commands():
 <table>
 <tr><th>Option</th><th>Meaning</th></tr>
 <tr><td><code>-C, --project &lt;dir&gt;</code></td><td>Project folder (default: current folder)</td></tr>
-<tr><td><code>-e, --env &lt;name&gt;</code></td><td>Environment (default: <code>BADGER_ENV</code>, then <code>defaultEnvironment</code>, then the only one)</td></tr>
-<tr><td><code>--var name=value</code></td><td>Script variable; repeatable; overrides badger.yaml</td></tr>
+<tr><td><code>-e, --env &lt;name&gt;</code></td><td>Environment (default: <code>BSM_ENV</code>, then <code>defaultEnvironment</code>, then the only one)</td></tr>
+<tr><td><code>--var name=value</code></td><td>Script variable; repeatable; overrides bsm.yaml</td></tr>
 <tr><td><code>--connection-string "..."</code></td><td>Connect exactly here for this run</td></tr>
 <tr><td><code>--claim-environment</code></td><td>Accept a database recorded under another environment and re-record it</td></tr>
 <tr><td><code>--json</code></td><td>Machine-readable output on stdout (warnings go to stderr)</td></tr>
@@ -760,9 +760,9 @@ def commands():
 <h2>Environment variables</h2>
 <table>
 <tr><th>Variable</th><th>Meaning</th></tr>
-<tr><td><code>BADGER_ENV</code></td><td>Default environment</td></tr>
-<tr><td><code>BADGER_AUTHOR</code></td><td>Author written by <code>bsm add</code> (default: OS user)</td></tr>
-<tr><td><code>BADGER_HOME</code></td><td>Where saved sign-ins live (default <code>~/.badger</code>)</td></tr>
+<tr><td><code>BSM_ENV</code></td><td>Default environment</td></tr>
+<tr><td><code>BSM_AUTHOR</code></td><td>Author written by <code>bsm add</code> (default: OS user)</td></tr>
+<tr><td><code>BSM_HOME</code></td><td>Where saved sign-ins live (default <code>~/.bsm</code>)</td></tr>
 <tr><td><code>NO_COLOR</code></td><td>Disable colors</td></tr>
 </table>
 
@@ -833,27 +833,27 @@ bsm status -e prod                          # initial-schema shown as (baseline)
   <li>Write revert scripts for the changes you might want to undo; mark the rest <code>!irreversible</code>.</li>
   <li>Move repeatable/"anytime" scripts into <code>repeatable/</code>.</li>
   <li>Replace placeholders such as <code>${{name}}</code> (Flyway) with <code>{{name}}</code> or keep <code>$(name)</code>.</li>
-  <li>Baseline each existing database. The old tool's history table can stay; bsm uses its own <code>badger</code> schema.</li>
+  <li>Baseline each existing database. The old tool's history table can stay; bsm uses its own <code>bsm</code> schema.</li>
 </ul>
 """)
 
 
 def journal():
-    return doc("docs/journal/", "Journal tables", "What bsm stores in each database (schema badger, configurable).", f"""
+    return doc("docs/journal/", "Journal tables", "What bsm stores in each database (schema bsm, configurable).", f"""
 <table>
 <tr><th>Table</th><th>Contents</th></tr>
-<tr><td><code>badger.changes</code></td><td>One row per applied change: sequence, name, script hash, chain id, deploy/revert/verify scripts, flags, deployed at/by/host, tool version, duration, out-of-order and baseline flags, rendered hashes</td></tr>
-<tr><td><code>badger.repeatables</code></td><td>Current and previous script and hash of each repeatable, applied at/by</td></tr>
-<tr><td><code>badger.events</code></td><td>Append-only log: deploy, revert, fail (with the error), repeatable, baseline, resource; actor, host, tool version, environment</td></tr>
-<tr><td><code>badger.schema_snapshots</code></td><td>Schema fingerprint and canonical dump after each run, with the head chain id</td></tr>
-<tr><td><code>badger.meta</code></td><td><code>state_version</code> (journal layout) and <code>environment</code> (owner)</td></tr>
+<tr><td><code>bsm.changes</code></td><td>One row per applied change: sequence, name, script hash, chain id, deploy/revert/verify scripts, flags, deployed at/by/host, tool version, duration, out-of-order and baseline flags, rendered hashes</td></tr>
+<tr><td><code>bsm.repeatables</code></td><td>Current and previous script and hash of each repeatable, applied at/by</td></tr>
+<tr><td><code>bsm.events</code></td><td>Append-only log: deploy, revert, fail (with the error), repeatable, baseline, resource; actor, host, tool version, environment</td></tr>
+<tr><td><code>bsm.schema_snapshots</code></td><td>Schema fingerprint and canonical dump after each run, with the head chain id</td></tr>
+<tr><td><code>bsm.meta</code></td><td><code>state_version</code> (journal layout) and <code>environment</code> (owner)</td></tr>
 </table>
 {sql('''-- what is deployed, in order
-SELECT sequence, name, deployed_at, deployed_by, applied_out_of_order FROM badger.changes ORDER BY sequence;
+SELECT sequence, name, deployed_at, deployed_by, applied_out_of_order FROM bsm.changes ORDER BY sequence;
 
 -- recent failures
-SELECT TOP (20) at, name, message, actor, host FROM badger.events WHERE kind = 'fail' ORDER BY id DESC;''')}
-<p>Badger creates the schema and tables on the first deploy and upgrades them itself; a newer journal than the tool understands stops the tool with a message to upgrade. Change the schema name with <code>stateSchema</code>. Do not edit these tables by hand: they are the certificate.</p>
+SELECT TOP (20) at, name, message, actor, host FROM bsm.events WHERE kind = 'fail' ORDER BY id DESC;''')}
+<p>Badger SQL Migrate creates the schema and tables on the first deploy and upgrades them itself; a newer journal than the tool understands stops the tool with a message to upgrade. Change the schema name with <code>stateSchema</code>. Do not edit these tables by hand: they are the certificate.</p>
 """)
 
 

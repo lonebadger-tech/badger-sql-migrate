@@ -13,7 +13,7 @@ public enum ChangeFlags
     NoTransaction = 2,
 }
 
-/// <summary>One change line in badger.plan.</summary>
+/// <summary>One change line in bsm.plan.</summary>
 public sealed record PlanChange(
     string Name,
     IReadOnlyList<string> Requires,

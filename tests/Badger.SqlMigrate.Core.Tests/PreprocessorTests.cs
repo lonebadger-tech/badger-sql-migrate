@@ -13,7 +13,7 @@ public sealed class PreprocessorTests : IDisposable
 
     private static ScriptPreprocessor Pre(Dictionary<string, string>? user = null, UnknownVariablePolicy unknown = UnknownVariablePolicy.Error, string env = "test") =>
         new(
-            ScriptPreprocessor.BuiltIns(env, "Test env", "AppDb", "sql.example.com", 1433, "sqlserver", "1.2.3", "badger", "head", "brock", "mac", new DateTimeOffset(2026, 11, 3, 18, 0, 0, TimeSpan.Zero), "run1"),
+            ScriptPreprocessor.BuiltIns(env, "Test env", "AppDb", "sql.example.com", 1433, "sqlserver", "1.2.3", "bsm", "head", "brock", "mac", new DateTimeOffset(2026, 11, 3, 18, 0, 0, TimeSpan.Zero), "run1"),
             (user ?? []).Select(kv => new VariableInfo(kv.Key, kv.Value, VariableSource.Config)),
             new PreprocessorOptions { Unknown = unknown });
 
@@ -28,7 +28,7 @@ public sealed class PreprocessorTests : IDisposable
     [InlineData("{env.description}", "Test env")]
     [InlineData("{db}", "AppDb")]
     [InlineData("{db.host}:{db.port}", "sql.example.com:1433")]
-    [InlineData("{badger.provider} {badger.version} {badger.schema}", "sqlserver 1.2.3 badger")]
+    [InlineData("{bsm.provider} {bsm.version} {bsm.schema}", "sqlserver 1.2.3 bsm")]
     [InlineData("{change} {change.kind} {change.hash}", "add-calc deploy abc123")]
     [InlineData("{deploy.utc} {deploy.date}", "2026-11-03T18:00:00Z 2026-11-03")]
     [InlineData("$(env)", "test")]
@@ -76,7 +76,7 @@ public sealed class PreprocessorTests : IDisposable
     [Fact]
     public void Preprocessing_can_be_turned_off_per_script()
     {
-        const string script = "-- badger:preprocess off\nSELECT '{env}', '$(x)'";
+        const string script = "-- bsm:preprocess off\nSELECT '{env}', '$(x)'";
         Assert.Equal(script, Pre().Render(script, Ctx).Text);
     }
 

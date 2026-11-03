@@ -1,8 +1,8 @@
-# Configuration reference (`badger.yaml`)
+# Configuration reference (`bsm.yaml`)
 
 ```yaml
 provider: sqlserver
-defaultEnvironment: dev           # or BADGER_ENV, or --env
+defaultEnvironment: dev           # or BSM_ENV, or --env
 preprocessor:
   unknown: error                  # error (default) | keep: leave unknown {name} tokens untouched
   sqlcmdSyntax: true              # also expand $(name)
@@ -47,7 +47,7 @@ Secrets never belong in the file: any string may use `${env:NAME}` or `${file:pa
 | `protected` | Deploy, revert, baseline and destructive provisioning require typing the environment name (or `--yes`) |
 | `allowRevert` | `false` refuses revert and rebase (fix forward) |
 | `ordering` | `dependency` (shared dev databases) or `strict` (exact plan order; certified history) |
-| `stateSchema` | Schema for the journal tables (default `badger`) |
+| `stateSchema` | Schema for the journal tables (default `bsm`) |
 | `commandTimeoutSeconds`, `lockTimeoutSeconds` | Per-command timeout; how long to wait for another deployer |
 | `variables` | Environment-specific variables (override shared ones) |
 | `alwaysEncrypted` | SQL Server Always Encrypted keys (see below) |
@@ -135,7 +135,7 @@ Scripts are preprocessed before they reach the database. Raw scripts are what ge
 | `{name}`, `{group.name}`, `{var.name}` | variable |
 | `$(name)` | same variables, sqlcmd syntax |
 | `{{name}}` | literal `{name}` |
-| `-- badger:preprocess off` (first line) | leave this script untouched |
+| `-- bsm:preprocess off` (first line) | leave this script untouched |
 
 Only an identifier directly inside braces is a token, so ODBC escapes (`{fn NOW()}`), JSON (`'{"a":1}'`) and format strings (`'{0}'`) are left alone.
 
@@ -146,7 +146,7 @@ Only an identifier directly inside braces is a token, so ODBC escapes (`{fn NOW(
 | `{env}`, `{env.name}`, `{env.description}` | environment |
 | `{db}`, `{db.name}`, `{db.host}`, `{db.port}` | target database |
 | `{change}`, `{change.name}`, `{change.kind}`, `{change.hash}` | current change/repeatable, `deploy`/`revert`/`verify`/`repeatable`, script hash |
-| `{badger.provider}`, `{badger.version}`, `{badger.schema}` | tool facts |
+| `{bsm.provider}`, `{bsm.version}`, `{bsm.schema}` | tool facts |
 | `{plan.head}` | plan certificate |
 | `{deploy.user}`, `{deploy.host}`, `{deploy.utc}`, `{deploy.date}`, `{deploy.id}` | per-run values (scripts using them are not rendered-hash tracked) |
 

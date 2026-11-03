@@ -1,6 +1,6 @@
 namespace Badger.SqlMigrate.Core.Providers;
 
-/// <summary>Maps the "provider:" id in badger.yaml to an implementation.</summary>
+/// <summary>Maps the "provider:" id in bsm.yaml to an implementation.</summary>
 public sealed class ProviderRegistry
 {
     private readonly Dictionary<string, Func<IDatabaseProvider>> factories = new(StringComparer.OrdinalIgnoreCase);

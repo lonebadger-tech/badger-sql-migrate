@@ -12,7 +12,7 @@ using YamlDotNet.RepresentationModel;
 namespace Badger.SqlMigrate.Cli;
 
 /// <summary>
-/// badger.yaml: provider, shared variables and named environments.
+/// bsm.yaml: provider, shared variables and named environments.
 /// <code>
 /// provider: sqlserver
 /// defaultEnvironment: dev
@@ -38,9 +38,9 @@ namespace Badger.SqlMigrate.Cli;
 /// </code>
 /// Secrets are referenced as ${env:NAME} or ${file:path}; they are resolved only for the environment in use.
 /// </summary>
-public sealed class BadgerConfig
+public sealed class BsmConfig
 {
-    public const string FileName = "badger.yaml";
+    public const string FileName = "bsm.yaml";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -51,7 +51,7 @@ public sealed class BadgerConfig
 
     private static readonly HashSet<string> RootKeys = new(StringComparer.OrdinalIgnoreCase) { "provider", "defaultEnvironment", "variables", "environments", "preprocessor" };
 
-    private BadgerConfig(string provider, string? defaultEnvironment, Dictionary<string, string> variables, Dictionary<string, JsonObject> environments, PreprocessorOptions preprocessor)
+    private BsmConfig(string provider, string? defaultEnvironment, Dictionary<string, string> variables, Dictionary<string, JsonObject> environments, PreprocessorOptions preprocessor)
     {
         Preprocessor = preprocessor;
         Provider = provider;
@@ -75,7 +75,7 @@ public sealed class BadgerConfig
 
     public static bool IsTemplate(string name) => name.StartsWith('_');
 
-    public static BadgerConfig Load(string projectDir)
+    public static BsmConfig Load(string projectDir)
     {
         var path = Path.Combine(projectDir, FileName);
         if (!File.Exists(path))
@@ -127,13 +127,13 @@ public sealed class BadgerConfig
             }
         }
 
-        return new BadgerConfig(Scalar(root["provider"]) is { Length: > 0 } p ? p : "sqlserver", root["defaultEnvironment"]?.ToString(), variables, environments, preprocessor);
+        return new BsmConfig(Scalar(root["provider"]) is { Length: > 0 } p ? p : "sqlserver", root["defaultEnvironment"]?.ToString(), variables, environments, preprocessor);
     }
 
-    /// <summary>Picks --env, then BADGER_ENV, then defaultEnvironment, then the only deployable environment.</summary>
+    /// <summary>Picks --env, then BSM_ENV, then defaultEnvironment, then the only deployable environment.</summary>
     public string SelectEnvironmentName(string? requested)
     {
-        var name = requested ?? Environment.GetEnvironmentVariable("BADGER_ENV") ?? DefaultEnvironment;
+        var name = requested ?? Environment.GetEnvironmentVariable("BSM_ENV") ?? DefaultEnvironment;
         if (name is null)
         {
             var deployable = DeployableEnvironments.ToList();
@@ -233,7 +233,7 @@ public sealed class BadgerConfig
             Ordering = dto.Ordering ?? OrderingPolicy.Dependency,
             Protected = dto.Protected ?? false,
             AllowRevert = dto.AllowRevert ?? true,
-            StateSchema = dto.StateSchema ?? "badger",
+            StateSchema = dto.StateSchema ?? "bsm",
             CommandTimeoutSeconds = dto.CommandTimeoutSeconds,
             LockTimeoutSeconds = dto.LockTimeoutSeconds ?? 300,
             Variables = variables,

@@ -17,7 +17,7 @@ Day one ships the **SQL Server / Azure SQL** provider. The engine is vendor-neut
 | Problem in other tools | Badger SQL Migrate |
 |---|---|
 | Flyway charges for undo | `revert.sql` is first-class and free |
-| Two developers both create `V12__...sql` | Changes are **named**; `badger.plan` is merged with git's union driver, so concurrent additions never conflict |
+| Two developers both create `V12__...sql` | Changes are **named**; `bsm.plan` is merged with git's union driver, so concurrent additions never conflict |
 | Rollback depends on the scripts in your current checkout | Deploy, revert and verify scripts are **stored in the database** at deploy time; revert works from any branch or machine |
 | Weak checksums (CRC32) or none (DbUp) | SHA-256 per change plus a **Merkle chain** over the plan: equal head hash = identical history |
 | "Did someone hotfix prod?" | Schema fingerprint after every run; `bsm verify` reports drift |
@@ -47,8 +47,8 @@ A project looks like this:
 
 ```
 db/
-  badger.yaml                 # provider, connection profiles, variables
-  badger.plan                 # ordered list of changes: the single source of ordering
+  bsm.yaml                 # provider, connection profiles, variables
+  bsm.plan                 # ordered list of changes: the single source of ordering
   changes/
     create-customer/
       deploy.sql              # up
@@ -71,13 +71,13 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 
 - `[a b]` dependencies, `!notx` (no transaction), `!irreversible` (no revert), `# note`.
 - `@tag` lines tag the change above; use them as `--to @release-1.4`.
-- `bsm init` adds `badger.plan merge=union` to `.gitattributes`. Run `bsm plan check` in CI to catch duplicate names or broken dependencies after a merge.
+- `bsm init` adds `bsm.plan merge=union` to `.gitattributes`. Run `bsm plan check` in CI to catch duplicate names or broken dependencies after a merge.
 
 ### Commands
 
 | Command | What it does |
 |---|---|
-| `init` | Create `badger.yaml`, `badger.plan`, folders, `.gitattributes` |
+| `init` | Create `bsm.yaml`, `bsm.plan`, folders, `.gitattributes` |
 | `add <name> [-r dep] [--notx] [--irreversible]` | Scaffold a change and append it to the plan |
 | `tag <name>` | Tag the last change |
 | `plan check` / `plan show` | Validate plan, folders and scripts (lint) / list hashes and chain ids. No database needed |
@@ -99,7 +99,7 @@ Global options: `-C <dir>`, `-e <environment>`, `--var name=value`, `--connectio
 
 ## Configuration
 
-`badger.yaml` holds the provider, shared variables and named **environments** (dev, test, prod...). Environments inherit from each other with `extends`; names starting with `_` are templates.
+`bsm.yaml` holds the provider, shared variables and named **environments** (dev, test, prod...). Environments inherit from each other with `extends`; names starting with `_` are templates.
 
 ```yaml
 provider: sqlserver
@@ -161,7 +161,7 @@ The website pages are generated from `docs/website/` into the site repository:
 python3 docs/website/build.py ../badger-website/site
 ```
 
-The SQL Server conformance tests start SQL Server 2022 with Testcontainers (Docker required) or use `BADGER_TEST_SQLSERVER=<connection string>`. They skip when neither is available.
+The SQL Server conformance tests start SQL Server 2022 with Testcontainers (Docker required) or use `BSM_TEST_SQLSERVER=<connection string>`. They skip when neither is available.
 
 Adding a database vendor: see [docs/writing-a-provider.md](docs/writing-a-provider.md).
 

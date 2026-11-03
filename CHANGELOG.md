@@ -4,7 +4,7 @@ All notable changes to Badger SQL Migrate. The format follows [Keep a Changelog]
 
 ## Unreleased
 
-- The command is now `bsm` (was `badger`). Project files (`badger.yaml`, `badger.plan`), the `badger` journal schema, `BADGER_*` environment variables and `~/.badger` are unchanged.
+- Everything the tool names is now `bsm`: the command (`bsm`, was `badger`), project files `bsm.yaml` and `bsm.plan`, the `bsm` journal schema, `-- bsm:` script directives, `{bsm.*}` variables, `BSM_*` environment variables and `~/.bsm`.
 - Open source under the MIT license, with contribution, security and conduct guides.
 - The .NET tool is published to nuget.org from GitHub Actions with Trusted Publishing.
 - Fixed: on Windows, Always Encrypted connections failed with "'MSSQL_' prefix is reserved" because the system key stores were registered on the connection.
@@ -13,8 +13,8 @@ All notable changes to Badger SQL Migrate. The format follows [Keep a Changelog]
 
 The first release.
 
-- Named changes in `badger.plan`, merged with git's union driver.
+- Named changes in `bsm.plan`, merged with git's union driver.
 - Deploy, revert and verify scripts, stored in the database at deploy time.
 - SHA-256 hash certification with a chain id over the whole plan.
 - SQL Server and Azure SQL provider: every Entra ID flow, SSH tunnels, Always Encrypted keys per environment.
-- Environments in `badger.yaml`, variables, repeatables, baselines and schema drift detection.
+- Environments in `bsm.yaml`, variables, repeatables, baselines and schema drift detection.

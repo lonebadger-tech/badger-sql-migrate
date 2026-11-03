@@ -6,7 +6,7 @@ using Badger.SqlMigrate.Core.Providers;
 namespace Badger.SqlMigrate.Providers.SqlServer;
 
 /// <summary>
-/// The badger journal in the target database:
+/// The bsm journal in the target database:
 /// [schema].[changes], [repeatables], [events], [schema_snapshots], [meta].
 /// All writes are parameterized (required for Always Encrypted connections).
 /// </summary>
@@ -99,7 +99,7 @@ public sealed partial class SqlServerStateStore : IStateStore
         }
         else if (int.Parse((string)rows[0]["value"]!, CultureInfo.InvariantCulture) > StateVersion)
         {
-            throw new MigrationException($"The badger state tables in {s} were created by a newer version of Badger SQL Migrate (state version {rows[0]["value"]}). Upgrade the tool.");
+            throw new MigrationException($"The bsm state tables in {s} were created by a newer version of Badger SQL Migrate (state version {rows[0]["value"]}). Upgrade the tool.");
         }
     }
 

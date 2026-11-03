@@ -4,7 +4,7 @@
 
 Flyway and DbUp order scripts by a number or name in the file name. Two developers who pick the same next number on two branches collide, and the tool can only either refuse or run "out of order" globally.
 
-Badger identifies a change by its **name** (its folder under `changes/`). Order comes from `badger.plan`, one change per line. Because the plan is line-based, git's `union` merge driver merges two developers' appended lines without a conflict. `bsm plan check` then validates the result (unique names, dependencies exist and come earlier, every folder is listed).
+Badger SQL Migrate identifies a change by its **name** (its folder under `changes/`). Order comes from `bsm.plan`, one change per line. Because the plan is line-based, git's `union` merge driver merges two developers' appended lines without a conflict. `bsm plan check` then validates the result (unique names, dependencies exist and come earlier, every folder is listed).
 
 ## Hash certification
 
@@ -30,7 +30,7 @@ Shared development databases see merges in arbitrary order. Each profile picks a
 
 ## Down
 
-`revert.sql` is required unless the change is marked `!irreversible`. At deploy time the deploy, revert and verify scripts are stored in `badger.changes`. Revert executes the **stored** revert script, so it works from any branch or machine, even after the change was removed from the working copy (`status` lists such changes as orphans).
+`revert.sql` is required unless the change is marked `!irreversible`. At deploy time the deploy, revert and verify scripts are stored in `bsm.changes`. Revert executes the **stored** revert script, so it works from any branch or machine, even after the change was removed from the working copy (`status` lists such changes as orphans).
 
 ## Transactions
 
@@ -42,7 +42,7 @@ Providers without transactional DDL (e.g. MySQL) declare it in their capabilitie
 
 Deploy, revert and baseline hold an exclusive deploy lock for the whole run (`sp_getapplock` on SQL Server, owned by the session). A second deployer waits up to `lockTimeoutSeconds` and then fails with a clear message.
 
-## State tables (schema `badger`, configurable)
+## State tables (schema `bsm`, configurable)
 
 - `changes`: applied changes with scripts, hashes, chain ids, who/when/where, duration, out-of-order and baseline flags
 - `repeatables`: current and previous definition of each repeatable

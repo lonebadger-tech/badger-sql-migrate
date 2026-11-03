@@ -56,7 +56,7 @@ public static class Commands
         Directory.CreateDirectory(Path.Combine(dir, MigrationProject.RepeatableFolder));
         Directory.CreateDirectory(Path.Combine(dir, MigrationProject.EnvironmentsFolder));
 
-        WriteIfMissing(Path.Combine(dir, BadgerConfig.FileName), $$"""
+        WriteIfMissing(Path.Combine(dir, BsmConfig.FileName), $$"""
             # Badger SQL Migrate configuration
             provider: {{provider.Id}}
             defaultEnvironment: local
@@ -80,7 +80,7 @@ public static class Commands
                 database: MyDatabase
                 authentication: password
                 user: sa
-                password: ${env:BADGER_LOCAL_PASSWORD}
+                password: ${env:BSM_LOCAL_PASSWORD}
                 tls:
                   mode: mandatory
                   trustServerCertificate: true   # local development only
@@ -134,7 +134,7 @@ public static class Commands
     public static int Add(GlobalOptions g, string name, string[] requires, string? note, bool noTx, bool irreversible)
     {
         var dir = Path.GetFullPath(g.ProjectDir);
-        var config = BadgerConfig.Load(dir);
+        var config = BsmConfig.Load(dir);
         var provider = Providers.Resolve(config.Provider);
         if (!PlanFile.IsValidName(name))
         {
@@ -172,7 +172,7 @@ public static class Commands
         File.WriteAllText(Path.Combine(changeDir, MigrationProject.VerifyFile), provider.FormatComment($"Verify {name}: raise an error if the deploy did not take effect (optional; delete if unused)") + "\n\n", Utf8NoBom);
 
         var flags = (noTx ? ChangeFlags.NoTransaction : ChangeFlags.None) | (irreversible ? ChangeFlags.Irreversible : ChangeFlags.None);
-        var author = Environment.GetEnvironmentVariable("BADGER_AUTHOR") ?? Environment.UserName.Replace(' ', '_');
+        var author = Environment.GetEnvironmentVariable("BSM_AUTHOR") ?? Environment.UserName.Replace(' ', '_');
         var line = PlanFile.FormatChange(new PlanChange(name, requires, flags, DateTimeOffset.UtcNow, author, note, 0));
         AppendLine(planPath, line);
 
@@ -255,7 +255,7 @@ public static class Commands
     /// </summary>
     private static void CheckVariableReferences(GlobalOptions g, MigrationProject project, List<string> errors, List<string> warnings)
     {
-        var config = BadgerConfig.Load(Path.GetFullPath(g.ProjectDir));
+        var config = BsmConfig.Load(Path.GetFullPath(g.ProjectDir));
         if (config.Preprocessor.Unknown == UnknownVariablePolicy.Keep)
         {
             return;
@@ -283,7 +283,7 @@ public static class Commands
                 var missing = environments.Where(e => !e.Value.Contains(name)).Select(e => e.Key).ToList();
                 if (missing.Count == environments.Count)
                 {
-                    errors.Add($"{path} line {reference.Line}: variable '{reference.Name}' is not defined in badger.yaml (or write {{{{{reference.Name}}}}} for a literal).");
+                    errors.Add($"{path} line {reference.Line}: variable '{reference.Name}' is not defined in bsm.yaml (or write {{{{{reference.Name}}}}} for a literal).");
                 }
                 else if (missing.Count > 0)
                 {
@@ -315,7 +315,7 @@ public static class Commands
         g.Out.Line("environment", engine.Environment.Name);
         foreach (var group in list.GroupBy(v => v.source))
         {
-            g.Out.Highlight(group.Key == "builtin" ? "built-in" : group.Key == "config" ? "badger.yaml" : "--var");
+            g.Out.Highlight(group.Key == "builtin" ? "built-in" : group.Key == "config" ? "bsm.yaml" : "--var");
             foreach (var v in group)
             {
                 var detail = v.raw is not null && v.raw != v.value ? $"  (= {v.raw})" : v.Description is not null ? $"  # {v.Description}" : string.Empty;
@@ -394,7 +394,7 @@ public static class Commands
     private static (MigrationEngine Engine, MigrationProject Project) OfflineEngine(GlobalOptions g)
     {
         var dir = Path.GetFullPath(g.ProjectDir);
-        var config = BadgerConfig.Load(dir);
+        var config = BsmConfig.Load(dir);
         var provider = Providers.Resolve(config.Provider);
         var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
         var project = MigrationProject.Load(dir, provider.Id, environment.Name);
@@ -658,7 +658,7 @@ public static class Commands
     public static async Task<int> Doctor(GlobalOptions g, CancellationToken ct)
     {
         var dir = Path.GetFullPath(g.ProjectDir);
-        var config = BadgerConfig.Load(dir);
+        var config = BsmConfig.Load(dir);
         var provider = Providers.Resolve(config.Provider);
         var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
         g.Out.Line("provider", provider.DisplayName);
@@ -711,14 +711,14 @@ public static class Commands
 
     public static int EnvList(GlobalOptions g)
     {
-        var config = BadgerConfig.Load(Path.GetFullPath(g.ProjectDir));
+        var config = BsmConfig.Load(Path.GetFullPath(g.ProjectDir));
         var rows = config.Environments.Keys.Order(StringComparer.Ordinal).Select(name =>
         {
             var merged = config.Merge(name);
             return new
             {
                 name,
-                template = BadgerConfig.IsTemplate(name),
+                template = BsmConfig.IsTemplate(name),
                 isDefault = name == config.DefaultEnvironment,
                 extends = config.Environments[name]["extends"]?.ToString(),
                 description = merged["description"]?.ToString(),
@@ -747,7 +747,7 @@ public static class Commands
 
     public static int EnvShow(GlobalOptions g)
     {
-        var config = BadgerConfig.Load(Path.GetFullPath(g.ProjectDir));
+        var config = BsmConfig.Load(Path.GetFullPath(g.ProjectDir));
         var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
         var node = System.Text.Json.JsonSerializer.SerializeToNode(environment, ShowJsonOptions)!;
         Mask(node);
@@ -863,7 +863,7 @@ public static class Commands
     private static (MigrationProject Project, IDatabaseProvider Provider) LoadProject(GlobalOptions g)
     {
         var dir = Path.GetFullPath(g.ProjectDir);
-        var config = BadgerConfig.Load(dir);
+        var config = BsmConfig.Load(dir);
         var provider = Providers.Resolve(config.Provider);
         return (MigrationProject.Load(dir, provider.Id), provider);
     }
@@ -871,7 +871,7 @@ public static class Commands
     private static async Task<ConnectedContext> Connect(GlobalOptions g, CancellationToken ct)
     {
         var dir = Path.GetFullPath(g.ProjectDir);
-        var config = BadgerConfig.Load(dir);
+        var config = BsmConfig.Load(dir);
         var provider = Providers.Resolve(config.Provider);
         var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
         var problems = provider.ValidateEnvironment(environment);

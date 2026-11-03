@@ -22,7 +22,7 @@ environments:
     database: DemoDb
     authentication: password
     user: sa
-    password: ${env:BADGER_LOCAL_PASSWORD}
+    password: ${env:BSM_LOCAL_PASSWORD}
     tls: { mode: mandatory, trustServerCertificate: true }
 
   test:
