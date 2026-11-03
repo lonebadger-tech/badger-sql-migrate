@@ -29,7 +29,7 @@ public sealed partial class PostgreSqlStatementSplitter : IScriptParser
 
     public IReadOnlyList<ScriptBatch> Split(string script, IReadOnlyDictionary<string, string> variables)
     {
-        var result = new Scanner(script, variables, lint: false).Run();
+        var result = new Scanner(Lf(script), variables, lint: false).Run();
         if (result.Problems.Count > 0)
         {
             var (line, message) = result.Problems[0];
@@ -40,7 +40,13 @@ public sealed partial class PostgreSqlStatementSplitter : IScriptParser
     }
 
     /// <summary>For the linter: every branch of every \if, and every problem rather than the first.</summary>
-    internal ScanResult Analyze(string script) => new Scanner(script, new Dictionary<string, string>(), lint: true).Run();
+    internal ScanResult Analyze(string script) => new Scanner(Lf(script), new Dictionary<string, string>(), lint: true).Run();
+
+    /// <summary>
+    /// Scripts hash the same with CRLF or LF line endings, so they must also run the same: statements and COPY data
+    /// get LF on every OS. (Line numbers do not change.)
+    /// </summary>
+    private static string Lf(string script) => script.Replace("\r\n", "\n", StringComparison.Ordinal);
 
     /// <summary>Character ranges of meta-commands (a backslash outside any string or body, to the end of its line).</summary>
     internal static IReadOnlyList<(int Start, int End, int Line)> MetaCommands(string script) => new Scanner(script, new Dictionary<string, string>(), lint: true).Run().Metas;

@@ -844,10 +844,11 @@ internal sealed class PostgreSqlModel
         })) + ")";
     }
 
+    /// <summary>Catalog text with LF line endings, as scripts are hashed and run: CRLF and LF checkouts compare equal.</summary>
     private static string? S(object? value) => value switch
     {
         null => null,
-        string s => s,
+        string s => s.Replace("\r\n", "\n", StringComparison.Ordinal),
         _ => Convert.ToString(value, CultureInfo.InvariantCulture),
     };
 

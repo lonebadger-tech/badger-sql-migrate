@@ -354,3 +354,17 @@ public sealed class PsqlIncludeTests : IDisposable
     }
 }
 
+
+public sealed class LineEndingTests
+{
+    [Fact]
+    public void Crlf_and_lf_scripts_split_into_the_same_statements_and_copy_data()
+    {
+        const string script = "-- note\nCREATE TABLE t (a text);\nCOPY t FROM STDIN;\nx\n\"y\nz\"\n\\.\nSELECT 'a\nb';\n";
+        var splitter = new PostgreSqlStatementSplitter();
+        var lf = splitter.Split(script);
+        var crlf = splitter.Split(script.Replace("\n", "\r\n", StringComparison.Ordinal));
+        Assert.Equal(lf.Select(b => (b.Text, b.CopyData, b.StartLine)), crlf.Select(b => (b.Text, b.CopyData, b.StartLine)));
+        Assert.DoesNotContain(crlf, b => b.Text.Contains('\r', StringComparison.Ordinal) || (b.CopyData ?? string.Empty).Contains('\r', StringComparison.Ordinal));
+    }
+}
