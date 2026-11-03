@@ -56,10 +56,10 @@ public static class ProjectBundle
     };
 
     /// <summary>Writes a bundle of the project at <paramref name="root"/>. The project must load without problems.</summary>
-    public static BundleManifest Create(string root, string providerId, string outputPath, bool includeConfig, string toolVersion)
+    public static BundleManifest Create(string root, string providerId, string outputPath, bool includeConfig, string toolVersion, Providers.IScriptIncludes? includes = null)
     {
         root = System.IO.Path.GetFullPath(root);
-        var project = MigrationProject.Load(root, providerId);
+        var project = MigrationProject.Load(root, providerId, includes: includes);
         if (project.Problems.Count > 0)
         {
             throw new MigrationException("The project has problems; fix them before bundling:\n  " + string.Join("\n  ", project.Problems));
@@ -73,6 +73,12 @@ public static class ProjectBundle
 
         paths.AddRange(Files(root, MigrationProject.RepeatableFolder, "*.sql"));
         paths.AddRange(Files(root, MigrationProject.EnvironmentsFolder, "*.sql"));
+        paths.AddRange(project.IncludedFiles);
+        foreach (var environment in Directory.Exists(System.IO.Path.Combine(root, MigrationProject.EnvironmentsFolder)) ? Directory.EnumerateDirectories(System.IO.Path.Combine(root, MigrationProject.EnvironmentsFolder)) : [])
+        {
+            // Files that environment scripts include are only read when that environment loads.
+            paths.AddRange(MigrationProject.Load(root, providerId, System.IO.Path.GetFileName(environment), includes).IncludedFiles);
+        }
         if (includeConfig)
         {
             if (!File.Exists(System.IO.Path.Combine(root, ConfigName)))
@@ -121,9 +127,10 @@ public static class ProjectBundle
     public static BundleManifest Verify(string bundlePath) => Read(bundlePath, null);
 
     /// <summary>Checks a bundle and extracts it into <paramref name="directory"/> (which must be empty or missing).</summary>
-    public static BundleManifest Extract(string bundlePath, string directory) => Read(bundlePath, System.IO.Path.GetFullPath(directory));
+    /// <param name="includes">The include directives of a provider id (the manifest says which provider).</param>
+    public static BundleManifest Extract(string bundlePath, string directory, Func<string, Providers.IScriptIncludes?>? includes = null) => Read(bundlePath, System.IO.Path.GetFullPath(directory), includes);
 
-    private static BundleManifest Read(string bundlePath, string? extractTo)
+    private static BundleManifest Read(string bundlePath, string? extractTo, Func<string, Providers.IScriptIncludes?>? includes = null)
     {
         if (!File.Exists(bundlePath))
         {
@@ -223,7 +230,7 @@ public static class ProjectBundle
                 File.WriteAllBytes(target, bytes);
             }
 
-            var project = MigrationProject.Load(extractTo, manifest.Provider);
+            var project = MigrationProject.Load(extractTo, manifest.Provider, includes: includes?.Invoke(manifest.Provider));
             if (!string.Equals(project.HeadChainId, manifest.PlanHead, StringComparison.Ordinal))
             {
                 throw new MigrationException($"Bundle '{bundlePath}' failed verification: its plan head is {project.HeadChainId ?? "(empty)"} but the manifest says {manifest.PlanHead ?? "(empty)"}.");

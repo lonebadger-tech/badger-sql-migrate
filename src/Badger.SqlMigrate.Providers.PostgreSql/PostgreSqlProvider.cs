@@ -25,6 +25,8 @@ public sealed class PostgreSqlProvider : IDatabaseProvider
 
     public IScriptParser Parser { get; } = new PostgreSqlStatementSplitter();
 
+    public IScriptIncludes Includes { get; } = new PostgreSqlIncludes();
+
     public IScriptLinter Linter { get; } = new PostgreSqlLinter();
 
     public IStateStore StateStore { get; } = new PostgreSqlStateStore();
@@ -34,6 +36,10 @@ public sealed class PostgreSqlProvider : IDatabaseProvider
     public ISchemaInspector Schema { get; } = new PostgreSqlSchemaInspector();
 
     public IEnvironmentResources? Resources => null;
+
+    public ISchemaScripter Scripter { get; } = new Scripting.PostgreSqlScripter();
+
+    public IScratchDatabases ScratchDatabases => new Scripting.PostgreSqlScratchDatabases(this);
 
     public string DefaultSchema => "public";
 
@@ -45,6 +51,7 @@ public sealed class PostgreSqlProvider : IDatabaseProvider
 
     public async Task<IDatabaseSession> OpenSessionAsync(DeploymentEnvironment environment, SessionContext context, CancellationToken cancellationToken)
     {
+        var fingerprint = PostgreSqlFingerprintSettings.From(environment);
         var (builder, description) = await PostgreSqlConnectionFactory.BuildAsync(environment, context, cancellationToken).ConfigureAwait(false);
         var connection = new NpgsqlConnection(builder.ConnectionString);
         try
@@ -57,7 +64,7 @@ public sealed class PostgreSqlProvider : IDatabaseProvider
             throw new MigrationException($"Could not connect to {description}: {ex.Message}", ex);
         }
 
-        return new PostgreSqlSession(connection, description);
+        return new PostgreSqlSession(connection, description) { Fingerprint = fingerprint };
     }
 
     public async Task<IReadOnlyList<KeyValuePair<string, string>>> DescribeAsync(IDatabaseSession session, CancellationToken cancellationToken)

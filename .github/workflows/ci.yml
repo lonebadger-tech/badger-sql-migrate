@@ -18,6 +18,22 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet build -c Release
-      # SQL Server conformance tests run where Docker is available (ubuntu) and skip elsewhere.
+      # SQL Server and PostgreSQL (18) database tests run where Docker is available (ubuntu) and skip elsewhere.
       - run: dotnet test -c Release --no-build
       - run: dotnet run -c Release --no-build --project src/Badger.SqlMigrate.Cli -- plan check -C samples/demo-db
+
+  # Every supported PostgreSQL major version: the provider's conformance and feature tests against each.
+  postgresql:
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['12', '13', '14', '15', '16', '17', '18']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test tests/Badger.SqlMigrate.Providers.PostgreSql.Tests -c Release
+        env:
+          BSM_TEST_POSTGRES_IMAGE: postgres:${{ matrix.version }}

@@ -5,8 +5,9 @@ using Badger.SqlMigrate.Core.Providers;
 namespace Badger.SqlMigrate.Providers.PostgreSql;
 
 /// <summary>
-/// Checks statement by statement (after splitting): statements PostgreSQL refuses inside a transaction block
-/// need !notx, explicit transaction control would end bsm's transaction, and psql-only syntax is not SQL.
+/// Checks statement by statement (after splitting, across every \if branch): statements PostgreSQL refuses inside a
+/// transaction block need !notx, explicit transaction control would end bsm's transaction, and psql commands bsm
+/// cannot run (\c, \o, \!, \gset ...) are reported.
 /// </summary>
 public sealed partial class PostgreSqlLinter : IScriptLinter
 {
@@ -16,21 +17,16 @@ public sealed partial class PostgreSqlLinter : IScriptLinter
     {
         var diagnostics = new List<LintDiagnostic>();
         var transactional = !context.Flags.HasFlag(ChangeFlags.NoTransaction);
-        foreach (var batch in splitter.Split(script))
+        var scan = splitter.Analyze(script);
+        foreach (var (line, message) in scan.Problems)
+        {
+            diagnostics.Add(new(LintSeverity.Error, message, line, "BSM005"));
+        }
+
+        foreach (var batch in scan.Batches)
         {
             var text = StripComments(batch.Text);
             var line = batch.StartLine + LeadingLines(batch.Text);
-
-            if (MetaCommandRegex().Match(text) is { Success: true } meta)
-            {
-                diagnostics.Add(new(LintSeverity.Error, $"'{meta.Value.Trim()}' is a psql meta-command, not SQL; bsm sends statements to the server directly. Remove it.", line, "BSM005"));
-                continue;
-            }
-
-            if (CopyFromStdinRegex().IsMatch(text))
-            {
-                diagnostics.Add(new(LintSeverity.Error, "COPY ... FROM STDIN needs psql to stream the data. Use INSERT statements, or COPY from a file the server can read.", line, "BSM006"));
-            }
 
             if (transactional && NonTransactionalRegex().Match(text) is { Success: true } m)
             {
@@ -48,7 +44,7 @@ public sealed partial class PostgreSqlLinter : IScriptLinter
             }
         }
 
-        return diagnostics;
+        return diagnostics.OrderBy(d => d.Line).ToList();
     }
 
     private static string StripComments(string sql) => CommentRegex().Replace(sql, " ").Trim();
@@ -69,12 +65,6 @@ public sealed partial class PostgreSqlLinter : IScriptLinter
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespaceRegex();
-
-    [GeneratedRegex(@"\A\\[a-zA-Z!?]+[^\n]*")]
-    private static partial Regex MetaCommandRegex();
-
-    [GeneratedRegex(@"\ACOPY\b[\s\S]*\bFROM\s+STDIN\b", RegexOptions.IgnoreCase)]
-    private static partial Regex CopyFromStdinRegex();
 
     [GeneratedRegex(@"\A(?:CREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY|DROP\s+INDEX\s+CONCURRENTLY|REINDEX\b[^;]*\bCONCURRENTLY|VACUUM|CREATE\s+DATABASE|DROP\s+DATABASE|ALTER\s+SYSTEM|CREATE\s+TABLESPACE|DROP\s+TABLESPACE|CREATE\s+SUBSCRIPTION|DROP\s+SUBSCRIPTION|ALTER\s+DATABASE\b[^;]*\bSET\s+TABLESPACE)\b", RegexOptions.IgnoreCase)]
     private static partial Regex NonTransactionalRegex();

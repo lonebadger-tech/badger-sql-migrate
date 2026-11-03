@@ -33,6 +33,9 @@ public interface IDatabaseProvider
 
     IScriptParser Parser { get; }
 
+    /// <summary>Include directives expanded when a project loads (psql \i); null when the vendor's scripts have none.</summary>
+    IScriptIncludes? Includes => null;
+
     IScriptLinter Linter { get; }
 
     IStateStore StateStore { get; }

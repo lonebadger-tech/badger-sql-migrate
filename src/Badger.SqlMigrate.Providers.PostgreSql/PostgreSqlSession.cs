@@ -23,6 +23,9 @@ public sealed class PostgreSqlSession : IDatabaseSession
 
     public TimeSpan? CommandTimeout { get; set; }
 
+    /// <summary>What the schema fingerprint leaves out for this environment.</summary>
+    public PostgreSqlFingerprintSettings Fingerprint { get; init; } = PostgreSqlFingerprintSettings.Default;
+
     public async Task BeginTransactionAsync(CancellationToken cancellationToken)
     {
         if (transaction is not null)
@@ -90,6 +93,35 @@ public sealed class PostgreSqlSession : IDatabaseSession
         }
 
         return rows;
+    }
+
+    /// <summary>COPY ... FROM STDIN streams the batch's data; \gexec runs each value the query returns.</summary>
+    public async Task ExecuteBatchAsync(ScriptBatch batch, CancellationToken cancellationToken)
+    {
+        if (batch.CopyData is { } data)
+        {
+            await using (var writer = await connection.BeginTextImportAsync(batch.Text, cancellationToken).ConfigureAwait(false))
+            {
+                await writer.WriteAsync(data.AsMemory(), cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        if (batch.ExecuteResults)
+        {
+            foreach (var row in await QueryAsync(batch.Text, null, cancellationToken).ConfigureAwait(false))
+            {
+                foreach (var value in row.Values.OfType<object>())
+                {
+                    await ExecuteAsync(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)!, null, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            return;
+        }
+
+        await ExecuteAsync(batch.Text, null, cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()

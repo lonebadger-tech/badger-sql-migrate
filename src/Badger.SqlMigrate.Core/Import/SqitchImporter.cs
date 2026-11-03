@@ -198,8 +198,8 @@ public static partial class SqitchImporter
         return result;
     }
 
-    /// <summary>Sqitch engines whose registry bsm can read (PostgreSQL and wire-compatible).</summary>
-    public static bool IsPostgres(string? engine) => engine is "pg" or "postgres" or "postgresql" or "cockroach";
+    /// <summary>Sqitch engines bsm's PostgreSQL provider runs (CockroachDB speaks the protocol but lacks advisory locks and pg_catalog parity).</summary>
+    public static bool IsPostgres(string? engine) => engine is "pg" or "postgres" or "postgresql";
 
     private static string Read(string path, ImportedProject result) => result.EscapeLiteral(File.ReadAllText(path, Encoding.UTF8), System.IO.Path.GetFileName(path));
 

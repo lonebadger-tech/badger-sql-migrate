@@ -247,7 +247,7 @@ public static class Commands
         RequireWorkingCopy(g, "import");
         var imported = SqitchImporter.Import(new SqitchImportOptions { Path = path, Engine = engine });
         // Sqitch projects for PostgreSQL ("pg") move to the PostgreSQL provider unless told otherwise.
-        providerId ??= imported.SourceEngine is "pg" or "postgres" or "postgresql" or "cockroach" ? PostgreSqlProvider.ProviderId : SqlServerProvider.ProviderId;
+        providerId ??= SqitchImporter.IsPostgres(imported.SourceEngine) ? PostgreSqlProvider.ProviderId : SqlServerProvider.ProviderId;
         return WriteImport(g, imported, dryRun, Providers.Resolve(providerId));
     }
 
@@ -333,7 +333,7 @@ public static class Commands
         }
 
         Write();
-        var project = MigrationProject.Load(dir, provider.Id);
+        var project = MigrationProject.Load(dir, provider.Id, includes: provider.Includes);
         foreach (var problem in project.Problems)
         {
             g.Out.Error(problem);
@@ -509,7 +509,7 @@ public static class Commands
                 ConnectionProperties = shadow.Environment.ConnectionProperties,
             };
             await using var shadowSession = await ctx.Provider.OpenSessionAsync(shadowEnvironmentSettings, shadowContext, ct);
-            var project = MigrationProject.Load(Open(g).ProjectDir, ctx.Provider.Id, ctx.Environment.Name);
+            var project = MigrationProject.Load(Open(g).ProjectDir, ctx.Provider.Id, ctx.Environment.Name, ctx.Provider.Includes);
             var shadowEngine = new MigrationEngine(project, ctx.Provider, shadowEnvironmentSettings, shadowSession, Actor.Current(ToolVersion), NullMigrationLog.Instance, ParseVariables(g.Variables))
             {
                 Preprocessing = ctx.Config.Preprocessor,
@@ -574,7 +574,7 @@ public static class Commands
         g.Out.Info($"  {MigrationProject.ChangesFolder}/{name}/{MigrationProject.RevertFile}");
         if (record)
         {
-            var project = MigrationProject.Load(Open(g).ProjectDir, ctx.Provider.Id, ctx.Environment.Name);
+            var project = MigrationProject.Load(Open(g).ProjectDir, ctx.Provider.Id, ctx.Environment.Name, ctx.Provider.Includes);
             var engine = new MigrationEngine(project, ctx.Provider, ctx.Environment, ctx.Session, Actor.Current(ToolVersion), g.Out, ParseVariables(g.Variables))
             {
                 Preprocessing = ctx.Config.Preprocessor,
@@ -847,7 +847,7 @@ public static class Commands
         var config = BsmConfig.Load(ws.ConfigDir);
         var provider = Providers.Resolve(config.Provider);
         var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
-        var project = MigrationProject.Load(ws.ProjectDir, provider.Id, environment.Name);
+        var project = MigrationProject.Load(ws.ProjectDir, provider.Id, environment.Name, provider.Includes);
         var engine = new MigrationEngine(project, provider, environment, OfflineSession.Instance, Actor.Current(ToolVersion), g.Out, ParseVariables(g.Variables))
         {
             Preprocessing = config.Preprocessor,
@@ -1174,9 +1174,9 @@ public static class Commands
         var dir = Path.GetFullPath(g.ProjectDir);
         var config = BsmConfig.Load(dir);
         var provider = Providers.Resolve(config.Provider);
-        var head = MigrationProject.Load(dir, provider.Id).HeadChainId;
+        var head = MigrationProject.Load(dir, provider.Id, includes: provider.Includes).HeadChainId;
         output ??= $"bsm-bundle-{(head is null ? "empty" : head[..12])}.zip";
-        var manifest = ProjectBundle.Create(dir, provider.Id, output, includeConfig: !noConfig, ToolVersion);
+        var manifest = ProjectBundle.Create(dir, provider.Id, output, includeConfig: !noConfig, ToolVersion, provider.Includes);
         if (g.Out.Json)
         {
             g.Out.WriteJson(new { path = Path.GetFullPath(output), manifest });
@@ -1412,7 +1412,7 @@ public static class Commands
         if (from is not null)
         {
             var (schema, table) = SplitTable(journal, from, ctx.Provider.DefaultSchema);
-            var project = MigrationProject.Load(Open(g).ProjectDir, ctx.Provider.Id, ctx.Environment.Name);
+            var project = MigrationProject.Load(Open(g).ProjectDir, ctx.Provider.Id, ctx.Environment.Name, ctx.Provider.Includes);
             string Rendered(RepeatableScript r) => ctx.Engine.Render(r.Name, "repeatable", r.Script).Text;
             switch (from.ToLowerInvariant())
             {
@@ -1669,7 +1669,7 @@ public static class Commands
         var ws = Open(g);
         var config = BsmConfig.Load(ws.ConfigDir);
         var provider = Providers.Resolve(config.Provider);
-        return (MigrationProject.Load(ws.ProjectDir, provider.Id), provider);
+        return (MigrationProject.Load(ws.ProjectDir, provider.Id, includes: provider.Includes), provider);
     }
 
     private static readonly Dictionary<string, Workspace> OpenedBundles = new(StringComparer.Ordinal);
@@ -1704,7 +1704,7 @@ public static class Commands
             }
         };
 
-        var manifest = ProjectBundle.Extract(bundle, extracted);
+        var manifest = ProjectBundle.Extract(bundle, extracted, id => Providers.Resolve(id).Includes);
         if (!manifest.IncludesConfig && !File.Exists(Path.Combine(dir, BsmConfig.FileName)))
         {
             throw new MigrationException($"The bundle has no {BsmConfig.FileName} and there is none in '{dir}'. Pass --project <dir with {BsmConfig.FileName}>.");
@@ -1738,7 +1738,7 @@ public static class Commands
             throw new MigrationException(string.Join("\n", problems));
         }
 
-        var project = MigrationProject.Load(dir, provider.Id, environment.Name);
+        var project = MigrationProject.Load(dir, provider.Id, environment.Name, provider.Includes);
         var (context, tunnel) = Prepare(g, provider, environment, ws.BaseDir);
         try
         {

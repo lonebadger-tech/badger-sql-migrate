@@ -9,7 +9,8 @@ namespace Badger.SqlMigrate.Providers.PostgreSql.Tests;
 
 /// <summary>
 /// One PostgreSQL for the whole run: BSM_TEST_POSTGRES (a connection string to an existing server) or a
-/// Testcontainers postgres:17 container. When neither is available the database tests skip.
+/// Testcontainers container of BSM_TEST_POSTGRES_IMAGE (default postgres:18; CI runs 12 through 18).
+/// When neither is available the database tests skip.
 /// </summary>
 public sealed class PostgreSqlFixture : IAsyncLifetime
 {
@@ -30,7 +31,7 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
 
         try
         {
-            container = new PostgreSqlBuilder("postgres:17").Build();
+            container = new PostgreSqlBuilder(Environment.GetEnvironmentVariable("BSM_TEST_POSTGRES_IMAGE") is { Length: > 0 } image ? image : "postgres:18").Build();
             await container.StartAsync();
             AdminConnectionString = container.GetConnectionString();
         }
@@ -79,7 +80,10 @@ public sealed class TestDatabase(string admin, string name) : IConformanceDataba
         NpgsqlConnection.ClearAllPools();
         await using var connection = new NpgsqlConnection(admin);
         await connection.OpenAsync();
-        await using var drop = new NpgsqlCommand($"DROP DATABASE \"{name}\" WITH (FORCE);", connection);
+        // DROP DATABASE ... WITH (FORCE) needs PostgreSQL 13; this works on 12 too.
+        await using var terminate = new NpgsqlCommand($"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{name}' AND pid <> pg_backend_pid();", connection);
+        await terminate.ExecuteNonQueryAsync();
+        await using var drop = new NpgsqlCommand($"DROP DATABASE \"{name}\";", connection);
         await drop.ExecuteNonQueryAsync();
     }
 }

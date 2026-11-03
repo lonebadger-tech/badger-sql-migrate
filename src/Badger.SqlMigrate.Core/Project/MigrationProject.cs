@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Badger.SqlMigrate.Core.Hashing;
 using Badger.SqlMigrate.Core.Plan;
+using Badger.SqlMigrate.Core.Providers;
 
 namespace Badger.SqlMigrate.Core.Project;
 
@@ -24,8 +25,9 @@ public sealed partial class MigrationProject
     public const string RevertFile = "revert.sql";
     public const string VerifyFile = "verify.sql";
 
-    private MigrationProject(string root, string providerId, PlanFile plan, IReadOnlyList<MigrationChange> changes, IReadOnlyList<RepeatableScript> repeatables, IReadOnlyList<string> problems)
+    private MigrationProject(string root, string providerId, PlanFile plan, IReadOnlyList<MigrationChange> changes, IReadOnlyList<RepeatableScript> repeatables, IReadOnlyList<string> problems, IReadOnlyList<string> includedFiles)
     {
+        IncludedFiles = includedFiles;
         Root = root;
         ProviderId = providerId;
         Plan = plan;
@@ -48,13 +50,17 @@ public sealed partial class MigrationProject
     /// <summary>Plan and folder consistency problems. A project with problems must not be deployed.</summary>
     public IReadOnlyList<string> Problems { get; }
 
+    /// <summary>Files scripts include (psql \i, \copy data), relative to the root with forward slashes.</summary>
+    public IReadOnlyList<string> IncludedFiles { get; }
+
     /// <summary>The chain id of the last change in the plan: the certificate of the whole plan.</summary>
     public string? HeadChainId => Changes.Count == 0 ? null : Changes[^1].ChainId;
 
     public MigrationChange? Find(string name) => Changes.FirstOrDefault(c => string.Equals(c.Name, name, StringComparison.Ordinal));
 
     /// <param name="environmentName">When set, scripts under environments/&lt;name&gt;/ are added after the shared repeatables.</param>
-    public static MigrationProject Load(string root, string providerId, string? environmentName = null)
+    /// <param name="includes">The provider's include directives, expanded into the scripts (and so into their hashes).</param>
+    public static MigrationProject Load(string root, string providerId, string? environmentName = null, IScriptIncludes? includes = null)
     {
         root = Path.GetFullPath(root);
         var planPath = Path.Combine(root, PlanFile.FileName);
@@ -65,6 +71,27 @@ public sealed partial class MigrationProject
 
         var plan = PlanFile.Load(planPath);
         var problems = PlanValidator.Validate(plan).ToList();
+        var included = new HashSet<string>(StringComparer.Ordinal);
+        string Read(string path)
+        {
+            var text = ContentHasher.ReadNormalized(path);
+            if (includes is null)
+            {
+                return text;
+            }
+
+            try
+            {
+                return ContentHasher.Normalize(includes.Expand(text, path, root, included));
+            }
+            catch (MigrationException ex)
+            {
+                problems.Add($"{Path.GetRelativePath(root, path).Replace('\\', '/')}: {ex.Message}");
+                return text;
+            }
+        }
+
+        string? ReadIfExists(string path) => File.Exists(path) ? Read(path) : null;
         var changes = new List<MigrationChange>();
         string? parent = null;
 
@@ -78,13 +105,13 @@ public sealed partial class MigrationProject
                 continue;
             }
 
-            var revert = ReadOptional(Path.Combine(dir, RevertFile));
+            var revert = ReadIfExists(Path.Combine(dir, RevertFile));
             if (revert is null && !planned.Flags.HasFlag(ChangeFlags.Irreversible))
             {
                 problems.Add($"change '{planned.Name}' has no {RevertFile}. Add one or mark the change !irreversible in the plan.");
             }
 
-            var change = new MigrationChange(planned, ContentHasher.ReadNormalized(deployPath), revert, ReadOptional(Path.Combine(dir, VerifyFile)));
+            var change = new MigrationChange(planned, Read(deployPath), revert, ReadIfExists(Path.Combine(dir, VerifyFile)));
             change.ChainId = MigrationChange.ComputeChainId(providerId, change.Name, change.ScriptHash, parent);
             parent = change.ChainId;
             changes.Add(change);
@@ -103,17 +130,18 @@ public sealed partial class MigrationProject
             }
         }
 
-        var repeatables = LoadRepeatables(Path.Combine(root, RepeatableFolder), string.Empty, problems);
+        var repeatables = LoadRepeatables(Path.Combine(root, RepeatableFolder), string.Empty, problems, Read);
         if (environmentName is not null)
         {
             var shared = repeatables.Select(r => r.Name).ToHashSet(StringComparer.Ordinal);
-            repeatables.AddRange(LoadRepeatables(Path.Combine(root, EnvironmentsFolder, environmentName), $"@{environmentName}/", problems, shared));
+            repeatables.AddRange(LoadRepeatables(Path.Combine(root, EnvironmentsFolder, environmentName), $"@{environmentName}/", problems, Read, shared));
         }
 
-        return new MigrationProject(root, providerId, plan, changes, repeatables, problems);
+        var includedFiles = included.Select(f => Path.GetRelativePath(root, f).Replace('\\', '/')).Order(StringComparer.Ordinal).ToList();
+        return new MigrationProject(root, providerId, plan, changes, repeatables, problems, includedFiles);
     }
 
-    private static List<RepeatableScript> LoadRepeatables(string dir, string prefix, List<string> problems, IReadOnlySet<string>? alreadyApplied = null)
+    private static List<RepeatableScript> LoadRepeatables(string dir, string prefix, List<string> problems, Func<string, string> read, IReadOnlySet<string>? alreadyApplied = null)
     {
         if (!Directory.Exists(dir))
         {
@@ -124,7 +152,7 @@ public sealed partial class MigrationProject
             .Select(path =>
             {
                 var name = prefix + Path.GetRelativePath(dir, path).Replace('\\', '/');
-                var text = ContentHasher.ReadNormalized(path);
+                var text = read(path);
                 var requires = RequiresHeader().Matches(text)
                     .SelectMany(m => m.Groups[1].Value.Split([' ', ','], StringSplitOptions.RemoveEmptyEntries))
                     .ToList();
@@ -181,8 +209,6 @@ public sealed partial class MigrationProject
 
         return ordered;
     }
-
-    private static string? ReadOptional(string path) => File.Exists(path) ? ContentHasher.ReadNormalized(path) : null;
 
     [GeneratedRegex(@"^\s*--\s*bsm:requires\s+(.+)$", RegexOptions.Multiline)]
     private static partial Regex RequiresHeader();

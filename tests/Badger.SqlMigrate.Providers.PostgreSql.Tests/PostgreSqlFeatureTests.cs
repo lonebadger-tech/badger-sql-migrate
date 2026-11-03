@@ -110,6 +110,184 @@ public sealed class PostgreSqlFeatureTests(PostgreSqlFixture fixture)
         }
     }
 
+    private const string Extras = """
+        CREATE TABLE app.note (id int PRIMARY KEY, body text, a int, b int) WITH (fillfactor = 70);
+        ALTER TABLE app.note ALTER COLUMN body SET STORAGE EXTERNAL;
+        COMMENT ON TABLE app.note IS 'Free-form notes';
+        COMMENT ON COLUMN app.note.body IS 'Markdown';
+        CREATE STATISTICS app.note_ab (dependencies) ON a, b FROM app.note;
+        CREATE RULE note_no_delete AS ON DELETE TO app.note DO INSTEAD NOTHING;
+        CREATE FUNCTION app.add_int(int, int) RETURNS int LANGUAGE sql IMMUTABLE AS 'SELECT $1 + $2';
+        CREATE AGGREGATE app.total(int) (SFUNC = app.add_int, STYPE = int, INITCOND = '0');
+        CREATE OPERATOR app.=== (LEFTARG = int, RIGHTARG = int, FUNCTION = app.add_int);
+        CREATE TYPE app.money2 AS (amount numeric, currency char(3));
+        CREATE FUNCTION app.money2_text(app.money2) RETURNS text LANGUAGE sql AS 'SELECT ($1).amount || '' '' || ($1).currency';
+        CREATE CAST (app.money2 AS text) WITH FUNCTION app.money2_text(app.money2);
+        CREATE COLLATION app.german (provider = libc, locale = 'C');
+        CREATE TEXT SEARCH CONFIGURATION app.plain (COPY = pg_catalog.simple);
+        CREATE PUBLICATION note_changes FOR TABLE app.note;
+        CREATE FOREIGN DATA WRAPPER dummy_fdw;
+        CREATE SERVER archive FOREIGN DATA WRAPPER dummy_fdw OPTIONS (region 'eu');
+        CREATE USER MAPPING FOR bsm_test_reader SERVER archive;
+        GRANT USAGE ON SCHEMA app TO bsm_test_reader;
+        GRANT SELECT ON app.customer TO bsm_test_reader;
+        GRANT SELECT (body) ON app.note TO bsm_test_reader;
+        GRANT EXECUTE ON FUNCTION app.add_int(int, int) TO bsm_test_reader;
+        ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT ON TABLES TO bsm_test_reader;
+        CREATE FUNCTION app.log_ddl() RETURNS event_trigger LANGUAGE plpgsql AS $$ BEGIN RAISE NOTICE 'ddl'; END $$;
+        CREATE EVENT TRIGGER log_ddl ON ddl_command_end EXECUTE FUNCTION app.log_ddl();
+        """;
+
+    [SkippableFact]
+    public async Task The_fingerprint_covers_privileges_comments_storage_and_less_common_objects()
+    {
+        Skip.If(fixture.AdminConnectionString is null, fixture.UnavailableReason);
+        await EnsureRoleAsync();
+        await using var a = await fixture.CreateDatabaseAsync();
+        await using var b = await fixture.CreateDatabaseAsync();
+        using var project = new ProjectDir();
+        project.Change("app-schema", Schema, Revert);
+        project.Change("extras", Extras, "SELECT 1;");
+
+        string dump;
+        await using (var e = await EngineAsync(a, project))
+        {
+            await e.Engine.DeployAsync(new DeployOptions());
+            dump = await e.Engine.CaptureSchemaAsync();
+        }
+
+        foreach (var expected in new[]
+        {
+            "grant|table app.customer|bsm_test_reader|SELECT",
+            "grant|table column app.note.body|bsm_test_reader|SELECT",
+            "grant|function app.add_int(integer,integer)|bsm_test_reader|EXECUTE",
+            "grant|schema app|bsm_test_reader|USAGE",
+            "default privileges|",
+            "comment|table app.note|Free-form notes",
+            "comment|table column app.note.body|Markdown",
+            "fillfactor=70",
+            "|body|text|false||||||e",
+            "statistics|app.note_ab|CREATE STATISTICS app.note_ab (dependencies) ON a, b FROM app.note",
+            "rule|app.note|note_no_delete|CREATE RULE note_no_delete AS",
+            "aggregate|app.total(integer)|n|app.add_int|integer|-|",
+            "operator|app.===(integer, integer)|app.add_int|integer|",
+            "cast|app.money2 AS text|app.money2_text(app.money2)|e|f",
+            "collation|app.german|c|true|C|C",
+            "text search configuration|app.plain|default|",
+            "publication|note_changes|false|true,true,true,true|app.note",
+            "foreign data wrapper|dummy_fdw|-|-|",
+            "server|archive|dummy_fdw|||region=eu",
+            "user mapping|archive|bsm_test_reader",
+            "event trigger|log_ddl|ddl_command_end|app.log_ddl()|O|",
+        })
+        {
+            Assert.Contains(expected, dump, StringComparison.Ordinal);
+        }
+
+        await using (var e = await EngineAsync(b, project))
+        {
+            await e.Engine.DeployAsync(new DeployOptions());
+            Assert.Equal(dump, await e.Engine.CaptureSchemaAsync());
+
+            // A grant made outside bsm is drift.
+            await e.Session.ExecuteAsync("GRANT INSERT ON app.customer TO bsm_test_reader;", null, CancellationToken.None);
+            var verify = await e.Engine.VerifyAsync();
+            Assert.False(verify.Ok);
+            var diff = SchemaDiff.Compare(provider.Schema.Parse((await e.Engine.GetRecordedSchemaAsync())!.Dump), provider.Schema.Parse(await e.Engine.CaptureSchemaAsync()));
+            Assert.Equal("grant table app.customer to bsm_test_reader INSERT", Assert.Single(diff).Key);
+            await e.Session.ExecuteAsync("DROP EVENT TRIGGER log_ddl;", null, CancellationToken.None);
+        }
+
+        await using (var e = await EngineAsync(a, project))
+        {
+            await e.Session.ExecuteAsync("DROP EVENT TRIGGER log_ddl;", null, CancellationToken.None);
+        }
+    }
+
+    [SkippableFact]
+    public async Task Privileges_and_job_maintained_partitions_can_be_left_out()
+    {
+        Skip.If(fixture.AdminConnectionString is null, fixture.UnavailableReason);
+        await EnsureRoleAsync();
+        await using var db = await fixture.CreateDatabaseAsync();
+        using var project = new ProjectDir();
+        project.Change("app-schema", Schema, Revert);
+        var settings = (System.Text.Json.Nodes.JsonObject)System.Text.Json.Nodes.JsonNode.Parse("""{ "schemaFingerprint": { "partitionBoundaries": "ignore", "privileges": "ignore" } }""")!;
+        var environment = db.Profile with { ProviderSettings = settings };
+        Assert.Empty(provider.ValidateEnvironment(environment with { Host = "x" }));
+
+        await using var session = await provider.OpenSessionAsync(environment, SessionContext.Empty, CancellationToken.None);
+        var engine = new MigrationEngine(MigrationProject.Load(project.Root, provider.Id), provider, environment, session, new Actor("tests", "host", "0.0.0"));
+        await engine.DeployAsync(new DeployOptions());
+        var before = await engine.CaptureSchemaAsync();
+        Assert.Contains("table|app.sale|p|", before, StringComparison.Ordinal);
+        Assert.DoesNotContain("app.sale_2026", before, StringComparison.Ordinal);
+
+        // What a partition-maintenance job and a DBA do outside bsm: neither is drift with these settings.
+        await session.ExecuteAsync("CREATE TABLE app.sale_2027 PARTITION OF app.sale FOR VALUES FROM ('2027-01-01') TO ('2028-01-01');", null, CancellationToken.None);
+        await session.ExecuteAsync("GRANT SELECT ON app.sale TO bsm_test_reader;", null, CancellationToken.None);
+        Assert.True((await engine.VerifyAsync()).Ok);
+        Assert.Equal(before, await engine.CaptureSchemaAsync());
+
+        Assert.Contains(provider.ValidateEnvironment(environment with { Host = "x", ProviderSettings = (System.Text.Json.Nodes.JsonObject)System.Text.Json.Nodes.JsonNode.Parse("""{ "schemaFingerprint": { "privileges": "sometimes" } }""")! }),
+            p => p.Contains("invalid schemaFingerprint settings", StringComparison.Ordinal));
+    }
+
+    private async Task EnsureRoleAsync()
+    {
+        await using var admin = new Npgsql.NpgsqlConnection(fixture.AdminConnectionString);
+        await admin.OpenAsync();
+        await using var create = new Npgsql.NpgsqlCommand("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bsm_test_reader') THEN CREATE ROLE bsm_test_reader; END IF; END $$;", admin);
+        await create.ExecuteNonQueryAsync();
+    }
+
+    [SkippableFact]
+    public async Task Psql_scripts_run_with_variables_conditionals_copy_data_echo_and_gexec()
+    {
+        Skip.If(fixture.AdminConnectionString is null, fixture.UnavailableReason);
+        await using var db = await fixture.CreateDatabaseAsync();
+        using var project = new ProjectDir();
+        project.Write("data/customers.csv", "id,name,region\n1,Ada,eu\n2,Grace,us\n");
+        project.Change("seed", """
+            \set ON_ERROR_STOP on
+            \set tbl customer
+            CREATE TABLE :"tbl" (id int PRIMARY KEY, name text NOT NULL, region text NOT NULL);
+            \if :is_prod
+            INSERT INTO :"tbl" VALUES (0, 'prod only', :'region');
+            \else
+            \copy customer (id, name, region) from 'data/customers.csv' with (format csv, header)
+            \endif
+            COPY customer (id, name, region) FROM STDIN;
+            9	inline; not split	:region
+            \.
+            \echo seeded :tbl in :region
+            SELECT format('CREATE INDEX %I ON customer (%I)', 'customer_' || c || '_idx', c) FROM unnest(ARRAY['name', 'region']) c
+            \gexec
+            """, "DROP TABLE customer;");
+        var profile = db.Profile with { Variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["region"] = "eu", ["is_prod"] = "off" } };
+
+        var messages = new List<string>();
+        await using (var e = await EngineAsync(db, project, messages, profile))
+        {
+            Assert.Equal(["seed"], (await e.Engine.DeployAsync(new DeployOptions())).Deployed);
+            var rows = await e.Session.QueryAsync("SELECT string_agg(id || ':' || name || ':' || region, ',' ORDER BY id) AS r FROM customer;", null, CancellationToken.None);
+            Assert.Equal("1:Ada:eu,2:Grace:us,9:inline; not split::region", rows[0]["r"]);
+            var indexes = await e.Session.QueryAsync("SELECT count(*) AS n FROM pg_indexes WHERE tablename = 'customer' AND indexname LIKE 'customer_%_idx';", null, CancellationToken.None);
+            Assert.Equal(2L, indexes[0]["n"]);
+            Assert.True((await e.Engine.VerifyAsync()).Ok);
+            Assert.True((await e.Engine.StatusAsync()).Certified);
+        }
+
+        Assert.Contains(messages, m => m.Contains("seeded customer in eu", StringComparison.Ordinal));
+
+        // The data file is part of the change: the journal holds the expanded script, so revert needs nothing on disk.
+        File.Delete(Path.Combine(project.Root, "data", "customers.csv"));
+        await using (var e = await EngineAsync(db, new ProjectDir(), profile: profile))
+        {
+            Assert.Equal(["seed"], (await e.Engine.RevertAsync(new RevertOptions { All = true })).Reverted);
+        }
+    }
+
     [SkippableFact]
     public async Task Errors_name_the_statement_line_and_roll_back()
     {
@@ -136,11 +314,11 @@ public sealed class PostgreSqlFeatureTests(PostgreSqlFixture fixture)
         Assert.Equal("app, public", (await session.QueryAsync("SHOW search_path;", null, CancellationToken.None))[0]["search_path"]);
     }
 
-    private async Task<EngineHandle> EngineAsync(TestDatabase db, ProjectDir project, List<string>? messages = null)
+    private async Task<EngineHandle> EngineAsync(TestDatabase db, ProjectDir project, List<string>? messages = null, DeploymentEnvironment? profile = null)
     {
-        var session = await provider.OpenSessionAsync(db.Profile, SessionContext.Empty, CancellationToken.None);
+        var session = await provider.OpenSessionAsync(profile ?? db.Profile, SessionContext.Empty, CancellationToken.None);
         var log = new ListLog(messages ?? []);
-        var engine = new MigrationEngine(MigrationProject.Load(project.Root, provider.Id), provider, db.Profile, session, new Actor("tests", "host", "0.0.0"), log);
+        var engine = new MigrationEngine(MigrationProject.Load(project.Root, provider.Id, includes: provider.Includes), provider, profile ?? db.Profile, session, new Actor("tests", "host", "0.0.0"), log);
         return new EngineHandle(engine, session);
     }
 
@@ -178,6 +356,13 @@ public sealed class PostgreSqlFeatureTests(PostgreSqlFixture fixture)
             File.WriteAllText(Path.Combine(dir, MigrationProject.DeployFile), deploy);
             File.WriteAllText(Path.Combine(dir, MigrationProject.RevertFile), revert);
             File.AppendAllText(Path.Combine(Root, "bsm.plan"), planLine + "\n");
+        }
+
+        public void Write(string relative, string text)
+        {
+            var path = Path.Combine(Root, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, text);
         }
 
         public void Dispose()

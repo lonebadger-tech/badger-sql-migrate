@@ -25,6 +25,17 @@ public interface IDatabaseSession : IAsyncDisposable
 
     Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string sql, IReadOnlyDictionary<string, object?>? parameters, CancellationToken cancellationToken);
 
+    /// <summary>Runs one batch of a script. Providers whose batches can carry COPY data or \gexec override this.</summary>
+    Task ExecuteBatchAsync(ScriptBatch batch, CancellationToken cancellationToken)
+    {
+        if (batch.CopyData is not null || batch.ExecuteResults)
+        {
+            throw new NotSupportedException($"{Description} cannot run COPY data or \\gexec batches.");
+        }
+
+        return ExecuteAsync(batch.Text, null, cancellationToken);
+    }
+
     /// <summary>Informational messages the server emitted (PRINT, RAISERROR with low severity, NOTICE).</summary>
     event Action<string>? Message;
 }

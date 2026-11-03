@@ -181,11 +181,13 @@ def releases():
   <h2>Version {VERSION} <span class="date">{RELEASE_DATE}</span></h2>
   <h3>PostgreSQL</h3>
   <ul>
-    <li>A PostgreSQL provider (PostgreSQL 12 and later, Azure Database for PostgreSQL, Amazon RDS and Aurora): <code>bsm init --provider postgresql</code></li>
+    <li>A PostgreSQL provider, tested on PostgreSQL 12 through 18: <code>bsm init --provider postgresql</code></li>
     <li>Everything SQL Server has: certified plans, revert from stored scripts, environments, variables, bundles, <code>diff-schema</code>, rework, repair and imports</li>
     <li>Statement splitting that understands dollar-quoted bodies; <code>CREATE INDEX CONCURRENTLY</code> and friends run in <code>!notx</code> changes</li>
     <li>Password, Kerberos and Entra ID sign-in (Azure Database for PostgreSQL), TLS modes, SSH tunnels, any Npgsql setting</li>
-    <li>A schema fingerprint over PostgreSQL's catalog: tables, partitions, constraints, indexes, views, functions, triggers, types, sequences, policies</li>
+    <li>A schema fingerprint over PostgreSQL's catalog, from tables, constraints and functions to grants, comments, policies, publications and foreign servers; partitions and privileges can be left out per environment</li>
+    <li><code>bsm add --from-diff</code> and <code>diff-schema --script</code> generate PostgreSQL DDL: tables, partitions, columns and renames, constraints, indexes, views, functions, triggers, policies, types, sequences, comments and grants, ordered by PostgreSQL's dependency catalog; what PostgreSQL cannot change in place is reported, not guessed</li>
+    <li>psql scripts run as they are: <code>\\i</code>/<code>\\ir</code> includes and <code>\\copy … from 'file'</code> become part of the change (hashed, stored, bundled); <code>\\set</code> and <code>:'variables'</code>, <code>\\if</code>, <code>\\echo</code>, <code>COPY … FROM STDIN</code> data and <code>\\gexec</code> work without psql</li>
     <li><code>bsm baseline --from sqitch</code> adopts PostgreSQL databases Sqitch deployed, checking its script hashes; imports take <code>--provider postgresql</code></li>
   </ul>
 </section>

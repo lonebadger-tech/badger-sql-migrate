@@ -90,7 +90,7 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 | `rework <change> [--as name]` | Add a change that supersedes a deployed one (copy of its deploy script; revert restores it) |
 | `repair <change>… \| --all [--reason text]` | Accept harmless edits to deployed changes (e.g. a fixed revert.sql) without running SQL; re-certifies |
 | `bundle create [-o file] [--no-config]` / `bundle verify <file>` | Hash-verified, byte-reproducible project bundle / check one |
-| `diff-schema [--against env] [--exit-code] [--script file]` | What changed since the last deploy, or how two environments differ; T-SQL to turn one into the other |
+| `diff-schema [--against env] [--exit-code] [--script file]` | What changed since the last deploy, or how two environments differ; SQL to turn one into the other |
 | `verify` | Hash check, run verify scripts, detect schema drift |
 | `log` | Deploy/revert/failure history from the database |
 | `baseline --to x \| --from flyway\|dbup\|grate\|roundhouse` | Adopt an existing database without running scripts (up to x, or as far as the old tool's journal says) |

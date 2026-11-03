@@ -85,9 +85,18 @@ public static class PostgreSqlConnectionFactory
             problems.Add($"environment '{name}': tls.hostNameInCertificate is not supported by PostgreSQL; with an SSH tunnel use tls.mode 'mandatory' (encrypt without host-name check) or connect by the certificate's host name.");
         }
 
-        foreach (var key in environment.ProviderSettings.Select(kv => kv.Key))
+        foreach (var key in environment.ProviderSettings.Select(kv => kv.Key).Where(k => !string.Equals(k, PostgreSqlFingerprintSettings.SectionName, StringComparison.OrdinalIgnoreCase)))
         {
-            problems.Add($"environment '{name}': unknown PostgreSQL setting '{key}'.");
+            problems.Add($"environment '{name}': unknown PostgreSQL setting '{key}'. Known: {PostgreSqlFingerprintSettings.SectionName}.");
+        }
+
+        try
+        {
+            PostgreSqlFingerprintSettings.From(environment);
+        }
+        catch (MigrationException ex)
+        {
+            problems.Add(ex.Message);
         }
 
         return problems;

@@ -6,12 +6,41 @@ namespace Badger.SqlMigrate.Core.Providers;
 public interface IScriptParser
 {
     IReadOnlyList<ScriptBatch> Split(string script);
+
+    /// <summary>
+    /// Splits a rendered script with the run's variables available to the vendor's client syntax (psql's
+    /// :name and \if). Default: variables are not used.
+    /// </summary>
+    IReadOnlyList<ScriptBatch> Split(string script, IReadOnlyDictionary<string, string> variables) => Split(script);
+
+    /// <summary>True when splitting changes the SQL (e.g. psql variables), so the rendered hash must cover the batches.</summary>
+    bool ExpandsText => false;
 }
 
 /// <param name="Text">SQL to send.</param>
 /// <param name="StartLine">1-based line in the original script, for error messages.</param>
 /// <param name="RepeatCount">How many times to execute (T-SQL "GO n").</param>
-public sealed record ScriptBatch(string Text, int StartLine, int RepeatCount = 1);
+public sealed record ScriptBatch(string Text, int StartLine, int RepeatCount = 1)
+{
+    /// <summary>Data streamed to a COPY ... FROM STDIN statement (psql inline data or \copy from a file).</summary>
+    public string? CopyData { get; init; }
+
+    /// <summary>Run the query, then run each value it returns as SQL (psql \gexec).</summary>
+    public bool ExecuteResults { get; init; }
+}
+
+/// <summary>
+/// Expands a client's include directives (psql \i, \ir, \copy from a file) when a project is loaded, so included
+/// text and data are part of the change: hashed, stored in the journal and bundled.
+/// </summary>
+public interface IScriptIncludes
+{
+    /// <param name="script">The script text.</param>
+    /// <param name="scriptPath">Its full path (relative includes resolve from its folder).</param>
+    /// <param name="projectRoot">The project folder; includes must stay inside it.</param>
+    /// <param name="included">Receives the full paths of every file read.</param>
+    string Expand(string script, string scriptPath, string projectRoot, ISet<string> included);
+}
 
 public enum LintSeverity
 {

@@ -706,7 +706,7 @@ public sealed class MigrationEngine
         {
             sb.AppendLine();
             sb.AppendLine(provider.FormatComment($"---- {item.Change.Name}  hash {item.Change.ScriptHash}"));
-            foreach (var batch in provider.Parser.Split(Render(item.Change.Name, "deploy", item.Change.DeployScript, item.Change.ScriptHash).Text))
+            foreach (var batch in provider.Parser.Split(Render(item.Change.Name, "deploy", item.Change.DeployScript, item.Change.ScriptHash).Text, ScriptVariables))
             {
                 sb.AppendLine(batch.Text.TrimEnd());
                 sb.AppendLine(provider.FormatBatchSeparator());
@@ -913,13 +913,23 @@ public sealed class MigrationEngine
     private async Task RunScriptAsync(string name, string kind, string script, CancellationToken cancellationToken)
     {
         var substituted = Render(name, kind, script, project.Find(name)?.ScriptHash).Text;
-        foreach (var batch in provider.Parser.Split(substituted))
+        IReadOnlyList<ScriptBatch> batches;
+        try
+        {
+            batches = provider.Parser.Split(substituted, ScriptVariables);
+        }
+        catch (MigrationException ex)
+        {
+            throw new MigrationException($"{name} ({kind}): {ex.Message}", ex);
+        }
+
+        foreach (var batch in batches)
         {
             for (var i = 0; i < batch.RepeatCount; i++)
             {
                 try
                 {
-                    await session.ExecuteAsync(batch.Text, null, cancellationToken).ConfigureAwait(false);
+                    await session.ExecuteBatchAsync(batch, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException and not MigrationException)
                 {
@@ -1122,10 +1132,39 @@ public sealed class MigrationEngine
                 return null;
             }
 
-            parts.Add((kind, rendered.Text));
+            // Client syntax such as psql's :name changes the SQL too, so the hash covers what is actually sent.
+            parts.Add((kind, provider.Parser.ExpandsText
+                ? string.Join("\n;\n", provider.Parser.Split(rendered.Text, ScriptVariables).Select(b => b.Text + (b.CopyData is null ? string.Empty : "\n" + b.CopyData)))
+                : rendered.Text));
         }
 
         return ContentHasher.HashParts([.. parts]);
+    }
+
+    private IReadOnlyDictionary<string, string>? scriptVariables;
+
+    /// <summary>
+    /// Built-in and user variables by name, resolved: what client syntax such as psql's :name can use. Per-change
+    /// (change.*) and per-run (deploy.*) values are left out so the same script always expands the same way.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> ScriptVariables => scriptVariables ??= BuildScriptVariables();
+
+    private Dictionary<string, string> BuildScriptVariables()
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var variable in Preprocessor.Describe().Where(v => !v.Volatile && !v.Name.StartsWith("change", StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                result[variable.Name] = Preprocessor.Resolve(variable.Name);
+            }
+            catch (MigrationException)
+            {
+                // A variable whose value cannot be resolved is simply not available.
+            }
+        }
+
+        return result;
     }
 
     private ScriptPreprocessor CreatePreprocessor()
