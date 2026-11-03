@@ -152,7 +152,7 @@ See [docs/methodology.md](docs/methodology.md). In short: every change's script 
 dotnet build
 dotnet test
 build/publish.sh        # release binaries for every platform, the .NET tool and SHA256SUMS into ./artifacts
-build/upload-release.sh # upload ./artifacts to the public downloads container the website links to
+build/mirror-release.sh # after a tagged release: copy its GitHub release files to the downloads container
 ```
 
 The website pages are generated from `docs/website/` into the site repository:

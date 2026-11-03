@@ -49,4 +49,4 @@ See [docs/writing-a-provider.md](docs/writing-a-provider.md). A provider is done
 
 ## Releases
 
-Maintainers release by pushing a `v<version>` tag on `dev`: `.github/workflows/release.yml` builds every platform, publishes the .NET tool to nuget.org and creates the GitHub release.
+Maintainers release by pushing a `v<version>` tag on `dev`: `.github/workflows/release.yml` builds every platform, publishes the .NET tool to nuget.org and creates the GitHub release. Then `build/mirror-release.sh` copies those exact files to the downloads container and `python3 docs/website/build.py ../badger-website/site` regenerates the download page from their `SHA256SUMS`, so every published hash matches. Don't upload a local build for a release: builds aren't byte-for-byte reproducible.

@@ -2,7 +2,8 @@ name: release
 
 # Push a tag like v0.1.0 to build every platform's binaries, the .NET tool package and SHA256SUMS,
 # publish the tool to nuget.org and attach the files to a GitHub release.
-# The website's download links point at the Azure blob container, which build/upload-release.sh fills.
+# The website's download links point at the Azure blob container: afterwards, build/mirror-release.sh copies
+# this release's files there, so the site, nuget.org and GitHub serve the same build.
 #
 # nuget.org uses Trusted Publishing, not an API key: a policy on nuget.org trusts this repository's
 # release.yml, and NuGet/login trades the job's GitHub OIDC token for a short-lived key.

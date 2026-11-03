@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Uploads ./artifacts (from build/publish.sh) to the public downloads container:
+# Uploads ./artifacts to the public downloads container (for a release, via build/mirror-release.sh):
 #   https://lonebadgerdownloads.blob.core.windows.net/badger-sql-migrate/v<version>/<file>
 # The website's download links (docs/website/build.py DOWNLOAD_BASE) point there. Needs `az login`.
 # Usage: build/upload-release.sh [version]   (default: version from Directory.Build.props)
