@@ -7,6 +7,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.14" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
@@ -18,7 +22,11 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>badger</ToolCommandName>
     <PackageId>Badger.SqlMigrate</PackageId>
-    <Description>Badger SQL Migrate: free, cross-platform, hash-certified database migrations with real up and down.</Description>
+    <Description>Badger SQL Migrate: free, cross-platform, hash-certified database migrations for SQL Server and Azure SQL, with real up and down, named changes, environments, Entra ID and Always Encrypted.</Description>
+    <PackageTags>sql-server;azure-sql;migrations;database;schema;devops;cli;entra-id;always-encrypted</PackageTags>
+    <PackageProjectUrl>https://lonebadger.tech/badger-sql-migrate/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/lonebadger-tech/badger-sql-migrate</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
 </Project>

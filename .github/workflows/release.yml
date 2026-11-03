@@ -1,0 +1,25 @@
+name: release
+
+# Push a tag like v0.1.0 to build every platform's binaries, the .NET tool package and SHA256SUMS,
+# and attach them to a GitHub release. The website's download links point at these assets.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test -c Release
+      - run: build/publish.sh "${GITHUB_REF_NAME#v}"
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" artifacts/* --title "Badger SQL Migrate ${GITHUB_REF_NAME#v}" --notes "See https://lonebadger.tech/badger-sql-migrate/releases/"

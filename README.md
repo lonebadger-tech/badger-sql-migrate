@@ -4,7 +4,7 @@ Free, cross-platform (Windows, macOS, Linux) database migrations with **real up 
 
 Day one ships the **SQL Server / Azure SQL** provider. The engine is vendor-neutral, so PostgreSQL, MySQL and SQLite can be added as providers without touching the engine or CLI.
 
-MIT licensed. © Lone Badger Tech, LLC.
+MIT licensed. © Lone Badger Tech, LLC. Documentation: [lonebadger.tech/badger-sql-migrate](https://lonebadger.tech/badger-sql-migrate/).
 
 ## Why another migration tool?
 
@@ -143,6 +143,13 @@ See [docs/methodology.md](docs/methodology.md). In short: every change's script 
 ```bash
 dotnet build
 dotnet test
+build/publish.sh        # release binaries for every platform, the .NET tool and SHA256SUMS into ./artifacts
+```
+
+The website pages are generated from `docs/website/` into the site repository:
+
+```bash
+python3 docs/website/build.py ../badger-sql/website
 ```
 
 The SQL Server conformance tests start SQL Server 2022 with Testcontainers (Docker required) or use `BADGER_TEST_SQLSERVER=<connection string>`. They skip when neither is available.
