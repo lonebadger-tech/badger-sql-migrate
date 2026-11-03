@@ -144,15 +144,15 @@ root.Subcommands.Add(log);
 
 // baseline
 var baselineTo = new Option<string?>("--to") { Description = "Mark changes up to this one as already applied." };
-var baselineFrom = new Option<string?>("--from") { Description = "flyway | dbup: read what the database already has from that tool's journal (for projects made with 'bsm import')." };
-baselineFrom.AcceptOnlyFromAmong("flyway", "dbup");
-var baselineJournal = new Option<string?>("--journal") { Description = "The tool's journal table, [schema.]table (default: dbo.flyway_schema_history or dbo.SchemaVersions)." };
-var baselineSkipChecksums = new Option<bool>("--skip-checksums") { Description = "Do not compare Flyway's recorded checksums with the imported scripts." };
+var baselineFrom = new Option<string?>("--from") { Description = "flyway | dbup | grate | roundhouse: read what the database already has from that tool's journal (for projects made with 'bsm import')." };
+baselineFrom.AcceptOnlyFromAmong("flyway", "dbup", "grate", "roundhouse");
+var baselineJournal = new Option<string?>("--journal") { Description = "The tool's journal table, [schema.]table (default: dbo.flyway_schema_history, dbo.SchemaVersions, grate.ScriptsRun or RoundhousE.ScriptsRun)." };
+var baselineSkipChecksums = new Option<bool>("--skip-checksums") { Description = "Do not compare Flyway's checksums or grate's hashes with the imported scripts." };
 var baseline = new Command("baseline", "Adopt an existing database: record changes as applied without running them.") { baselineTo, baselineFrom, baselineJournal, baselineSkipChecksums, yes };
 baseline.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Baseline(g, r.GetValue(baselineTo), r.GetValue(baselineFrom), r.GetValue(baselineJournal), r.GetValue(baselineSkipChecksums), r.GetValue(yes), ct)));
 
 // import
-var import = new Command("import", "Convert another tool's migrations into a new bsm project (written to --project).");
+var import = new Command("import", "Convert another tool's migrations (Flyway, DbUp, grate, Sqitch) into a new bsm project (written to --project).");
 var importPath = new Argument<string>("path") { Description = "The folder to import from." };
 var importDryRun = new Option<bool>("--dry-run") { Description = "Show what would be written without writing anything." };
 var flywayConfig = new Option<string?>("--config") { Description = "flyway.conf or flyway.toml (default: found in the folder or its conf/ folder)." };
@@ -166,6 +166,17 @@ var dbupNoVariables = new Option<bool>("--no-variables") { Description = "The pr
 var importDbUp = new Command("dbup", "Import DbUp scripts: one change per script in DbUp's order; $variables$ become {variables} (values via --var).") { importPath, dbupFileNames, dbupRunAlways, dbupNoVariables, importDryRun };
 importDbUp.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.ImportDbUp(g, r.GetValue(importPath)!, r.GetValue(dbupFileNames), r.GetValue(dbupRunAlways) ?? [], r.GetValue(dbupNoVariables), r.GetValue(importDryRun))));
 import.Subcommands.Add(importDbUp);
+var grateFolder = new Option<string[]>("--folder") { Description = "A renamed grate folder, key=name (e.g. up=ddl). Repeatable." };
+var grateEnvironments = new Option<string[]>("--environment") { Description = "Environment names used in *.ENV.* file names (default: the upper-case parts of those names). Repeatable or comma-separated." };
+var grateIgnoreDirs = new Option<bool>("--ignore-directory-names") { Description = "grate ran with --ignoredirectorynames: script names are file names only." };
+var grateNoTokens = new Option<bool>("--no-tokens") { Description = "grate ran with --disabletokenreplacement: leave {{Token}} text alone." };
+var importGrate = new Command("grate", "Import a grate or RoundhousE scripts folder: up/ as changes, anytime and everytime folders as repeatables, *.ENV.* scripts, {{Tokens}} (values via --var).") { importPath, grateFolder, grateEnvironments, grateIgnoreDirs, grateNoTokens, importDryRun };
+importGrate.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.ImportGrate(g, r.GetValue(importPath)!, r.GetValue(grateFolder) ?? [], r.GetValue(grateEnvironments) ?? [], r.GetValue(grateIgnoreDirs), r.GetValue(grateNoTokens), r.GetValue(importDryRun))));
+import.Subcommands.Add(importGrate);
+var sqitchEngine = new Option<string?>("--engine") { Description = "Which engine's settings to use from sqitch.conf (default: core.engine)." };
+var importSqitch = new Command("sqitch", "Import a Sqitch project: plan order, dependencies, tags, reworks and deploy/revert/verify scripts.") { importPath, sqitchEngine, importDryRun };
+importSqitch.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.ImportSqitch(g, r.GetValue(importPath)!, r.GetValue(sqitchEngine), r.GetValue(importDryRun))));
+import.Subcommands.Add(importSqitch);
 root.Subcommands.Add(import);
 root.Subcommands.Add(baseline);
 

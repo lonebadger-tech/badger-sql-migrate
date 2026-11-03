@@ -160,7 +160,7 @@ public sealed class SqlServerSchemaInspector : ISchemaInspector
         WHERE h.name LIKE N'MSSQL[_]TemporalHistoryFor[_]%';
         """;
 
-    /// <summary>2: system-versioned tables and partitioning (only lines for schemas that use them changed).</summary>
+    /// <summary>2: system-versioned tables and partitioning; module definitions without surrounding whitespace.</summary>
     public int FormatVersion => 2;
 
     public async Task<string> CaptureAsync(IDatabaseSession session, string stateSchema, CancellationToken cancellationToken)
@@ -179,7 +179,7 @@ public sealed class SqlServerSchemaInspector : ISchemaInspector
                 line = line.Replace(from, to, StringComparison.Ordinal);
             }
 
-            return line;
+            return line.StartsWith("module|", StringComparison.Ordinal) ? TrimDefinition(line) : line;
         }).ToList();
         lines.Sort(StringComparer.Ordinal);
         return string.Join('\n', lines);
@@ -227,6 +227,25 @@ public sealed class SqlServerSchemaInspector : ISchemaInspector
             };
             return new SchemaEntry(key, text);
         }
+    }
+
+    /// <summary>
+    /// SQL Server stores a module's text exactly as sent, so whitespace around it depends on the tool that ran the
+    /// script (bsm trims batches; others send the file as written). It is not part of the schema.
+    /// </summary>
+    private static string TrimDefinition(string line)
+    {
+        var bar = -1;
+        for (var i = 0; i < 3; i++)
+        {
+            bar = line.IndexOf('|', bar + 1);
+            if (bar < 0)
+            {
+                return line;
+            }
+        }
+
+        return line[..(bar + 1)] + line[(bar + 1)..].Trim();
     }
 
     private static readonly HashSet<string> Kinds = new(StringComparer.Ordinal) { "schema", "column", "index", "fk", "check", "module", "type", "sequence", "synonym", "temporal", "pfunction", "pscheme", "partitioned", "object" };

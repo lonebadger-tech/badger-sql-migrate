@@ -621,6 +621,42 @@ public sealed class MigrationEngine
         return names;
     }
 
+    /// <summary>
+    /// Records repeatables as applied in their current form without running them, for repeatables another tool
+    /// already applied with exactly this text ('bsm baseline --from').
+    /// </summary>
+    public async Task<IReadOnlyList<string>> BaselineRepeatablesAsync(IReadOnlyCollection<string> names, CancellationToken cancellationToken = default)
+    {
+        var scripts = project.Repeatables.Where(r => names.Contains(r.Name)).ToList();
+        if (scripts.Count == 0)
+        {
+            return [];
+        }
+
+        await using var lockHandle = await AcquireLockAsync(false, cancellationToken).ConfigureAwait(false);
+        await provider.StateStore.EnsureCreatedAsync(session, Schema, cancellationToken).ConfigureAwait(false);
+        await ClaimEnvironmentAsync(cancellationToken).ConfigureAwait(false);
+        var existing = (await provider.StateStore.GetRepeatablesAsync(session, Schema, cancellationToken).ConfigureAwait(false)).Select(r => r.Name).ToHashSet(StringComparer.Ordinal);
+        var recorded = new List<string>();
+        foreach (var script in scripts.Where(s => !existing.Contains(s.Name)))
+        {
+            await session.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await provider.StateStore.UpsertRepeatableAsync(session, Schema, new AppliedRepeatable
+            {
+                Name = script.Name,
+                Hash = script.Hash,
+                Script = script.Script,
+                AppliedAtUtc = DateTimeOffset.UtcNow,
+                AppliedBy = actor.User,
+            }, cancellationToken).ConfigureAwait(false);
+            await AppendEventAsync(MigrationEventKind.Baseline, script.Name, script.Hash, null, "repeatable", cancellationToken).ConfigureAwait(false);
+            await session.CommitAsync(cancellationToken).ConfigureAwait(false);
+            recorded.Add(script.Name);
+        }
+
+        return recorded;
+    }
+
     public async Task<IReadOnlyList<MigrationEvent>> LogAsync(int limit, CancellationToken cancellationToken = default) =>
         await provider.StateStore.ExistsAsync(session, Schema, cancellationToken).ConfigureAwait(false)
             ? await provider.StateStore.GetEventsAsync(session, Schema, limit, cancellationToken).ConfigureAwait(false)

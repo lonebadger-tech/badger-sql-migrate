@@ -117,4 +117,21 @@ public sealed class ImportCommandTests : IDisposable
         Assert.Null(JdbcSqlServer.Map(new ConnectionToImport("pg", "jdbc:postgresql://h/db?password=x", null, null), warnings));
         Assert.Contains(warnings, w => w.Contains("not a SQL Server JDBC URL", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void Imported_scripts_that_cannot_run_in_a_transaction_are_marked_notx()
+    {
+        var source = Path.Combine(root, "grate");
+        Directory.CreateDirectory(Path.Combine(source, "up"));
+        File.WriteAllText(Path.Combine(source, "up", "0001_db.sql"), "ALTER DATABASE CURRENT SET READ_COMMITTED_SNAPSHOT ON;");
+        File.WriteAllText(Path.Combine(source, "up", "0002_table.sql"), "CREATE TABLE dbo.T (Id int);");
+        var target = Path.Combine(root, "bsm");
+
+        Assert.Equal(0, Commands.ImportGrate(G(target), source, [], [], false, false, dryRun: false));
+
+        var plan = Badger.SqlMigrate.Core.Plan.PlanFile.Load(Path.Combine(target, "bsm.plan"));
+        Assert.True(plan.Changes[0].Flags.HasFlag(Badger.SqlMigrate.Core.Plan.ChangeFlags.NoTransaction));
+        Assert.False(plan.Changes[1].Flags.HasFlag(Badger.SqlMigrate.Core.Plan.ChangeFlags.NoTransaction));
+        Assert.Equal(0, Commands.PlanCheck(G(target)));
+    }
 }

@@ -194,11 +194,14 @@ def releases():
   <ul>
     <li><code>bsm diff-schema</code> lists the objects changed since the last deploy, or the differences between two environments, with line diffs for modules</li>
   </ul>
-  <h3>Moving from Flyway or DbUp</h3>
+  <h3>Moving from other tools</h3>
   <ul>
     <li><code>bsm import flyway</code> converts versioned, undo and repeatable migrations, placeholders (including Flyway's built-ins), per-script settings and environments from <code>flyway.toml</code> or <code>flyway.conf</code></li>
     <li><code>bsm import dbup</code> converts scripts in DbUp's order, <code>$variables$</code> and run-always scripts</li>
-    <li><code>bsm baseline --from flyway|dbup</code> adopts a database from the old tool's journal, checking Flyway's checksums</li>
+    <li><code>bsm import grate</code> converts grate and RoundhousE folders in grate's run order, <code>{{{{tokens}}}}</code> and <code>*.ENV.*</code> scripts</li>
+    <li><code>bsm import sqitch</code> converts Sqitch plans with dependencies, tags and reworked changes</li>
+    <li><code>bsm baseline --from flyway|dbup|grate|roundhouse</code> adopts a database from the old tool's journal, checking Flyway's checksums and grate's hashes, and records the repeatables it already applied</li>
+    <li>Imports mark scripts that cannot run in a transaction <code>!notx</code></li>
   </ul>
   <h3>System-versioned tables and partitions</h3>
   <ul>

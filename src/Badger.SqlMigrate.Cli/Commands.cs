@@ -166,6 +166,39 @@ public static class Commands
         return WriteImport(g, imported, dryRun);
     }
 
+    public static int ImportGrate(GlobalOptions g, string path, string[] folders, string[] environments, bool ignoreDirectoryNames, bool noTokens, bool dryRun)
+    {
+        RequireWorkingCopy(g, "import");
+        var renamed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var folder in folders)
+        {
+            var eq = folder.IndexOf('=', StringComparison.Ordinal);
+            if (eq <= 0)
+            {
+                throw new MigrationException($"--folder expects key=name (e.g. up=ddl), got '{folder}'.");
+            }
+
+            renamed[folder[..eq].Trim()] = folder[(eq + 1)..].Trim();
+        }
+
+        var imported = GrateImporter.Import(new GrateImportOptions
+        {
+            Path = path,
+            Folders = renamed,
+            Tokens = ParseVariables(g.Variables),
+            Environments = environments.SelectMany(e => e.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)).ToList(),
+            IgnoreDirectoryNames = ignoreDirectoryNames,
+            TokenReplacementDisabled = noTokens,
+        });
+        return WriteImport(g, imported, dryRun);
+    }
+
+    public static int ImportSqitch(GlobalOptions g, string path, string? engine, bool dryRun)
+    {
+        RequireWorkingCopy(g, "import");
+        return WriteImport(g, SqitchImporter.Import(new SqitchImportOptions { Path = path, Engine = engine }), dryRun);
+    }
+
     /// <summary>Writes an imported project into the (new) project folder: scripts, plan, bsm.yaml and .gitattributes.</summary>
     private static int WriteImport(GlobalOptions g, ImportedProject imported, bool dryRun)
     {
@@ -184,6 +217,7 @@ public static class Commands
             throw new MigrationException($"{changesDir} is not empty. Import into a new folder.");
         }
 
+        MarkNonTransactional(imported, Providers.Resolve(SqlServerProvider.ProviderId));
         var tool = imported.Tool.ToLowerInvariant();
         if (g.Out.Json)
         {
@@ -214,7 +248,10 @@ public static class Commands
 
         foreach (var repeatable in imported.Repeatables)
         {
-            Console.WriteLine($"  {repeatable.Source,-50} -> {MigrationProject.RepeatableFolder}/{repeatable.Path}");
+            var target = repeatable.Path.StartsWith(ImportedProject.EnvironmentScriptPrefix, StringComparison.Ordinal)
+                ? $"{MigrationProject.EnvironmentsFolder}/{repeatable.Path[ImportedProject.EnvironmentScriptPrefix.Length..]}"
+                : $"{MigrationProject.RepeatableFolder}/{repeatable.Path}";
+            Console.WriteLine($"  {repeatable.Source,-50} -> {target}");
         }
 
         foreach (var (name, value) in imported.Variables)
@@ -253,7 +290,9 @@ public static class Commands
 
         g.Out.Success($"imported {imported.Changes.Count} change(s) and {imported.Repeatables.Count} repeatable(s) from {imported.Tool} into {dir}; plan head {Short(project.HeadChainId)}.");
         g.Out.Info("next: review bsm.yaml, then 'bsm plan check'. New databases: 'bsm deploy'.");
-        g.Out.Info($"databases {imported.Tool} already manages: 'bsm baseline --from {tool} -e <environment>' records what they have without running it.");
+        g.Out.Info(imported.CanBaselineFromJournal
+            ? $"databases {imported.Tool} already manages: 'bsm baseline --from {tool} -e <environment>' records what they have without running it."
+            : $"existing databases: 'bsm baseline --to <change> -e <environment>' records the changes they already have without running them.");
         return project.Problems.Count == 0 ? Ok : Failed;
 
         void Write()
@@ -263,6 +302,35 @@ public static class Commands
             Directory.CreateDirectory(Path.Combine(dir, MigrationProject.EnvironmentsFolder));
             File.WriteAllText(Path.Combine(dir, BsmConfig.FileName), ImportYaml.Write(imported, SqlServerProvider.ProviderId), Utf8NoBom);
             WriteGitAttributes(dir);
+        }
+    }
+
+    /// <summary>
+    /// The source tools often run scripts without a transaction; bsm wraps each change in one. Changes whose scripts
+    /// contain statements that cannot run in a transaction (per the provider's linter) are marked !notx.
+    /// </summary>
+    private static void MarkNonTransactional(ImportedProject imported, IDatabaseProvider provider)
+    {
+        var marked = new List<string>();
+        for (var i = 0; i < imported.Changes.Count; i++)
+        {
+            var change = imported.Changes[i];
+            if (change.Flags.HasFlag(ChangeFlags.NoTransaction))
+            {
+                continue;
+            }
+
+            var scripts = new[] { ("deploy", change.Deploy), ("revert", change.Revert), ("verify", change.Verify) };
+            if (scripts.Any(s => s.Item2 is not null && provider.Linter.Lint(s.Item2, new LintContext(change.Name, s.Item1, change.Flags)).Any(d => d.Code == "BSM001")))
+            {
+                imported.Changes[i] = change with { Flags = change.Flags | ChangeFlags.NoTransaction };
+                marked.Add(change.Name);
+            }
+        }
+
+        if (marked.Count > 0)
+        {
+            imported.Warnings.Add($"marked !notx because they contain statements that cannot run in a transaction: {string.Join(", ", marked)}. A failure part way leaves partial work, so make them safe to re-run.");
         }
     }
 
@@ -1059,20 +1127,34 @@ public static class Commands
     {
         if ((to is null) == (from is null))
         {
-            throw new MigrationException("Pass --to <change|@tag>, or --from flyway|dbup to read what the database already has from that tool's journal.");
+            throw new MigrationException("Pass --to <change|@tag>, or --from flyway|dbup|grate to read what the database already has from that tool's journal.");
         }
 
         await using var ctx = await Connect(g, ct);
+        IReadOnlyList<string> repeatables = [];
         if (from is not null)
         {
             var (schema, table) = SplitTable(journal, from);
-            var (project, _) = LoadProject(g);
-            to = from.ToLowerInvariant() switch
+            var project = MigrationProject.Load(Open(g).ProjectDir, ctx.Provider.Id, ctx.Environment.Name);
+            string Rendered(RepeatableScript r) => ctx.Engine.Render(r.Name, "repeatable", r.Script).Text;
+            switch (from.ToLowerInvariant())
             {
-                "flyway" => ForeignJournal.FlywayTarget(project, await ForeignJournal.ReadFlywayAsync(ctx.Session, ctx.Provider, schema, table, ct), checkChecksums: !skipChecksums),
-                "dbup" => ForeignJournal.DbUpTarget(project, await ForeignJournal.ReadDbUpAsync(ctx.Session, ctx.Provider, schema, table, ct)),
-                _ => throw new MigrationException("--from must be flyway or dbup."),
-            };
+                case "flyway":
+                    var history = await ForeignJournal.ReadFlywayAsync(ctx.Session, ctx.Provider, schema, table, ct);
+                    to = ForeignJournal.FlywayTarget(project, history, checkChecksums: !skipChecksums);
+                    repeatables = ForeignJournal.FlywayRepeatables(project, history, Rendered);
+                    break;
+                case "dbup":
+                    to = ForeignJournal.DbUpTarget(project, await ForeignJournal.ReadDbUpAsync(ctx.Session, ctx.Provider, schema, table, ct));
+                    break;
+                case "grate" or "roundhouse":
+                    var runs = await ForeignJournal.ReadGrateAsync(ctx.Session, ctx.Provider, schema, table, ct);
+                    to = ForeignJournal.GrateTarget(project, runs, skipChecksums ? null : change => ctx.Engine.Render(change.Name, "deploy", change.DeployScript, change.ScriptHash).Text);
+                    repeatables = ForeignJournal.GrateRepeatables(project, runs, Rendered);
+                    break;
+                default:
+                    throw new MigrationException("--from must be flyway, dbup, grate or roundhouse.");
+            }
             if (to is null)
             {
                 g.Out.Success($"{from} has not applied any of the imported changes to this database; nothing to baseline. Use 'bsm deploy'.");
@@ -1087,7 +1169,13 @@ public static class Commands
         g.Out.Success($"baselined {names.Count} change(s).");
         if (from is not null)
         {
-            g.Out.Info($"the next 'bsm deploy' applies later changes and all repeatables. {from}'s own journal table is left in place; drop it when you no longer need it.");
+            var recorded = await ctx.Engine.BaselineRepeatablesAsync(repeatables.ToHashSet(StringComparer.Ordinal), ct);
+            if (recorded.Count > 0)
+            {
+                g.Out.Success($"recorded {recorded.Count} repeatable(s) {from} already applied with the same text: {string.Join(", ", recorded)}.");
+            }
+
+            g.Out.Info($"the next 'bsm deploy' applies later changes and any other repeatables. {from}'s own journal table is left in place; drop it when you no longer need it.");
         }
         return Ok;
     }
@@ -1404,17 +1492,23 @@ public static class Commands
         }
     }
 
-    /// <summary>"schema.table" or "table" (schema dbo), with each tool's default table.</summary>
+    /// <summary>"schema.table" or "table", with each tool's default schema and table (RoundhousE: RoundhousE.ScriptsRun).</summary>
     private static (string Schema, string Table) SplitTable(string? journal, string tool)
     {
-        var fallback = tool.Equals("dbup", StringComparison.OrdinalIgnoreCase) ? ForeignJournal.DbUpDefaultTable : ForeignJournal.FlywayDefaultTable;
+        var (schema, table) = tool.ToLowerInvariant() switch
+        {
+            "dbup" => ("dbo", ForeignJournal.DbUpDefaultTable),
+            "grate" => (ForeignJournal.GrateDefaultSchema, ForeignJournal.GrateDefaultTable),
+            "roundhouse" => ("RoundhousE", ForeignJournal.GrateDefaultTable),
+            _ => ("dbo", ForeignJournal.FlywayDefaultTable),
+        };
         if (string.IsNullOrWhiteSpace(journal))
         {
-            return ("dbo", fallback);
+            return (schema, table);
         }
 
         var dot = journal.LastIndexOf('.');
-        return dot < 0 ? ("dbo", journal) : (journal[..dot], journal[(dot + 1)..]);
+        return dot < 0 ? (schema, journal) : (journal[..dot], journal[(dot + 1)..]);
     }
 
     private static Dictionary<string, string> ParseVariables(string[] values)

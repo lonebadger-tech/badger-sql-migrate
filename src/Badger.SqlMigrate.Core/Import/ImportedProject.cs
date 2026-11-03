@@ -9,7 +9,19 @@ namespace Badger.SqlMigrate.Core.Import;
 
 /// <param name="Name">bsm change name.</param>
 /// <param name="Note">Plan note; carries the source tool's identity of the script (used by 'bsm baseline --from').</param>
-public sealed record ImportedChange(string Name, string Deploy, string? Revert, ChangeFlags Flags, string Note, string Source);
+public sealed record ImportedChange(string Name, string Deploy, string? Revert, ChangeFlags Flags, string Note, string Source)
+{
+    public string? Verify { get; init; }
+
+    public IReadOnlyList<string> Requires { get; init; } = [];
+
+    /// <summary>Tags placed on this change (written as "@tag" lines after it).</summary>
+    public IReadOnlyList<string> Tags { get; init; } = [];
+
+    public DateTimeOffset? PlannedAt { get; init; }
+
+    public string? Author { get; init; }
+}
 
 /// <param name="Path">Path under repeatable/, forward slashes.</param>
 public sealed record ImportedRepeatable(string Path, string Script, string Source);
@@ -23,7 +35,13 @@ public sealed record ImportedEnvironment(string Name, JsonObject Settings);
 /// </summary>
 public sealed partial class ImportedProject
 {
+    /// <summary>A repeatable path starting with this ("@env:test/seed.sql") is written to environments/&lt;name&gt;/ instead.</summary>
+    public const string EnvironmentScriptPrefix = "@env:";
+
     public required string Tool { get; init; }
+
+    /// <summary>'bsm baseline --from &lt;tool&gt;' can adopt databases the source tool manages (false for Sqitch: no SQL Server registry).</summary>
+    public bool CanBaselineFromJournal { get; init; } = true;
 
     public List<ImportedChange> Changes { get; } = [];
 
@@ -52,7 +70,9 @@ public sealed partial class ImportedProject
         var plan = new StringBuilder();
         plan.Append($"# Badger SQL Migrate plan, imported from {Tool}. One change per line, in deploy order.\n");
         plan.Append("#   name [requires ...] !notx !irreversible @timestamp author  # note\n");
-        plan.Append($"# The '{Tool.ToLowerInvariant()} ...' notes link each change to the script it came from; 'bsm baseline --from {Tool.ToLowerInvariant()}' uses them.\n\n");
+        plan.Append(CanBaselineFromJournal
+            ? $"# The '{Tool.ToLowerInvariant()} ...' notes link each change to the script it came from; 'bsm baseline --from {Tool.ToLowerInvariant()}' uses them.\n\n"
+            : $"# The '{Tool.ToLowerInvariant()} ...' notes link each change to the {Tool} change it came from.\n\n");
         foreach (var change in Changes)
         {
             var dir = Path.Combine(root, MigrationProject.ChangesFolder, change.Name);
@@ -63,14 +83,26 @@ public sealed partial class ImportedProject
                 File.WriteAllText(Path.Combine(dir, MigrationProject.RevertFile), change.Revert, utf8);
             }
 
-            plan.Append(PlanFile.FormatChange(new PlanChange(change.Name, [], change.Flags, null, null, change.Note, 0))).Append('\n');
+            if (change.Verify is not null)
+            {
+                File.WriteAllText(Path.Combine(dir, MigrationProject.VerifyFile), change.Verify, utf8);
+            }
+
+            plan.Append(PlanFile.FormatChange(new PlanChange(change.Name, change.Requires, change.Flags, change.PlannedAt, change.Author, change.Note, 0))).Append('\n');
+            foreach (var tag in change.Tags)
+            {
+                plan.Append('@').Append(tag).Append('\n');
+            }
         }
 
         Directory.CreateDirectory(Path.Combine(root, MigrationProject.ChangesFolder));
         File.WriteAllText(Path.Combine(root, PlanFile.FileName), plan.ToString(), utf8);
         foreach (var repeatable in Repeatables)
         {
-            var path = Path.Combine(root, MigrationProject.RepeatableFolder, repeatable.Path);
+            // "@env:<name>/path" is an environment-only script: environments/<name>/path.
+            var path = repeatable.Path.StartsWith(EnvironmentScriptPrefix, StringComparison.Ordinal)
+                ? Path.Combine(root, MigrationProject.EnvironmentsFolder, repeatable.Path[EnvironmentScriptPrefix.Length..])
+                : Path.Combine(root, MigrationProject.RepeatableFolder, repeatable.Path);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, repeatable.Script, utf8);
         }

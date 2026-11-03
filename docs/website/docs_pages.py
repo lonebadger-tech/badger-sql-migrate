@@ -31,7 +31,7 @@ SIDEBAR = [
         ("Bundles", "docs/bundles/"),
         ("Schema drift", "docs/drift/"),
         ("Existing databases", "docs/baseline/"),
-        ("Moving from Flyway or DbUp", "docs/importing/"),
+        ("Moving from other tools", "docs/importing/"),
         ("Journal tables", "docs/journal/"),
         ("Troubleshooting", "docs/troubleshooting/"),
     ]),
@@ -834,9 +834,11 @@ def commands():
         ("diff-schema", "[--against env] [--exit-code]", "Schema differences: live versus the schema recorded after the last deploy, or versus another environment. --exit-code returns 3 when they differ."),
         ("verify", "", "Hashes versus working copy, rendered-SQL drift, verify scripts (rolled back), schema drift. Exit 1 on problems."),
         ("log", "[-n|--limit 50]", "Deploy, revert, fail, repeatable and resource events, newest first."),
-        ("baseline", "--to x | --from flyway|dbup [--journal schema.table] [--skip-checksums] [-y]", "Record changes as applied without running them: up to x, or as far as Flyway's or DbUp's journal in the database says."),
+        ("baseline", "--to x | --from flyway|dbup|grate|roundhouse [--journal schema.table] [--skip-checksums] [-y]", "Record changes as applied without running them: up to x, or as far as the old tool's journal in the database says (with repeatables it already applied)."),
         ("import flyway &lt;folder&gt;", "[--config file] [--location dir…] [--dry-run]", "Convert a Flyway project into a new bsm project (written to -C). No database."),
         ("import dbup &lt;folder&gt;", "[--file-names] [--run-always glob…] [--no-variables] [--var name=value…] [--dry-run]", "Convert DbUp scripts into a new bsm project (written to -C). No database."),
+        ("import grate &lt;folder&gt;", "[--folder key=name…] [--environment name…] [--ignore-directory-names] [--no-tokens] [--var name=value…] [--dry-run]", "Convert a grate or RoundhousE scripts folder into a new bsm project. No database."),
+        ("import sqitch &lt;folder&gt;", "[--engine name] [--dry-run]", "Convert a Sqitch project into a new bsm project. No database."),
         ("vars", "", "Every variable for the environment: value, source, description."),
         ("render &lt;name&gt;", "[-k|--kind deploy|revert|verify]", "Print a change or repeatable exactly as it would run."),
         ("env list", "", "Environments and templates."),
@@ -986,7 +988,7 @@ bsm diff-schema -e test --against prod --exit-code --json   # exit 3 when they d
 <p>Compares two live databases: <code>-</code> is only in the first, <code>+</code> only in the second. Each environment uses its own connection, sign-in and fingerprint settings, so if only one of them sets <code>schemaFingerprint.partitionBoundaries: ignore</code>, partition functions and schemes show as changed.</p>
 
 <h2>What is compared</h2>
-<p>Schemas, tables and table types with their columns (type, nullability, identity, collation, computed and default definitions, encryption, period columns), indexes, foreign keys, check constraints, views, procedures, functions, triggers, user types, sequences, synonyms, system versioning (period, history table, retention) and partitioning (functions, boundaries, schemes, and the scheme and column of each partitioned table and index). The bsm journal schema is excluded. Names SQL Server generates for unnamed constraints differ on every server, so they are compared as <code>&lt;system&gt;</code>; Always Encrypted columns compare by key name, never key material, so environments with different keys still match.</p>
+<p>Schemas, tables and table types with their columns (type, nullability, identity, collation, computed and default definitions, encryption, period columns), indexes, foreign keys, check constraints, views, procedures, functions, triggers, user types, sequences, synonyms, system versioning (period, history table, retention) and partitioning (functions, boundaries, schemes, and the scheme and column of each partitioned table and index). The bsm journal schema is excluded. Names SQL Server generates for unnamed constraints differ on every server, so they are compared as <code>&lt;system&gt;</code>; whitespace around a view, procedure, function or trigger definition (which depends on the tool that sent it) is ignored; Always Encrypted columns compare by key name, never key material, so environments with different keys still match.</p>
 """)
 
 
@@ -1006,7 +1008,7 @@ bsm status -e prod                          # initial-schema shown as (baseline)
 <p>Baseline only works on a database with no deployed changes, takes the deploy lock, records the environment, and writes a schema fingerprint so later drift is detected.</p>
 
 <h2>Coming from Flyway, DbUp or grate</h2>
-<p>For Flyway and DbUp, <code>bsm import</code> does the conversion and <code>bsm baseline --from</code> reads each database's history for you; see {link("docs/importing/", "Moving from Flyway or DbUp")}. For other tools:</p>
+<p>For Flyway, DbUp, grate, RoundhousE and Sqitch, <code>bsm import</code> does the conversion and <code>bsm baseline --from</code> reads each database's history for you; see {link("docs/importing/", "Moving from other tools")}. For anything else:</p>
 <ul>
   <li>Convert your versioned scripts into changes (one folder each) in their existing order, or collapse history into one <code>initial-schema</code> change.</li>
   <li>Write revert scripts for the changes you might want to undo; mark the rest <code>!irreversible</code>.</li>
@@ -1018,13 +1020,21 @@ bsm status -e prod                          # initial-schema shown as (baseline)
 
 
 def importing():
-    return doc("docs/importing/", "Moving from Flyway or DbUp", "Convert an existing project, then adopt the databases it already manages without running anything.", f"""
+    return doc("docs/importing/", "Moving from other tools", "Convert a Flyway, DbUp, grate (or RoundhousE) or Sqitch project, then adopt the databases it already manages without running anything.", f"""
 {sh('''bsm import flyway ./flyway-project -C db --dry-run   # see what it would do
 bsm import flyway ./flyway-project -C db             # write a new bsm project in db/
 bsm plan check -C db
 bsm baseline --from flyway -C db -e prod             # once per existing database
 bsm deploy -C db -e prod                             # from now on''')}
 <p>Import writes a new project (it refuses a folder that already has one) and changes no database. Baseline reads the old tool's journal table in each database, records the changes it already ran, and runs nothing; the old journal table stays until you drop it. New, empty databases just run <code>bsm deploy</code>.</p>
+<table>
+<tr><th>From</th><th>Import</th><th>Adopt existing databases</th></tr>
+<tr><td>{link("docs/importing/#flyway", "Flyway")}</td><td><code>bsm import flyway</code></td><td><code>bsm baseline --from flyway</code> (checksums checked)</td></tr>
+<tr><td>{link("docs/importing/#dbup", "DbUp")}</td><td><code>bsm import dbup</code></td><td><code>bsm baseline --from dbup</code></td></tr>
+<tr><td>{link("docs/importing/#grate", "grate, RoundhousE")}</td><td><code>bsm import grate</code></td><td><code>bsm baseline --from grate</code> or <code>--from roundhouse</code> (hashes checked)</td></tr>
+<tr><td>{link("docs/importing/#sqitch", "Sqitch")}</td><td><code>bsm import sqitch</code></td><td><code>bsm baseline --to &lt;change&gt;</code> (Sqitch has no SQL Server engine, so there is no registry to read)</td></tr>
+</table>
+<p>Every import marks changes <code>!notx</code> when their scripts contain statements SQL Server refuses inside a transaction (the other tools often run without one), and lists everything it could not carry over.</p>
 
 <h2 id="flyway">Flyway</h2>
 <p>Point the import at the folder you run Flyway from. It reads <code>flyway.toml</code> or <code>flyway.conf</code> (also in <code>conf/</code>, or pass <code>--config</code>), takes migrations from <code>flyway.locations</code> (or <code>sql/</code>, <code>src/main/resources/db/migration</code>, or <code>--location</code>), and honours custom prefixes, separators, suffixes and placeholder syntax.</p>
@@ -1051,7 +1061,7 @@ bsm baseline --from flyway -e prod --journal app.flyway_history''')}
   <li>a change before the last applied one was never applied (Flyway's <code>outOfOrder</code>);</li>
   <li>Flyway's recorded checksum differs from the imported script, meaning the database ran a different version of it. bsm computes checksums exactly as Flyway does; <code>--skip-checksums</code> turns the check off.</li>
 </ul>
-<p>bsm has no record of repeatable scripts yet, so the first deploy after baselining runs each of them once.</p>
+<p>Repeatable scripts whose latest run in Flyway's history has the checksum of the same script rendered for this environment are recorded too, so the first deploy only runs the ones that differ.</p>
 
 <h2 id="dbup">DbUp</h2>
 {sh('''bsm import dbup ./src/App.Database/Scripts -C db --var schemaName=app --run-always "Always/**"
@@ -1066,14 +1076,44 @@ bsm baseline --from dbup -C db -e prod                    # reads dbo.SchemaVers
 </table>
 <p>DbUp has no down scripts, so every change is <code>!irreversible</code>. DbUp runs without a transaction unless configured to; bsm runs each change in one, and <code>bsm plan check</code> lists any statement that needs <code>!notx</code>.</p>
 
+<h2 id="grate">grate and RoundhousE</h2>
+{sh('''bsm import grate ./db -C bsm-db --var AppRole=app_reader
+bsm baseline --from grate -C bsm-db -e TEST                 # reads grate.ScriptsRun
+bsm baseline --from roundhouse -C bsm-db -e TEST            # reads RoundhousE.ScriptsRun''')}
+<p>Point the import at the folder you pass to grate as <code>--sqlfilesdirectory</code>. grate's folders run in a fixed order, and the import keeps it:</p>
+<table>
+<tr><th>grate</th><th>bsm</th></tr>
+<tr><td><code>up/</code> (run once)</td><td>One change per script, in grate's order (by path, ignoring case). The note <code>grate up/&lt;name&gt;</code> links it to <code>ScriptsRun</code>. grate has no down scripts, so changes are <code>!irreversible</code>.</td></tr>
+<tr><td><code>runAfterCreateDatabase/</code>, <code>alterDatabase/</code></td><td>Changes at the start of the plan: they run once on each new database</td></tr>
+<tr><td><code>runBeforeUp/</code>, <code>runFirstAfterUp/</code>, <code>functions/</code>, <code>views/</code>, <code>sprocs/</code>, <code>triggers/</code>, <code>indexes/</code>, <code>runAfterOtherAnyTimeScripts/</code> (anytime)</td><td>Repeatables under numbered folders that keep grate's folder order: <code>repeatable/06-functions/</code>, <code>07-views/</code>, <code>08-sprocs/</code> …</td></tr>
+<tr><td><code>beforeMigration/</code>, <code>permissions/</code>, <code>afterMigration/</code>, <code>everytime.*</code> (every time)</td><td>Repeatables, which bsm runs when they change rather than on every deploy</td></tr>
+<tr><td><code>*.ENV.*</code> scripts</td><td><code>environments/&lt;name&gt;/</code> for each environment in the file name (the upper-case parts, or the names you pass with <code>--environment</code>); bsm.yaml gets those environments</td></tr>
+<tr><td><code>{{{{Token}}}}</code></td><td><code>{{Token}}</code> variables; values for <code>--ut</code> tokens come from <code>--var</code>. <code>{{{{DatabaseName}}}}</code>, <code>{{{{ServerName}}}}</code> and <code>{{{{EnvironmentName}}}}</code> become <code>{{db}}</code>, <code>{{db.host}}</code> and <code>{{env}}</code>; folder-name tokens get their values; connection strings are never written into scripts.</td></tr>
+<tr><td><code>createDatabase/</code>, <code>dropDatabase/</code></td><td>Not imported: bsm does not create databases</td></tr>
+</table>
+<p>Renamed folders: <code>--folder up=ddl</code>. If grate ran with <code>--ignoredirectorynames</code> or <code>--disabletokenreplacement</code>, pass <code>--ignore-directory-names</code> or <code>--no-tokens</code>.</p>
+<p>grate records a hash of each script after replacing its tokens, so <code>baseline --from grate</code> renders every imported script with this environment's variables and compares: a mismatch means the database ran different text (or a token now has another value), and baseline stops. Repeatables and environment scripts grate already ran with the same text are recorded as applied, so they do not run again. <code>runAfterCreateDatabase/</code> scripts may be missing from the journal: grate only runs them for databases it created.</p>
+
+<h2 id="sqitch">Sqitch</h2>
+{sh('''bsm import sqitch ./flipr -C bsm-db
+bsm import sqitch ./flipr -C bsm-db --engine pg      # use that engine's settings from sqitch.conf''')}
+<p>Sqitch is closest to bsm: a plan of named changes with deploy, revert and verify scripts. The import reads <code>sqitch.conf</code> (top_dir, plan_file, deploy/revert/verify dirs, extension, per-engine overrides) and keeps the plan's order, dependencies, tags, planner and timestamp.</p>
+<ul>
+  <li>A reworked change (the same name again after a tag) becomes <code>&lt;name&gt;-v2</code>, <code>-v3</code> …; earlier versions take their scripts from <code>&lt;name&gt;@&lt;tag&gt;.sql</code>, as Sqitch keeps them. Dependencies such as <code>users@v1.0.0</code> point at the right version.</li>
+  <li>Conflicts (<code>!change</code>) and dependencies on other Sqitch projects have no bsm equivalent and are listed.</li>
+  <li>Scripts that manage their own transaction (<code>BEGIN; … COMMIT;</code>, as Sqitch's templates do) are <code>!notx</code>.</li>
+  <li>Sqitch has no SQL Server engine, so the scripts are written for another database. They are copied as written; translate them to T-SQL (<code>bsm plan check</code> flags what does not parse), and adopt existing databases with <code>bsm baseline --to &lt;change&gt;</code>.</li>
+</ul>
+
 <h2>Text that must stay literal</h2>
-<p>Neither tool expands <code>{{name}}</code> or <code>$(name)</code>, but bsm does. The import escapes <code>{{name}}</code> to <code>{{{{name}}}}</code>, and if any script contains <code>$(name)</code> text it sets <code>preprocessor.sqlcmdSyntax: false</code> in <code>bsm.yaml</code>.</p>
+<p>None of these tools expands <code>{{name}}</code> or <code>$(name)</code>, but bsm does. The import escapes <code>{{name}}</code> to <code>{{{{name}}}}</code>, and if any script contains <code>$(name)</code> text it sets <code>preprocessor.sqlcmdSyntax: false</code> in <code>bsm.yaml</code>.</p>
 
 <h2>Before you baseline</h2>
 <ul>
   <li>Write the reverts you want now: a change's hash includes its revert script, so adding one later means <code>bsm repair</code> in every database.</li>
   <li>Review the generated environments and fill in what the output asks for (tenant ids, variables without values).</li>
   <li>Check the result: deploy the project to an empty database and compare it with one the old tool built, using <code>bsm diff-schema -e new --against old</code>. Only the old tool's journal table should differ.</li>
+  <li>Scripts the old tool ran every time (DbUp run-always, grate everytime folders, Flyway callbacks) now run only when they change. If one must run on every deploy, make it idempotent and keep it in a change you add per release, or run it from your pipeline.</li>
 </ul>
 """)
 

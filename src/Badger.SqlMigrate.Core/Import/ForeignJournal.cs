@@ -5,6 +5,9 @@ using Badger.SqlMigrate.Core.Providers;
 
 namespace Badger.SqlMigrate.Core.Import;
 
+/// <summary>The latest grate/RoundhousE ScriptsRun row for a script.</summary>
+public sealed record GrateScriptRun(string ScriptName, string? TextHash, bool OneTime);
+
 /// <summary>A row of Flyway's flyway_schema_history, oldest first.</summary>
 public sealed record FlywayHistoryRow(int Rank, string? Version, string Type, int? Checksum, bool Success, string Script);
 
@@ -16,6 +19,8 @@ public static partial class ForeignJournal
 {
     public const string FlywayDefaultTable = "flyway_schema_history";
     public const string DbUpDefaultTable = "SchemaVersions";
+    public const string GrateDefaultSchema = "grate";
+    public const string GrateDefaultTable = "ScriptsRun";
 
     public static async Task<IReadOnlyList<FlywayHistoryRow>> ReadFlywayAsync(IDatabaseSession session, IDatabaseProvider provider, string schema, string table, CancellationToken cancellationToken)
     {
@@ -33,6 +38,98 @@ public static partial class ForeignJournal
     {
         var rows = await Query(session, $"SELECT ScriptName FROM {provider.QuoteIdentifier(schema)}.{provider.QuoteIdentifier(table)}", schema, table, "DbUp", cancellationToken).ConfigureAwait(false);
         return rows.Select(r => (string)r["ScriptName"]!).ToList();
+    }
+
+    public static async Task<IReadOnlyList<GrateScriptRun>> ReadGrateAsync(IDatabaseSession session, IDatabaseProvider provider, string schema, string table, CancellationToken cancellationToken)
+    {
+        var name = $"{provider.QuoteIdentifier(schema)}.{provider.QuoteIdentifier(table)}";
+        var rows = await Query(session, $"SELECT script_name, text_hash, one_time_script FROM {name} sr WHERE id = (SELECT MAX(id) FROM {name} sr2 WHERE sr2.script_name = sr.script_name)", schema, table, "grate", cancellationToken).ConfigureAwait(false);
+        return rows.Select(r => new GrateScriptRun((string)r["script_name"]!, r["text_hash"] as string, System.Convert.ToBoolean(r["one_time_script"] ?? false, CultureInfo.InvariantCulture))).ToList();
+    }
+
+    /// <summary>
+    /// The last imported change grate ran (null when none). One-time (up/) scripts match by name among one-time rows;
+    /// runAfterCreateDatabase/alterDatabase changes among the others. With <paramref name="render"/>, each matched
+    /// change's deploy script, rendered for this environment, must hash to grate's recorded text_hash.
+    /// </summary>
+    public static string? GrateTarget(MigrationProject project, IReadOnlyList<GrateScriptRun> runs, Func<MigrationChange, string>? render)
+    {
+        var problems = new List<string>();
+        var changes = project.Changes.Select(c => (Change: c, Source: c.Plan.Note is null ? null : GrateNote().Match(c.Plan.Note) is { Success: true } m ? (Folder: m.Groups["folder"].Value, Script: m.Groups["script"].Value) : ((string Folder, string Script)?)null)).ToList();
+        var ran = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (change, source) in changes)
+        {
+            if (source is not { } s)
+            {
+                continue;
+            }
+
+            var oneTime = s.Folder.Equals("up", StringComparison.OrdinalIgnoreCase);
+            var run = runs.FirstOrDefault(r => r.OneTime == oneTime && string.Equals(r.ScriptName, s.Script, StringComparison.Ordinal));
+            if (run is null)
+            {
+                continue;
+            }
+
+            ran.Add(change.Name);
+            if (render is not null && !GrateImporter.HashMatches(render(change), run.TextHash))
+            {
+                problems.Add($"'{change.Name}' ({s.Folder}/{s.Script}): grate recorded a different script (text_hash {run.TextHash}). The database ran another version of it, or a token now has a different value.");
+            }
+        }
+
+        var known = changes.Where(c => c.Source is { Folder: var f } && f.Equals("up", StringComparison.OrdinalIgnoreCase)).Select(c => c.Source!.Value.Script).ToHashSet(StringComparer.Ordinal);
+        foreach (var run in runs.Where(r => r.OneTime && !known.Contains(r.ScriptName) && !r.ScriptName.Contains(".ENV.", StringComparison.OrdinalIgnoreCase)))
+        {
+            problems.Add($"grate ran the one-time script '{run.ScriptName}', but no change in the plan has the note 'grate up/{run.ScriptName}'.");
+        }
+
+        var last = changes.FindLastIndex(c => ran.Contains(c.Change.Name));
+        for (var i = 0; i < last; i++)
+        {
+            var (change, source) = changes[i];
+            if (ran.Contains(change.Name))
+            {
+                continue;
+            }
+
+            if (source is null)
+            {
+                problems.Add($"'{change.Name}' comes before scripts grate ran but did not come from grate; move it after them in the plan.");
+            }
+            else if (!source.Value.Folder.Equals("runAfterCreateDatabase", StringComparison.OrdinalIgnoreCase))
+            {
+                // grate runs runAfterCreateDatabase/ only for databases it created itself, so those may be missing.
+                problems.Add($"'{change.Name}' ({source.Value.Folder}/{source.Value.Script}) was not run by grate, but scripts after it were. Run it with grate first, or move it later in the plan.");
+            }
+        }
+
+        if (problems.Count > 0)
+        {
+            throw new MigrationException("This database's grate journal does not match the plan:\n  " + string.Join("\n  ", problems));
+        }
+
+        return last < 0 ? null : changes[last].Change.Name;
+    }
+
+    /// <summary>
+    /// Repeatables (and environment scripts) grate already ran with exactly this text: the rendered script hashes to
+    /// grate's text_hash for the same script name. They are recorded as applied so the first deploy does not rerun them.
+    /// </summary>
+    public static IReadOnlyList<string> GrateRepeatables(MigrationProject project, IReadOnlyList<GrateScriptRun> runs, Func<RepeatableScript, string> render) =>
+        project.Repeatables.Where(r =>
+        {
+            var name = r.Name.StartsWith('@') ? r.Name[(r.Name.IndexOf('/', StringComparison.Ordinal) + 1)..] : r.Name;
+            var slash = name.IndexOf('/', StringComparison.Ordinal);
+            var scriptName = slash < 0 ? name : name[(slash + 1)..];
+            return runs.Any(run => string.Equals(run.ScriptName, scriptName, StringComparison.Ordinal) && GrateImporter.HashMatches(render(r), run.TextHash));
+        }).Select(r => r.Name).ToList();
+
+    /// <summary>Repeatables whose rendered text has the checksum of Flyway's latest successful run of the same R__ script.</summary>
+    public static IReadOnlyList<string> FlywayRepeatables(MigrationProject project, IReadOnlyList<FlywayHistoryRow> history, Func<RepeatableScript, string> render)
+    {
+        var latest = history.Where(h => h.Version is null && h.Success).GroupBy(h => h.Script, StringComparer.Ordinal).Select(g => g.OrderBy(h => h.Rank).Last()).ToList();
+        return project.Repeatables.Where(r => latest.Any(h => h.Script.EndsWith("__" + r.Name, StringComparison.Ordinal) && h.Checksum == Hashing.Crc32.Flyway(render(r)))).Select(r => r.Name).ToList();
     }
 
     /// <summary>
@@ -164,6 +261,9 @@ public static partial class ForeignJournal
 
     [GeneratedRegex(@"\bflyway V(?<v>[0-9][0-9._]*)(?: checksum (?<c>-?[0-9]+))?")]
     private static partial Regex FlywayNote();
+
+    [GeneratedRegex(@"^\s*grate (?<folder>[^/]+)/(?<script>.+?)\s*$")]
+    private static partial Regex GrateNote();
 
     [GeneratedRegex(@"^\s*dbup (?<s>.+?)\s*$")]
     private static partial Regex DbUpNote();

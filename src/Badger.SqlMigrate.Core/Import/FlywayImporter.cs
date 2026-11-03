@@ -171,7 +171,7 @@ public static partial class FlywayImporter
 
         if (repeatable.Count > 0)
         {
-            result.Warnings.Add("repeatable migrations are re-applied on the first bsm deploy to each existing database (bsm has no record of them yet); they must be safe to run again, as Flyway already requires.");
+            result.Warnings.Add("'bsm baseline --from flyway' records the repeatable migrations Flyway already applied with the same text; any others run on the first bsm deploy.");
         }
 
         var irreversible = result.Changes.Count(c => c.Flags.HasFlag(ChangeFlags.Irreversible));

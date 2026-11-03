@@ -92,8 +92,8 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 | `diff-schema [--against env] [--exit-code]` | What changed since the last deploy, or how two environments differ |
 | `verify` | Hash check, run verify scripts, detect schema drift |
 | `log` | Deploy/revert/failure history from the database |
-| `baseline --to x \| --from flyway\|dbup` | Adopt an existing database without running scripts (up to x, or as far as Flyway's or DbUp's journal says) |
-| `import flyway <dir>` / `import dbup <dir>` | Convert a Flyway or DbUp project into a new bsm project: migrations, undo, repeatables, placeholders/variables, environments |
+| `baseline --to x \| --from flyway\|dbup\|grate\|roundhouse` | Adopt an existing database without running scripts (up to x, or as far as the old tool's journal says) |
+| `import flyway\|dbup\|grate\|sqitch <dir>` | Convert a Flyway, DbUp, grate/RoundhousE or Sqitch project into a new bsm project: migrations, reverts, repeatables, variables, environments |
 | `doctor` | Check config, Entra sign-in and connectivity; show resources |
 | `env list` / `env show` | Environments (with templates) / one environment fully merged, secrets masked |
 | `env status` / `env provision [--allow-destructive]` | Compare / create or rotate per-environment resources (Always Encrypted keys) |

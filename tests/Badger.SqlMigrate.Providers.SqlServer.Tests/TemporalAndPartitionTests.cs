@@ -131,6 +131,24 @@ public sealed class TemporalAndPartitionTests(SqlServerFixture fixture)
         }
     }
 
+    [SkippableFact]
+    public async Task Whitespace_around_a_module_definition_does_not_change_the_fingerprint()
+    {
+        Skip.If(fixture.MasterConnectionString is null, fixture.UnavailableReason);
+        await using var a = await DatabaseAsync();
+        await using var b = await DatabaseAsync();
+        var dumps = new List<string>();
+        foreach (var (db, sql) in new[] { (a, "\n  CREATE VIEW dbo.v AS SELECT 1 AS x;\r\n\r\n"), (b, "CREATE VIEW dbo.v AS SELECT 1 AS x;") })
+        {
+            await using var session = await provider.OpenSessionAsync(db.Environment(), SessionContext.Empty, CancellationToken.None);
+            await session.ExecuteAsync(sql, null, CancellationToken.None);
+            dumps.Add(await provider.Schema.CaptureAsync(session, "bsm", CancellationToken.None));
+        }
+
+        Assert.Equal(dumps[0], dumps[1]);
+        Assert.Contains("module|V |dbo.v|CREATE VIEW dbo.v AS SELECT 1 AS x;", dumps[0], StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Fingerprint_settings_are_validated()
     {
