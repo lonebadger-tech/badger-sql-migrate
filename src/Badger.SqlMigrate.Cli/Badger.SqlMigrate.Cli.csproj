@@ -7,7 +7,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <!-- The package page shows docs/nuget/README.md: written for users, unlike the repository README. -->
+    <None Include="..\..\docs\nuget\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\docs\nuget\icon.png" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>
@@ -25,8 +27,11 @@
     <Description>Badger SQL Migrate: free, cross-platform, hash-certified database migrations for SQL Server and Azure SQL, with real up and down, named changes, environments, Entra ID and Always Encrypted.</Description>
     <PackageTags>sql-server;azure-sql;migrations;database;schema;devops;cli;entra-id;always-encrypted</PackageTags>
     <PackageProjectUrl>https://lonebadger.tech/badger-sql-migrate/</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/lonebadger-tech/badger-sql-migrate</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReleaseNotes>https://lonebadger.tech/badger-sql-migrate/releases/</PackageReleaseNotes>
+    <RepositoryUrl>https://github.com/lonebadger-tech/badger-sql-migrate</RepositoryUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
   </PropertyGroup>
 
 </Project>

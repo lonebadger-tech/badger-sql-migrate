@@ -1,0 +1,41 @@
+name: Bug report
+description: Something doesn't work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Don't include passwords, tokens or keys. Security problems go through [SECURITY.md](https://github.com/lonebadger-tech/badger-sql-migrate/blob/dev/SECURITY.md), not an issue.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `badger --version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installed as
+      options: [.NET tool, Standalone binary, Portable build, Built from source]
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and database
+      placeholder: e.g. macOS 26 arm64; Azure SQL Database
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command you ran, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: The command's output with `-v`, and `badger doctor` if it's about connecting.
+      render: text

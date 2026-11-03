@@ -1,10 +1,34 @@
 """Content for the overview, download, releases, comparison and examples pages."""
-from build import BASE, DOWNLOAD_BASE, RELEASE_DATE, VERSION, Page, code, sh, sql, yaml
+import html
+import os
+import re
+
+from build import BASE, DOWNLOAD_BASE, REPO, RELEASE_DATE, VERSION, Page, code, sh, sql, yaml
 import docs_pages
 
 
 def all_pages(artifacts):
-    return [home(), download(artifacts), releases(), compare(), examples(), *docs_pages.pages()]
+    return [home(), download(artifacts), releases(), compare(), examples(), license_page(), *docs_pages.pages()]
+
+
+# ---------------------------------------------------------------- license
+
+def license_page():
+    # The repository's LICENSE, the same text that ships in every download.
+    with open(os.path.join(REPO, "LICENSE"), encoding="utf-8") as f:
+        text = f.read().split("\n", 2)[2].strip()  # drop the title line; the page heading replaces it
+    # Unwrap the file's hard line breaks: one paragraph per block (one line per item, if it has numbered items).
+    paragraphs = []
+    for block in text.split("\n\n"):
+        items = []
+        for line in block.splitlines():
+            if not items or re.match(r"\s*(\d+|[a-z])\. ", line):
+                items.append(line.strip())
+            else:
+                items[-1] += " " + line.strip()
+        paragraphs.append("<p>" + "<br>".join(html.escape(i) for i in items) + "</p>")
+    body = "\n".join(paragraphs)
+    return Page("license/", "Badger SQL Migrate license (MIT)", "Badger SQL Migrate is free software under the MIT license.", body, heading="License", lede="Badger SQL Migrate is open source under the MIT license.")
 
 
 # ---------------------------------------------------------------- home
@@ -57,7 +81,7 @@ badger revert --to create-customer -e test''')}
 <h2>Why another migration tool?</h2>
 <p>Flyway charges for undo and collides when two branches pick the same version number. DbUp only goes up and ignores edited scripts. SSDT computes a different script on each machine. Sqitch has the right model but a Perl install and weak SQL Server support. Badger SQL Migrate keeps the best ideas of each and fixes the gaps. <a href="{BASE}/compare/">See the comparison →</a></p>
 
-<p><a href="{BASE}/docs/">Documentation</a> · <a href="{BASE}/examples/">Example scripts</a> · <a href="{BASE}/download/">Download</a> · <a href="{BASE}/releases/">What's new</a> · <a href="https://github.com/lonebadger-tech/badger-sql-migrate">Source</a></p>
+<p><a href="{BASE}/docs/">Documentation</a> · <a href="{BASE}/examples/">Example scripts</a> · <a href="{BASE}/download/">Download</a> · <a href="{BASE}/releases/">What's new</a> · <a href="https://github.com/lonebadger-tech/badger-sql-migrate">Source on GitHub</a></p>
 """
     return Page("", "Badger SQL Migrate: hash-certified SQL Server migrations", "Free, cross-platform, hash-certified database migrations for SQL Server and Azure SQL with real up and down, named changes, environments, Entra ID and Always Encrypted.", body)
 
@@ -93,14 +117,14 @@ def download(artifacts):
                 f'<td><code title="{tool_digest}">{tool_digest[:16]}{"…" if tool_digest else ""}</code></td></tr>')
 
     body = f"""
-<p class="lede">Version {VERSION} · {RELEASE_DATE} · MIT license</p>
+<p class="lede">Version {VERSION} · {RELEASE_DATE} · <a href="{BASE}/license/">MIT license</a></p>
 
 <h2>.NET tool</h2>
 <p>If you have the .NET 10 SDK, this is the easiest way to install and update:</p>
 {sh('''dotnet tool install --global Badger.SqlMigrate
 badger --version''')}
 <p>Update with <code>dotnet tool update --global Badger.SqlMigrate</code>. To pin a version for a repository, use a local tool manifest:</p>
-{sh('''dotnet new tool-manifest
+{sh(f'''dotnet new tool-manifest
 dotnet tool install Badger.SqlMigrate --version {VERSION}
 dotnet badger status''')}
 

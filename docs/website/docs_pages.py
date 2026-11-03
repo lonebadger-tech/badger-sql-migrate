@@ -802,7 +802,7 @@ badger verify -C db -e prod''')}
 
 <h2>Containers</h2>
 {code(f'''FROM mcr.microsoft.com/dotnet/runtime-deps:10.0
-ADD https://github.com/lonebadger-tech/badger-sql-migrate/releases/download/v{VERSION}/badger-sql-migrate-{VERSION}-linux-x64.tar.gz /tmp/badger.tgz
+ADD https://lonebadgerdownloads.blob.core.windows.net/badger-sql-migrate/v{VERSION}/badger-sql-migrate-{VERSION}-linux-x64.tar.gz /tmp/badger.tgz
 RUN tar -xzf /tmp/badger.tgz -C /usr/local/bin badger && rm /tmp/badger.tgz
 COPY db /db
 ENTRYPOINT ["badger", "-C", "/db"]''', "", "Dockerfile")}
@@ -915,8 +915,8 @@ Badger.SqlMigrate.Connectivity ─────┘   Entra ID tokens, SSH tunnels
 <p>The core holds the plan, hashing, the preprocessor and the engine, and references no database driver; a test fails the build if the engine, connectivity or CLI reference a vendor driver directly.</p>
 
 <h2>Adding a database</h2>
-<p>A provider implements <code>IDatabaseProvider</code>: sessions, batch splitting, linting, journal tables, a deploy lock, a schema fingerprint, and optionally environment resources. It must pass the shared conformance test suite. The engine, plan, certification, variables, Entra ID tokens and SSH tunnels work unchanged. The repository's <code>docs/writing-a-provider.md</code> walks through it. PostgreSQL, MySQL and SQLite are natural next providers.</p>
+<p>A provider implements <code>IDatabaseProvider</code>: sessions, batch splitting, linting, journal tables, a deploy lock, a schema fingerprint, and optionally environment resources. It must pass the shared conformance test suite. The engine, plan, certification, variables, Entra ID tokens and SSH tunnels work unchanged. <a href="https://github.com/lonebadger-tech/badger-sql-migrate/blob/dev/docs/writing-a-provider.md">Writing a provider</a> walks through it, and <a href="https://github.com/lonebadger-tech/badger-sql-migrate/blob/dev/CONTRIBUTING.md">CONTRIBUTING.md</a> covers sending it upstream. PostgreSQL, MySQL and SQLite are natural next providers.</p>
 
 <h2>Source</h2>
-<p><a href="https://github.com/lonebadger-tech/badger-sql-migrate">github.com/lonebadger-tech/badger-sql-migrate</a> · MIT license.</p>
+<p><a href="https://github.com/lonebadger-tech/badger-sql-migrate">github.com/lonebadger-tech/badger-sql-migrate</a> · <a href="{BASE}/license/">MIT license</a>. Contributions welcome.</p>
 """)

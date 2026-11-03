@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Builds the Badger SQL Migrate pages for lonebadger.tech/badger-sql-migrate/.
 
-The site (badger-sql repo, website/) is plain static HTML served by Azure Static Web Apps with a CSP that
+The site (badger-website repo, site/) is plain static HTML served by Azure Static Web Apps with a CSP that
 forbids inline styles and scripts, so this generator emits static pages that use /styles.css plus
 /badger-sql-migrate/docs.css, and highlights code at build time.
 
 Usage:
-  python3 docs/website/build.py <site-root>   e.g. ../badger-sql/website
+  python3 docs/website/build.py <site-root>   e.g. ../badger-website/site
 Download sizes and SHA-256 hashes are read from artifacts/SHA256SUMS when present (build/publish.sh).
 """
 import html
@@ -22,9 +22,9 @@ sys.path.insert(0, HERE)
 VERSION = "0.1.0"
 RELEASE_DATE = "November 2026"
 BASE = "/badger-sql-migrate"
-# Where release files are downloaded from. Release assets are attached to the GitHub release v{VERSION}.
-DOWNLOAD_BASE = f"https://github.com/lonebadger-tech/badger-sql-migrate/releases/download/v{VERSION}"
-FOOTER = ("© 2026 Lone Badger Tech, LLC. Badger SQL Migrate is free software under the MIT license. "
+# Where release files are downloaded from: the public Azure blob container build/upload-release.sh fills.
+DOWNLOAD_BASE = f"https://lonebadgerdownloads.blob.core.windows.net/badger-sql-migrate/v{VERSION}"
+FOOTER = ("© 2026 Lone Badger Tech, LLC. Badger SQL Migrate is free software under the <a href='/badger-sql-migrate/license/'>MIT license</a>. "
           "Microsoft, SQL Server, Azure and Microsoft Entra are trademarks of the Microsoft group of companies; "
           "other product names are trademarks of their respective owners. Badger SQL Migrate is not affiliated "
           "with or endorsed by Microsoft or the makers of the other tools mentioned.")

@@ -41,7 +41,7 @@ printf '@dotnet "%%~dp0badger.dll" %%*\r\n' > "$work/portable/badger.cmd"
 (cd "$work/portable" && zip -q -r -X "$out/badger-sql-migrate-$version-portable.zip" .)
 
 echo "== dotnet tool"
-dotnet pack "$cli" -c Release -o "$out" -p:Version="$version" -v quiet
+dotnet pack "$cli" -c Release -o "$out" -p:Version="$version" -p:DebugType=none -v quiet
 
 (cd "$out" && shasum -a 256 * > SHA256SUMS)
 ls -lh "$out"

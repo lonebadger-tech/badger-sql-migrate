@@ -1,10 +1,16 @@
 # Badger SQL Migrate
 
-Free, cross-platform (Windows, macOS, Linux) database migrations with **real up and down**, **named changes instead of version numbers**, and **SHA-256 hash certification** of everything that reaches a database.
+[![ci](https://github.com/lonebadger-tech/badger-sql-migrate/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/lonebadger-tech/badger-sql-migrate/actions/workflows/ci.yml)
+[![NuGet](https://img.shields.io/nuget/v/Badger.SqlMigrate.svg)](https://www.nuget.org/packages/Badger.SqlMigrate)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+Free, open-source, cross-platform (Windows, macOS, Linux) database migrations with **real up and down**, **named changes instead of version numbers**, and **SHA-256 hash certification** of everything that reaches a database.
 
 Day one ships the **SQL Server / Azure SQL** provider. The engine is vendor-neutral, so PostgreSQL, MySQL and SQLite can be added as providers without touching the engine or CLI.
 
-MIT licensed. © Lone Badger Tech, LLC. Documentation: [lonebadger.tech/badger-sql-migrate](https://lonebadger.tech/badger-sql-migrate/).
+- **Documentation:** [lonebadger.tech/badger-sql-migrate](https://lonebadger.tech/badger-sql-migrate/) (also as Markdown for AI assistants: [llms.txt](https://www.lonebadger.tech/llms.txt))
+- **Download:** [standalone binaries](https://lonebadger.tech/badger-sql-migrate/download/) or `dotnet tool install -g Badger.SqlMigrate`
+- **License:** [MIT](LICENSE). © Lone Badger Tech, LLC.
 
 ## Why another migration tool?
 
@@ -23,6 +29,8 @@ MIT licensed. © Lone Badger Tech, LLC. Documentation: [lonebadger.tech/badger-s
 ```bash
 dotnet tool install -g Badger.SqlMigrate
 ```
+
+No .NET SDK? Self-contained executables for Windows, macOS and Linux are on the [download page](https://lonebadger.tech/badger-sql-migrate/download/).
 
 ## Quick start
 
@@ -144,14 +152,36 @@ See [docs/methodology.md](docs/methodology.md). In short: every change's script 
 dotnet build
 dotnet test
 build/publish.sh        # release binaries for every platform, the .NET tool and SHA256SUMS into ./artifacts
+build/upload-release.sh # upload ./artifacts to the public downloads container the website links to
 ```
 
 The website pages are generated from `docs/website/` into the site repository:
 
 ```bash
-python3 docs/website/build.py ../badger-sql/website
+python3 docs/website/build.py ../badger-website/site
 ```
 
 The SQL Server conformance tests start SQL Server 2022 with Testcontainers (Docker required) or use `BADGER_TEST_SQLSERVER=<connection string>`. They skip when neither is available.
 
 Adding a database vendor: see [docs/writing-a-provider.md](docs/writing-a-provider.md).
+
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| `src/Badger.SqlMigrate.Core` | Plan, hashing and certification, preprocessor, engine. No database driver |
+| `src/Badger.SqlMigrate.Connectivity` | Entra ID tokens, SSH tunnels, secrets (vendor-neutral) |
+| `src/Badger.SqlMigrate.Providers.SqlServer` | The SQL Server / Azure SQL provider |
+| `src/Badger.SqlMigrate.Cli` | The `badger` command (packaged as the `Badger.SqlMigrate` .NET tool) |
+| `tests/` | Unit tests, the shared provider conformance suite, architecture tests |
+| `samples/demo-db` | A runnable sample project |
+| `docs/` | Configuration reference, methodology, provider guide, and the website generator (`docs/website/`) |
+| `build/` | Release build (`publish.sh`) and upload (`upload-release.sh`) |
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first; everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md). Report security problems privately as described in [SECURITY.md](SECURITY.md), not in a public issue. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+[MIT](LICENSE) © Lone Badger Tech, LLC. Microsoft, SQL Server, Azure and Microsoft Entra are trademarks of the Microsoft group of companies; Badger SQL Migrate is not affiliated with or endorsed by Microsoft.

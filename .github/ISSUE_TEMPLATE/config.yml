@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://lonebadger.tech/badger-sql-migrate/docs/
+    about: Configuration, commands, CI/CD and troubleshooting.
+  - name: Report a security problem
+    url: https://github.com/lonebadger-tech/badger-sql-migrate/security/advisories/new
+    about: Report privately, not in a public issue.
