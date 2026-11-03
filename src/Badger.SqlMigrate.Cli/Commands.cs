@@ -6,6 +6,7 @@ using Badger.SqlMigrate.Core.Bundles;
 using Badger.SqlMigrate.Core.Configuration;
 using Badger.SqlMigrate.Core.Engine;
 using Badger.SqlMigrate.Core.Hashing;
+using Badger.SqlMigrate.Core.Import;
 using Badger.SqlMigrate.Core.Plan;
 using Badger.SqlMigrate.Core.Preprocessing;
 using Badger.SqlMigrate.Core.Project;
@@ -127,6 +128,14 @@ public static class Commands
 
             """);
 
+        WriteGitAttributes(dir);
+        g.Out.Success($"initialized {provider.DisplayName} project in {dir}");
+        g.Out.Info("next: bsm add <change-name>");
+        return Ok;
+    }
+
+    private static void WriteGitAttributes(string dir)
+    {
         var gitattributes = Path.Combine(dir, ".gitattributes");
         var rule = $"{PlanFile.FileName} merge=union";
         var existing = File.Exists(gitattributes) ? File.ReadAllText(gitattributes) : string.Empty;
@@ -134,10 +143,127 @@ public static class Commands
         {
             File.AppendAllText(gitattributes, (existing.Length > 0 && !existing.EndsWith('\n') ? "\n" : string.Empty) + rule + "\n*.sql text eol=lf\n");
         }
+    }
 
-        g.Out.Success($"initialized {provider.DisplayName} project in {dir}");
-        g.Out.Info("next: bsm add <change-name>");
-        return Ok;
+    public static int ImportFlyway(GlobalOptions g, string path, string? configFile, string[] locations, bool dryRun)
+    {
+        RequireWorkingCopy(g, "import");
+        var imported = FlywayImporter.Import(new FlywayImportOptions { Path = path, ConfigFile = configFile, Locations = locations, MapConnection = JdbcSqlServer.Map });
+        return WriteImport(g, imported, dryRun);
+    }
+
+    public static int ImportDbUp(GlobalOptions g, string path, bool fileNames, string[] runAlways, bool noVariables, bool dryRun)
+    {
+        RequireWorkingCopy(g, "import");
+        var imported = DbUpImporter.Import(new DbUpImportOptions
+        {
+            Path = path,
+            FileNamesOnly = fileNames,
+            RunAlways = runAlways,
+            Variables = ParseVariables(g.Variables),
+            VariablesDisabled = noVariables,
+        });
+        return WriteImport(g, imported, dryRun);
+    }
+
+    /// <summary>Writes an imported project into the (new) project folder: scripts, plan, bsm.yaml and .gitattributes.</summary>
+    private static int WriteImport(GlobalOptions g, ImportedProject imported, bool dryRun)
+    {
+        var dir = Path.GetFullPath(g.ProjectDir);
+        foreach (var existing in new[] { BsmConfig.FileName, PlanFile.FileName })
+        {
+            if (File.Exists(Path.Combine(dir, existing)))
+            {
+                throw new MigrationException($"{Path.Combine(dir, existing)} already exists. Import into a new folder: bsm import ... -C <new folder>.");
+            }
+        }
+
+        var changesDir = Path.Combine(dir, MigrationProject.ChangesFolder);
+        if (Directory.Exists(changesDir) && Directory.EnumerateFileSystemEntries(changesDir).Any())
+        {
+            throw new MigrationException($"{changesDir} is not empty. Import into a new folder.");
+        }
+
+        var tool = imported.Tool.ToLowerInvariant();
+        if (g.Out.Json)
+        {
+            if (!dryRun)
+            {
+                Write();
+            }
+
+            g.Out.WriteJson(new
+            {
+                tool,
+                dryRun,
+                changes = imported.Changes.Select(c => new { c.Name, c.Source, flags = c.Flags.ToString(), c.Note }),
+                repeatables = imported.Repeatables.Select(r => new { r.Path, r.Source }),
+                variables = imported.Variables,
+                undefinedVariables = imported.UndefinedVariables,
+                environments = imported.Environments.Select(e => e.Name),
+                warnings = imported.Warnings.Distinct(),
+            });
+            return Ok;
+        }
+
+        foreach (var change in imported.Changes)
+        {
+            var flags = string.Join(' ', new[] { change.Flags.HasFlag(ChangeFlags.NoTransaction) ? "!notx" : null, change.Flags.HasFlag(ChangeFlags.Irreversible) ? "!irreversible" : null, change.Revert is not null ? "(revert)" : null }.Where(f => f is not null));
+            Console.WriteLine($"  {change.Source,-50} -> {MigrationProject.ChangesFolder}/{change.Name} {g.Out.Paint(flags, "\u001b[90m")}");
+        }
+
+        foreach (var repeatable in imported.Repeatables)
+        {
+            Console.WriteLine($"  {repeatable.Source,-50} -> {MigrationProject.RepeatableFolder}/{repeatable.Path}");
+        }
+
+        foreach (var (name, value) in imported.Variables)
+        {
+            g.Out.Line($"{{{name}}}", value);
+        }
+
+        foreach (var name in imported.UndefinedVariables)
+        {
+            g.Out.Line($"{{{name}}}", "(no value: define it in bsm.yaml)");
+        }
+
+        foreach (var environment in imported.Environments)
+        {
+            g.Out.Line("environment", environment.Name + (environment.Name == imported.DefaultEnvironment ? " (default)" : string.Empty));
+        }
+
+        foreach (var warning in imported.Warnings.Distinct())
+        {
+            g.Out.Warn(warning);
+        }
+
+        if (dryRun)
+        {
+            g.Out.Success($"would import {imported.Changes.Count} change(s) and {imported.Repeatables.Count} repeatable(s) from {imported.Tool} into {dir}.");
+            return Ok;
+        }
+
+        Write();
+        var provider = Providers.Resolve(SqlServerProvider.ProviderId);
+        var project = MigrationProject.Load(dir, provider.Id);
+        foreach (var problem in project.Problems)
+        {
+            g.Out.Error(problem);
+        }
+
+        g.Out.Success($"imported {imported.Changes.Count} change(s) and {imported.Repeatables.Count} repeatable(s) from {imported.Tool} into {dir}; plan head {Short(project.HeadChainId)}.");
+        g.Out.Info("next: review bsm.yaml, then 'bsm plan check'. New databases: 'bsm deploy'.");
+        g.Out.Info($"databases {imported.Tool} already manages: 'bsm baseline --from {tool} -e <environment>' records what they have without running it.");
+        return project.Problems.Count == 0 ? Ok : Failed;
+
+        void Write()
+        {
+            Directory.CreateDirectory(dir);
+            imported.WriteScripts(dir);
+            Directory.CreateDirectory(Path.Combine(dir, MigrationProject.EnvironmentsFolder));
+            File.WriteAllText(Path.Combine(dir, BsmConfig.FileName), ImportYaml.Write(imported, SqlServerProvider.ProviderId), Utf8NoBom);
+            WriteGitAttributes(dir);
+        }
     }
 
     public static int Add(GlobalOptions g, string name, string[] requires, string? note, bool noTx, bool irreversible)
@@ -929,12 +1055,40 @@ public static class Commands
         return Ok;
     }
 
-    public static async Task<int> Baseline(GlobalOptions g, string to, bool yes, CancellationToken ct)
+    public static async Task<int> Baseline(GlobalOptions g, string? to, string? from, string? journal, bool skipChecksums, bool yes, CancellationToken ct)
     {
+        if ((to is null) == (from is null))
+        {
+            throw new MigrationException("Pass --to <change|@tag>, or --from flyway|dbup to read what the database already has from that tool's journal.");
+        }
+
         await using var ctx = await Connect(g, ct);
+        if (from is not null)
+        {
+            var (schema, table) = SplitTable(journal, from);
+            var (project, _) = LoadProject(g);
+            to = from.ToLowerInvariant() switch
+            {
+                "flyway" => ForeignJournal.FlywayTarget(project, await ForeignJournal.ReadFlywayAsync(ctx.Session, ctx.Provider, schema, table, ct), checkChecksums: !skipChecksums),
+                "dbup" => ForeignJournal.DbUpTarget(project, await ForeignJournal.ReadDbUpAsync(ctx.Session, ctx.Provider, schema, table, ct)),
+                _ => throw new MigrationException("--from must be flyway or dbup."),
+            };
+            if (to is null)
+            {
+                g.Out.Success($"{from} has not applied any of the imported changes to this database; nothing to baseline. Use 'bsm deploy'.");
+                return Ok;
+            }
+
+            g.Out.Info($"{from} journal {schema}.{table}: applied up to and including '{to}'.");
+        }
+
         Confirm(g, yes, ctx.Environment, $"Record changes up to '{to}' as already applied on '{ctx.Environment.Name}' ({ctx.Session.Description}) without running them?");
-        var names = await ctx.Engine.BaselineAsync(to, ct);
+        var names = await ctx.Engine.BaselineAsync(to!, ct);
         g.Out.Success($"baselined {names.Count} change(s).");
+        if (from is not null)
+        {
+            g.Out.Info($"the next 'bsm deploy' applies later changes and all repeatables. {from}'s own journal table is left in place; drop it when you no longer need it.");
+        }
         return Ok;
     }
 
@@ -1248,6 +1402,19 @@ public static class Commands
             tunnel?.Dispose();
             throw;
         }
+    }
+
+    /// <summary>"schema.table" or "table" (schema dbo), with each tool's default table.</summary>
+    private static (string Schema, string Table) SplitTable(string? journal, string tool)
+    {
+        var fallback = tool.Equals("dbup", StringComparison.OrdinalIgnoreCase) ? ForeignJournal.DbUpDefaultTable : ForeignJournal.FlywayDefaultTable;
+        if (string.IsNullOrWhiteSpace(journal))
+        {
+            return ("dbo", fallback);
+        }
+
+        var dot = journal.LastIndexOf('.');
+        return dot < 0 ? ("dbo", journal) : (journal[..dot], journal[(dot + 1)..]);
     }
 
     private static Dictionary<string, string> ParseVariables(string[] values)

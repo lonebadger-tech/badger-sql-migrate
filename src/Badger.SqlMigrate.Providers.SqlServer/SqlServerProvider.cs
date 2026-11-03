@@ -108,4 +108,6 @@ public sealed class SqlServerProvider : IDatabaseProvider
     public string FormatBatchSeparator() => "GO";
 
     public string FormatComment(string text) => "-- " + text;
+
+    public string QuoteIdentifier(string name) => "[" + name.Replace("]", "]]", StringComparison.Ordinal) + "]";
 }

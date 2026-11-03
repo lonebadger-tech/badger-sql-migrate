@@ -31,6 +31,7 @@ SIDEBAR = [
         ("Bundles", "docs/bundles/"),
         ("Schema drift", "docs/drift/"),
         ("Existing databases", "docs/baseline/"),
+        ("Moving from Flyway or DbUp", "docs/importing/"),
         ("Journal tables", "docs/journal/"),
         ("Troubleshooting", "docs/troubleshooting/"),
     ]),
@@ -51,7 +52,7 @@ def link(path, label):
 def pages():
     return [overview(), install(), quick_start(), project(), plan(), changes(), certification(), revert(), fixing_changes(),
             teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(),
-            commands(), ci_cd(), bundles(), drift(), baseline(), journal(), troubleshooting(), extending()]
+            commands(), ci_cd(), bundles(), drift(), baseline(), importing(), journal(), troubleshooting(), extending()]
 
 
 # ---------------------------------------------------------------- get started
@@ -833,7 +834,9 @@ def commands():
         ("diff-schema", "[--against env] [--exit-code]", "Schema differences: live versus the schema recorded after the last deploy, or versus another environment. --exit-code returns 3 when they differ."),
         ("verify", "", "Hashes versus working copy, rendered-SQL drift, verify scripts (rolled back), schema drift. Exit 1 on problems."),
         ("log", "[-n|--limit 50]", "Deploy, revert, fail, repeatable and resource events, newest first."),
-        ("baseline", "--to x [-y]", "Record changes up to x as applied without running them."),
+        ("baseline", "--to x | --from flyway|dbup [--journal schema.table] [--skip-checksums] [-y]", "Record changes as applied without running them: up to x, or as far as Flyway's or DbUp's journal in the database says."),
+        ("import flyway &lt;folder&gt;", "[--config file] [--location dir…] [--dry-run]", "Convert a Flyway project into a new bsm project (written to -C). No database."),
+        ("import dbup &lt;folder&gt;", "[--file-names] [--run-always glob…] [--no-variables] [--var name=value…] [--dry-run]", "Convert DbUp scripts into a new bsm project (written to -C). No database."),
         ("vars", "", "Every variable for the environment: value, source, description."),
         ("render &lt;name&gt;", "[-k|--kind deploy|revert|verify]", "Print a change or repeatable exactly as it would run."),
         ("env list", "", "Environments and templates."),
@@ -1003,12 +1006,74 @@ bsm status -e prod                          # initial-schema shown as (baseline)
 <p>Baseline only works on a database with no deployed changes, takes the deploy lock, records the environment, and writes a schema fingerprint so later drift is detected.</p>
 
 <h2>Coming from Flyway, DbUp or grate</h2>
+<p>For Flyway and DbUp, <code>bsm import</code> does the conversion and <code>bsm baseline --from</code> reads each database's history for you; see {link("docs/importing/", "Moving from Flyway or DbUp")}. For other tools:</p>
 <ul>
   <li>Convert your versioned scripts into changes (one folder each) in their existing order, or collapse history into one <code>initial-schema</code> change.</li>
   <li>Write revert scripts for the changes you might want to undo; mark the rest <code>!irreversible</code>.</li>
   <li>Move repeatable/"anytime" scripts into <code>repeatable/</code>.</li>
   <li>Replace placeholders such as <code>${{name}}</code> (Flyway) with <code>{{name}}</code> or keep <code>$(name)</code>.</li>
   <li>Baseline each existing database. The old tool's history table can stay; bsm uses its own <code>bsm</code> schema.</li>
+</ul>
+""")
+
+
+def importing():
+    return doc("docs/importing/", "Moving from Flyway or DbUp", "Convert an existing project, then adopt the databases it already manages without running anything.", f"""
+{sh('''bsm import flyway ./flyway-project -C db --dry-run   # see what it would do
+bsm import flyway ./flyway-project -C db             # write a new bsm project in db/
+bsm plan check -C db
+bsm baseline --from flyway -C db -e prod             # once per existing database
+bsm deploy -C db -e prod                             # from now on''')}
+<p>Import writes a new project (it refuses a folder that already has one) and changes no database. Baseline reads the old tool's journal table in each database, records the changes it already ran, and runs nothing; the old journal table stays until you drop it. New, empty databases just run <code>bsm deploy</code>.</p>
+
+<h2 id="flyway">Flyway</h2>
+<p>Point the import at the folder you run Flyway from. It reads <code>flyway.toml</code> or <code>flyway.conf</code> (also in <code>conf/</code>, or pass <code>--config</code>), takes migrations from <code>flyway.locations</code> (or <code>sql/</code>, <code>src/main/resources/db/migration</code>, or <code>--location</code>), and honours custom prefixes, separators, suffixes and placeholder syntax.</p>
+<table>
+<tr><th>Flyway</th><th>bsm</th></tr>
+<tr><td><code>V1.2__Add_email.sql</code></td><td>Change <code>add-email</code>, in version order (1.10 after 1.9). The plan note <code>flyway V1.2 checksum …</code> links it to Flyway's history. Repeated descriptions get the version appended.</td></tr>
+<tr><td><code>U1.2__Add_email.sql</code> (undo)</td><td>The change's <code>revert.sql</code>. Changes without one are <code>!irreversible</code>.</td></tr>
+<tr><td><code>R__Customer_view.sql</code></td><td><code>repeatable/Customer_view.sql</code> (same order: by description)</td></tr>
+<tr><td><code>V2__x.sql.conf</code> with <code>executeInTransaction=false</code></td><td><code>!notx</code></td></tr>
+<tr><td><code>${{name}}</code> placeholders</td><td><code>{{name}}</code> variables. Values from <code>[flyway.placeholders]</code> go under <code>variables:</code>; values from <code>[environments.x.flyway.placeholders]</code> go to that environment. Names bsm reserves (such as <code>env</code>) become <code>{{flyway.env}}</code>.</td></tr>
+<tr><td><code>${{flyway:database}}</code>, <code>${{flyway:environment}}</code></td><td><code>{{db}}</code>, <code>{{env}}</code></td></tr>
+<tr><td><code>${{flyway:defaultSchema}}</code>, <code>${{flyway:user}}</code>, <code>${{flyway:table}}</code></td><td><code>{{flyway.defaultSchema}}</code>, <code>{{flyway.user}}</code>, <code>{{flyway.table}}</code>, with values from the configuration</td></tr>
+<tr><td><code>${{flyway:timestamp}}</code>, <code>${{flyway:filename}}</code></td><td><code>{{deploy.utc}}</code> (ISO 8601 UTC), <code>{{change}}</code> (the change name)</td></tr>
+<tr><td><code>flyway.url</code>, <code>[environments.x]</code></td><td>Environments: host, port, instance, database, Windows or Entra authentication, TLS and the JDBC settings SqlClient shares. Passwords are never copied: <code>${{env.DB_PASSWORD}}</code> becomes <code>${{env:DB_PASSWORD}}</code>, and a literal password becomes a reference to <code>FLYWAY_PASSWORD</code>.</td></tr>
+<tr><td>Callbacks (<code>afterMigrate.sql</code> …), baseline migrations (<code>B…</code>), Java migrations</td><td>Not imported; listed in the output</td></tr>
+</table>
+
+<h3>Baseline from Flyway's history</h3>
+{sh('''bsm baseline --from flyway -e prod                         # reads dbo.flyway_schema_history
+bsm baseline --from flyway -e prod --journal app.flyway_history''')}
+<p>Applied, undone and baselined versions are taken from the history in order. Baseline refuses, and says why, when:</p>
+<ul>
+  <li>a version Flyway applied has no change in the plan;</li>
+  <li>a change before the last applied one was never applied (Flyway's <code>outOfOrder</code>);</li>
+  <li>Flyway's recorded checksum differs from the imported script, meaning the database ran a different version of it. bsm computes checksums exactly as Flyway does; <code>--skip-checksums</code> turns the check off.</li>
+</ul>
+<p>bsm has no record of repeatable scripts yet, so the first deploy after baselining runs each of them once.</p>
+
+<h2 id="dbup">DbUp</h2>
+{sh('''bsm import dbup ./src/App.Database/Scripts -C db --var schemaName=app --run-always "Always/**"
+bsm baseline --from dbup -C db -e prod                    # reads dbo.SchemaVersions''')}
+<p>DbUp's scripts and options live in code, so tell the import what the code does:</p>
+<table>
+<tr><th>DbUp</th><th>bsm import</th></tr>
+<tr><td>Scripts embedded as resources (<code>WithScriptsEmbeddedInAssembly</code>)</td><td>Default: script names are the folder path joined with dots (<code>Orders.Script0003.sql</code>), and the order is DbUp's: ordinal by name. Baseline matches them to the full resource names in the journal.</td></tr>
+<tr><td><code>WithScriptsFromFileSystem</code></td><td><code>--file-names</code>: names are the file names</td></tr>
+<tr><td><code>ScriptType.RunAlways</code> scripts</td><td><code>--run-always "glob"</code>: imported as repeatables, which run when they change rather than on every deploy</td></tr>
+<tr><td><code>$name$</code> variables, <code>WithVariable("name", value)</code></td><td><code>{{name}}</code> variables; pass the values with <code>--var name=value</code>, or add them to <code>bsm.yaml</code> afterwards (<code>plan check</code> fails until every variable has a value). <code>--no-variables</code> if the code calls <code>WithVariablesDisabled()</code>.</td></tr>
+</table>
+<p>DbUp has no down scripts, so every change is <code>!irreversible</code>. DbUp runs without a transaction unless configured to; bsm runs each change in one, and <code>bsm plan check</code> lists any statement that needs <code>!notx</code>.</p>
+
+<h2>Text that must stay literal</h2>
+<p>Neither tool expands <code>{{name}}</code> or <code>$(name)</code>, but bsm does. The import escapes <code>{{name}}</code> to <code>{{{{name}}}}</code>, and if any script contains <code>$(name)</code> text it sets <code>preprocessor.sqlcmdSyntax: false</code> in <code>bsm.yaml</code>.</p>
+
+<h2>Before you baseline</h2>
+<ul>
+  <li>Write the reverts you want now: a change's hash includes its revert script, so adding one later means <code>bsm repair</code> in every database.</li>
+  <li>Review the generated environments and fill in what the output asks for (tenant ids, variables without values).</li>
+  <li>Check the result: deploy the project to an empty database and compare it with one the old tool built, using <code>bsm diff-schema -e new --against old</code>. Only the old tool's journal table should differ.</li>
 </ul>
 """)
 

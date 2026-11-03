@@ -143,9 +143,30 @@ log.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Log(g, r.GetValu
 root.Subcommands.Add(log);
 
 // baseline
-var baselineTo = new Option<string>("--to") { Description = "Mark changes up to this one as already applied.", Required = true };
-var baseline = new Command("baseline", "Adopt an existing database: record changes as applied without running them.") { baselineTo, yes };
-baseline.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Baseline(g, r.GetValue(baselineTo)!, r.GetValue(yes), ct)));
+var baselineTo = new Option<string?>("--to") { Description = "Mark changes up to this one as already applied." };
+var baselineFrom = new Option<string?>("--from") { Description = "flyway | dbup: read what the database already has from that tool's journal (for projects made with 'bsm import')." };
+baselineFrom.AcceptOnlyFromAmong("flyway", "dbup");
+var baselineJournal = new Option<string?>("--journal") { Description = "The tool's journal table, [schema.]table (default: dbo.flyway_schema_history or dbo.SchemaVersions)." };
+var baselineSkipChecksums = new Option<bool>("--skip-checksums") { Description = "Do not compare Flyway's recorded checksums with the imported scripts." };
+var baseline = new Command("baseline", "Adopt an existing database: record changes as applied without running them.") { baselineTo, baselineFrom, baselineJournal, baselineSkipChecksums, yes };
+baseline.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Baseline(g, r.GetValue(baselineTo), r.GetValue(baselineFrom), r.GetValue(baselineJournal), r.GetValue(baselineSkipChecksums), r.GetValue(yes), ct)));
+
+// import
+var import = new Command("import", "Convert another tool's migrations into a new bsm project (written to --project).");
+var importPath = new Argument<string>("path") { Description = "The folder to import from." };
+var importDryRun = new Option<bool>("--dry-run") { Description = "Show what would be written without writing anything." };
+var flywayConfig = new Option<string?>("--config") { Description = "flyway.conf or flyway.toml (default: found in the folder or its conf/ folder)." };
+var flywayLocation = new Option<string[]>("--location") { Description = "Migration folder; overrides flyway.locations. Repeatable." };
+var importFlyway = new Command("flyway", "Import a Flyway project: V/U/R scripts, placeholders, script config and environments.") { importPath, flywayConfig, flywayLocation, importDryRun };
+importFlyway.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.ImportFlyway(g, r.GetValue(importPath)!, r.GetValue(flywayConfig), r.GetValue(flywayLocation) ?? [], r.GetValue(importDryRun))));
+import.Subcommands.Add(importFlyway);
+var dbupFileNames = new Option<bool>("--file-names") { Description = "DbUp script names are file names only (WithScriptsFromFileSystem); default: folder.path.names like embedded resources." };
+var dbupRunAlways = new Option<string[]>("--run-always") { Description = "Glob of scripts DbUp runs every time (imported as repeatables). Repeatable." };
+var dbupNoVariables = new Option<bool>("--no-variables") { Description = "The project disabled DbUp variables: leave $name$ text alone." };
+var importDbUp = new Command("dbup", "Import DbUp scripts: one change per script in DbUp's order; $variables$ become {variables} (values via --var).") { importPath, dbupFileNames, dbupRunAlways, dbupNoVariables, importDryRun };
+importDbUp.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.ImportDbUp(g, r.GetValue(importPath)!, r.GetValue(dbupFileNames), r.GetValue(dbupRunAlways) ?? [], r.GetValue(dbupNoVariables), r.GetValue(importDryRun))));
+import.Subcommands.Add(importDbUp);
+root.Subcommands.Add(import);
 root.Subcommands.Add(baseline);
 
 // vars / render

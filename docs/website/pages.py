@@ -194,6 +194,12 @@ def releases():
   <ul>
     <li><code>bsm diff-schema</code> lists the objects changed since the last deploy, or the differences between two environments, with line diffs for modules</li>
   </ul>
+  <h3>Moving from Flyway or DbUp</h3>
+  <ul>
+    <li><code>bsm import flyway</code> converts versioned, undo and repeatable migrations, placeholders (including Flyway's built-ins), per-script settings and environments from <code>flyway.toml</code> or <code>flyway.conf</code></li>
+    <li><code>bsm import dbup</code> converts scripts in DbUp's order, <code>$variables$</code> and run-always scripts</li>
+    <li><code>bsm baseline --from flyway|dbup</code> adopts a database from the old tool's journal, checking Flyway's checksums</li>
+  </ul>
   <h3>System-versioned tables and partitions</h3>
   <ul>
     <li>The schema fingerprint records system versioning (period columns, history table, retention) and partitioning (functions, boundaries, schemes, partitioned tables and indexes)</li>

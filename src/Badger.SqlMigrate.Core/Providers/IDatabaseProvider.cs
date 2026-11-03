@@ -50,6 +50,9 @@ public interface IDatabaseProvider
 
     /// <summary>A comment line in this vendor's dialect.</summary>
     string FormatComment(string text);
+
+    /// <summary>Quotes an identifier (schema or table name) for this vendor. Default: ANSI double quotes.</summary>
+    string QuoteIdentifier(string name) => "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
 }
 
 public sealed record Endpoint(string Host, int Port);

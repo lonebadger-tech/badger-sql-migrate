@@ -82,3 +82,8 @@ Scripts are preprocessed (`{name}`, `$(name)`) before the provider sees them. Th
 ## Environment resources
 
 Some objects must exist before changes run but cannot be in hashed scripts because their definitions differ per environment. Providers expose them through `IEnvironmentResources`. On SQL Server these are Always Encrypted keys: scripts name a column encryption key; each environment maps it to its own column master key, and bsm provisions the key metadata and material. Safe actions run automatically before a deploy; destructive ones (dropping an old key value after rotation) need `env provision --allow-destructive`; contradictions are conflicts that stop the deploy.
+
+## Importing from Flyway and DbUp
+
+`bsm import flyway|dbup` writes a new project; the importers live in Core (`Import/`) and know nothing about the database. Each imported change keeps the source identity in its plan note (`flyway V1.2 checksum <crc32>`, `dbup <script name>`), which is not hashed. `bsm baseline --from` reads the old tool's journal through the provider (`QuoteIdentifier` builds the table name), maps it to those notes, refuses gaps, unknown entries and (for Flyway) checksum mismatches, and then runs an ordinary baseline. Flyway's checksum is CRC-32 over each line's UTF-8 bytes without line breaks, with the BOM removed, as a signed integer.
+
