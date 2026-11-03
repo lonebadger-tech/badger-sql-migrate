@@ -208,6 +208,27 @@ public class ConnectionFactoryTests
         Assert.Contains("only available on Windows", ex.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void System_key_stores_are_never_registered_on_the_connection()
+    {
+        // SqlClient rejects MSSQL_* names on a connection; it always supplies those stores itself.
+        var all = new Dictionary<string, SqlColumnEncryptionKeyStoreProvider>(StringComparer.OrdinalIgnoreCase)
+        {
+            [KeyStoreProviders.CertificateStore] = new SqlColumnEncryptionCertificateStoreProvider(),
+            [KeyStoreProviders.Cng] = new SqlColumnEncryptionCngProvider(),
+            [KeyStoreProviders.Csp] = new SqlColumnEncryptionCspProvider(),
+            ["HSM_VAULT"] = new SqlColumnEncryptionCertificateStoreProvider(),
+        };
+
+        var onConnection = KeyStoreProviders.ForConnection(all);
+
+        Assert.Equal(["HSM_VAULT"], onConnection.Keys);
+        using var rejected = new SqlConnection();
+        Assert.Throws<ArgumentException>(() => rejected.RegisterColumnEncryptionKeyStoreProvidersOnConnection(all));
+        using var connection = new SqlConnection();
+        connection.RegisterColumnEncryptionKeyStoreProvidersOnConnection(onConnection);
+    }
+
     private sealed class FixedTokens : IAccessTokenProvider
     {
         public string DefaultScope => "https://database.windows.net/.default";

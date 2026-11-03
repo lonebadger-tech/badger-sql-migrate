@@ -6,6 +6,7 @@ All notable changes to Badger SQL Migrate. The format follows [Keep a Changelog]
 
 - Open source under the MIT license, with contribution, security and conduct guides.
 - The .NET tool is published to nuget.org from GitHub Actions with Trusted Publishing.
+- Fixed: on Windows, Always Encrypted connections failed with "'MSSQL_' prefix is reserved" because the system key stores were registered on the connection.
 
 ## 0.1.0 (November 2026)
 

@@ -229,7 +229,11 @@ public static class SqlServerConnectionFactory
         if (alwaysEncrypted is not null)
         {
             keyStores = KeyStoreProviders.Build(alwaysEncrypted, environment, context);
-            connection.RegisterColumnEncryptionKeyStoreProvidersOnConnection(keyStores);
+            var onConnection = KeyStoreProviders.ForConnection(keyStores);
+            if (onConnection.Count > 0)
+            {
+                connection.RegisterColumnEncryptionKeyStoreProvidersOnConnection(onConnection);
+            }
         }
 
         var description = $"sqlserver://{target.Host}:{target.Port}/{builder.InitialCatalog}{(context.EndpointOverride is null ? string.Empty : " (via ssh)")}";

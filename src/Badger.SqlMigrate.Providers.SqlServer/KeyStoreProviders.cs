@@ -35,7 +35,8 @@ public static class KeyStoreProviders
     {
         var providers = new Dictionary<string, SqlColumnEncryptionKeyStoreProvider>(StringComparer.OrdinalIgnoreCase);
 
-        // Connection-level registration replaces the driver's defaults, so re-add the Windows system stores.
+        // The Windows system stores, for provisioning and rotating keys. The driver always has its own copies,
+        // so they're never registered on a connection (see ForConnection).
         if (OperatingSystem.IsWindows())
         {
             providers[CertificateStore] = new SqlColumnEncryptionCertificateStoreProvider();
@@ -62,6 +63,13 @@ public static class KeyStoreProviders
 
         return providers;
     }
+
+    /// <summary>The providers to register on a connection: all but the system stores. The driver supplies those
+    /// itself, ahead of any registered provider, and rejects registrations whose names start with MSSQL_.</summary>
+    public static Dictionary<string, SqlColumnEncryptionKeyStoreProvider> ForConnection(IReadOnlyDictionary<string, SqlColumnEncryptionKeyStoreProvider> providers) =>
+        providers.Where(p => !IsSystemStore(p.Key)).ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
+
+    public static bool IsSystemStore(string name) => name.StartsWith("MSSQL_", StringComparison.OrdinalIgnoreCase);
 
     public static SqlColumnEncryptionKeyStoreProvider Get(IReadOnlyDictionary<string, SqlColumnEncryptionKeyStoreProvider> providers, string keyStore)
     {
