@@ -194,6 +194,13 @@ def releases():
   <ul>
     <li><code>bsm diff-schema</code> lists the objects changed since the last deploy, or the differences between two environments, with line diffs for modules</li>
   </ul>
+  <h3>Generating changes</h3>
+  <ul>
+    <li><code>bsm add &lt;name&gt; --from-diff</code> turns schema edits made in your own database into a change: it builds a shadow database from the plan, compares, and writes <code>deploy.sql</code> and <code>revert.sql</code></li>
+    <li>Tables, columns, renames, keys, indexes, constraints, views, procedures, functions, triggers, types, sequences, synonyms, temporal tables and partitions; risky edits are reported, not guessed</li>
+    <li><code>bsm diff-schema --against env --script file</code> writes T-SQL between any two databases</li>
+    <li>No extra components: everything comes from SQL Server's catalog views</li>
+  </ul>
   <h3>Moving from other tools</h3>
   <ul>
     <li><code>bsm import flyway</code> converts versioned, undo and repeatable migrations, placeholders (including Flyway's built-ins), per-script settings and environments from <code>flyway.toml</code> or <code>flyway.conf</code></li>

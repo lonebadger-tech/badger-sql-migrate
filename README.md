@@ -79,6 +79,7 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 |---|---|
 | `init` | Create `bsm.yaml`, `bsm.plan`, folders, `.gitattributes` |
 | `add <name> [-r dep] [--notx] [--irreversible]` | Scaffold a change and append it to the plan |
+| `add <name> --from-diff [--shadow-env env]` | Generate the change from schema edits made in your database (compared with a shadow database built from the plan) |
 | `tag <name>` | Tag the last change |
 | `plan check` / `plan show` | Validate plan, folders and scripts (lint) / list hashes and chain ids. No database needed |
 | `status [--exit-code]` | Plan vs database: pending, applied, edited, orphaned, certified |
@@ -89,7 +90,7 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 | `rework <change> [--as name]` | Add a change that supersedes a deployed one (copy of its deploy script; revert restores it) |
 | `repair <change>… \| --all [--reason text]` | Accept harmless edits to deployed changes (e.g. a fixed revert.sql) without running SQL; re-certifies |
 | `bundle create [-o file] [--no-config]` / `bundle verify <file>` | Hash-verified, byte-reproducible project bundle / check one |
-| `diff-schema [--against env] [--exit-code]` | What changed since the last deploy, or how two environments differ |
+| `diff-schema [--against env] [--exit-code] [--script file]` | What changed since the last deploy, or how two environments differ; T-SQL to turn one into the other |
 | `verify` | Hash check, run verify scripts, detect schema drift |
 | `log` | Deploy/revert/failure history from the database |
 | `baseline --to x \| --from flyway\|dbup\|grate\|roundhouse` | Adopt an existing database without running scripts (up to x, or as far as the old tool's journal says) |

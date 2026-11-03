@@ -21,6 +21,9 @@ public sealed record DeployOptions
     public OrderingPolicy? Ordering { get; init; }
 
     public bool SkipRepeatables { get; init; }
+
+    /// <summary>Deploy no changes, only repeatables (for building a copy of a database that has none).</summary>
+    public bool OnlyRepeatables { get; init; }
 }
 
 public sealed record RevertOptions
@@ -226,7 +229,7 @@ public sealed class MigrationEngine
         var status = await StatusAsync(cancellationToken).ConfigureAwait(false);
         ThrowOnMismatch(status);
 
-        var pending = status.Changes.Where(c => c.State == ChangeState.Pending && c.PlanIndex <= targetIndex).ToList();
+        var pending = options.OnlyRepeatables ? [] : status.Changes.Where(c => c.State == ChangeState.Pending && c.PlanIndex <= targetIndex).ToList();
         var maxAppliedIndex = status.Changes.Where(c => c.State != ChangeState.Pending).Select(c => c.PlanIndex).DefaultIfEmpty(-1).Max();
         var outOfOrder = pending.Where(p => p.PlanIndex < maxAppliedIndex).Select(p => p.Change.Name).ToHashSet(StringComparer.Ordinal);
         var ordering = options.Ordering ?? environment.Ordering;
@@ -566,6 +569,32 @@ public sealed class MigrationEngine
 
             return parts;
         }
+    }
+
+    /// <summary>
+    /// Records a change as applied without running it: for a change generated from this database's own schema
+    /// ('bsm add --from-diff'), which the database therefore already has. It must be the next pending change.
+    /// </summary>
+    public async Task RecordAppliedAsync(string name, string reason, CancellationToken cancellationToken = default)
+    {
+        EnsureProjectIsValid();
+        await using var lockHandle = await AcquireLockAsync(false, cancellationToken).ConfigureAwait(false);
+        await provider.StateStore.EnsureCreatedAsync(session, Schema, cancellationToken).ConfigureAwait(false);
+        await ClaimEnvironmentAsync(cancellationToken).ConfigureAwait(false);
+        var status = await StatusAsync(cancellationToken).ConfigureAwait(false);
+        ThrowOnMismatch(status);
+        var next = status.Pending.FirstOrDefault();
+        if (next is null || !string.Equals(next.Change.Name, name, StringComparison.Ordinal))
+        {
+            throw new MigrationException($"'{name}' is not the next pending change in this database; deploy the changes before it first.");
+        }
+
+        var chainId = MigrationChange.ComputeChainId(provider.Id, next.Change.Name, next.Change.ScriptHash, status.DatabaseHeadChainId);
+        await session.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await provider.StateStore.InsertChangeAsync(session, Schema, NewApplied(next.Change, chainId, 0, false) with { Baselined = true }, cancellationToken).ConfigureAwait(false);
+        await AppendEventAsync(MigrationEventKind.Baseline, name, next.Change.ScriptHash, chainId, reason, cancellationToken).ConfigureAwait(false);
+        await session.CommitAsync(cancellationToken).ConfigureAwait(false);
+        await CaptureSnapshotAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>The live schema dump (for 'bsm diff-schema').</summary>

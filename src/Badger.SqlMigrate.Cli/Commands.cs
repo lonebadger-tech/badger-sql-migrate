@@ -391,6 +391,200 @@ public static class Commands
         return Ok;
     }
 
+    /// <summary>Other tools' journal tables, never part of a generated change.</summary>
+    private static readonly string[] DefaultScriptExclusions = ["*.flyway_schema_history", "*.SchemaVersions", "grate.*", "RoundhousE.*", "*.__EFMigrationsHistory"];
+
+    /// <summary>
+    /// Captures schema edits made directly in a database as a new change: builds a shadow database from the plan
+    /// (as far as the database has deployed it), compares the two, and writes deploy.sql and revert.sql. The
+    /// database already has the change, so it is recorded there as applied.
+    /// </summary>
+    public static async Task<int> AddFromDiff(GlobalOptions g, string name, string[] requires, string? note, string? shadowEnvironment, bool keepShadow, string[] exclude, bool dryRun, bool record, CancellationToken ct)
+    {
+        RequireWorkingCopy(g, "add");
+        var dir = Path.GetFullPath(g.ProjectDir);
+        if (!PlanFile.IsValidName(name))
+        {
+            throw new MigrationException($"Invalid change name '{name}'. Use letters, digits, '-', '_' or '.'.");
+        }
+
+        var planPath = Path.Combine(dir, PlanFile.FileName);
+        var plan = PlanFile.Load(planPath);
+        if (plan.IndexOf(name) >= 0 || Directory.Exists(Path.Combine(dir, MigrationProject.ChangesFolder, name)))
+        {
+            throw new MigrationException($"Change '{name}' already exists.");
+        }
+
+        foreach (var dependency in requires.Where(d => plan.IndexOf(d) < 0))
+        {
+            throw new MigrationException($"Required change '{dependency}' is not in the plan.");
+        }
+
+        await using var ctx = await Connect(g, ct);
+        if (ctx.Provider.Scripter is not { } scripter || ctx.Provider.ScratchDatabases is not { } scratch)
+        {
+            throw new MigrationException($"{ctx.Provider.DisplayName} cannot script schema differences.");
+        }
+
+        var status = await ctx.Engine.StatusAsync(ct);
+        if (status.Mismatched.Any() || status.Orphans.Count > 0 || !status.Certified)
+        {
+            throw new MigrationException($"'{ctx.Environment.Name}' must have exactly a prefix of the plan deployed, in order (check 'bsm status'); otherwise the comparison would include other differences. Deploy or rebase it first.");
+        }
+
+        var lastApplied = status.Applied.Count == 0 ? null : status.Applied[^1].Name;
+        g.Out.Muted($"comparing {ctx.Session.Description} with a shadow database built from the plan{(lastApplied is null ? " (repeatables only)" : $" up to '{lastApplied}'")}");
+
+        // The shadow uses this environment's settings (variables, keys) on the shadow server.
+        var server = shadowEnvironment is null ? ctx.Environment : ctx.Config.ResolveEnvironment(shadowEnvironment, null);
+        var (shadowContext, shadowTunnel) = shadowEnvironment is null ? (ctx.Context, null) : Prepare(g, ctx.Provider, server, Open(g).BaseDir);
+        SchemaScript script;
+        string[] repeatables;
+        try
+        {
+            await using var shadow = await scratch.CreateAsync(server, shadowContext, keepShadow, ct);
+            var shadowEnvironmentSettings = ctx.Environment with
+            {
+                Host = shadow.Environment.Host,
+                Port = shadow.Environment.Port,
+                ConnectionString = shadow.Environment.ConnectionString,
+                Database = shadow.Environment.Database,
+                Authentication = shadow.Environment.Authentication,
+                User = shadow.Environment.User,
+                Password = shadow.Environment.Password,
+                Entra = shadow.Environment.Entra,
+                Tls = shadow.Environment.Tls,
+                Ssh = shadow.Environment.Ssh,
+                ConnectionProperties = shadow.Environment.ConnectionProperties,
+            };
+            await using var shadowSession = await ctx.Provider.OpenSessionAsync(shadowEnvironmentSettings, shadowContext, ct);
+            var project = MigrationProject.Load(Open(g).ProjectDir, ctx.Provider.Id, ctx.Environment.Name);
+            var shadowEngine = new MigrationEngine(project, ctx.Provider, shadowEnvironmentSettings, shadowSession, Actor.Current(ToolVersion), NullMigrationLog.Instance, ParseVariables(g.Variables))
+            {
+                Preprocessing = ctx.Config.Preprocessor,
+                AllowEnvironmentMismatch = true,
+            };
+            await shadowEngine.DeployAsync(new DeployOptions { To = lastApplied, OnlyRepeatables = lastApplied is null }, ct);
+            if (keepShadow)
+            {
+                g.Out.Info($"shadow database kept: {shadow.Environment.Database}");
+            }
+
+            repeatables = project.Repeatables.Select(r => shadowEngine.Render(r.Name, "repeatable", r.Script).Text).ToArray();
+            script = await scripter.ScriptAsync(shadowSession, ctx.Session, new SchemaScriptOptions
+            {
+                StateSchema = ctx.Environment.StateSchema,
+                Exclude = [.. DefaultScriptExclusions, .. exclude],
+                RepeatableScripts = repeatables,
+            }, ct);
+        }
+        finally
+        {
+            shadowTunnel?.Dispose();
+        }
+
+        foreach (var line in script.Summary)
+        {
+            Console.WriteLine("  " + line);
+        }
+
+        var warnings = script.Warnings.ToList();
+        warnings.AddRange(EnvironmentValues(ctx.Engine, script.Deploy));
+        foreach (var warning in warnings)
+        {
+            g.Out.Warn(warning);
+        }
+
+        if (script.Deploy.Length == 0)
+        {
+            g.Out.Success(warnings.Count == 0 ? $"no schema differences: '{ctx.Environment.Name}' matches the plan." : "nothing to script.");
+            return Ok;
+        }
+
+        var deploy = GeneratedScript(ctx, $"Deploy {name}", script.Summary, warnings, script.Deploy);
+        var revert = GeneratedScript(ctx, $"Revert {name}", [], [], script.Revert);
+        if (dryRun)
+        {
+            Console.WriteLine(deploy);
+            g.Out.Success($"would add {name} ({script.Summary.Count} difference(s)); nothing written.");
+            return Ok;
+        }
+
+        var changeDir = Path.Combine(dir, MigrationProject.ChangesFolder, name);
+        Directory.CreateDirectory(changeDir);
+        File.WriteAllText(Path.Combine(changeDir, MigrationProject.DeployFile), deploy, Utf8NoBom);
+        File.WriteAllText(Path.Combine(changeDir, MigrationProject.RevertFile), revert, Utf8NoBom);
+        var notx = new[] { deploy, revert }.Any(sql => ctx.Provider.Linter.Lint(sql, new LintContext(name, "deploy", ChangeFlags.None)).Any(d => d.Code == "BSM001"));
+        var author = Environment.GetEnvironmentVariable("BSM_AUTHOR") ?? Environment.UserName.Replace(' ', '_');
+        AppendLine(planPath, PlanFile.FormatChange(new PlanChange(name, requires, notx ? ChangeFlags.NoTransaction : ChangeFlags.None, DateTimeOffset.UtcNow, author, note ?? $"generated from {ctx.Environment.Name}", 0)));
+
+        g.Out.Success($"added {name}: {script.Summary.Count} difference(s){(script.DataLoss ? ", WITH DATA LOSS" : string.Empty)}. Review the scripts before committing.");
+        g.Out.Info($"  {MigrationProject.ChangesFolder}/{name}/{MigrationProject.DeployFile}");
+        g.Out.Info($"  {MigrationProject.ChangesFolder}/{name}/{MigrationProject.RevertFile}");
+        if (record)
+        {
+            var project = MigrationProject.Load(Open(g).ProjectDir, ctx.Provider.Id, ctx.Environment.Name);
+            var engine = new MigrationEngine(project, ctx.Provider, ctx.Environment, ctx.Session, Actor.Current(ToolVersion), g.Out, ParseVariables(g.Variables))
+            {
+                Preprocessing = ctx.Config.Preprocessor,
+                AllowEnvironmentMismatch = g.ClaimEnvironment,
+            };
+            await engine.RecordAppliedAsync(name, "generated from this database by bsm add --from-diff", ct);
+            g.Out.Info($"recorded {name} as applied in '{ctx.Environment.Name}' (it already has these changes). If you edit the scripts, use 'bsm repair {name}' here or 'bsm rebase'.");
+        }
+
+        return Ok;
+    }
+
+    /// <summary>The generated SQL with a header, escaped so bsm's preprocessor leaves it as written.</summary>
+    private static string GeneratedScript(ConnectedContext ctx, string title, IReadOnlyList<string> summary, IReadOnlyList<string> warnings, string sql)
+    {
+        var header = new StringBuilder();
+        header.Append(ctx.Provider.FormatComment($"{title}: generated by Badger SQL Migrate {ToolVersion} from '{ctx.Environment.Name}' on {DateTimeOffset.UtcNow:yyyy-MM-dd}. Review before committing.")).Append('\n');
+        foreach (var line in summary)
+        {
+            header.Append(ctx.Provider.FormatComment("  " + line)).Append('\n');
+        }
+
+        foreach (var warning in warnings)
+        {
+            header.Append(ctx.Provider.FormatComment("WARNING: " + warning)).Append('\n');
+        }
+
+        var body = ScriptPreprocessor.EscapeLiteral(sql, ctx.Config.Preprocessor.SqlCmdSyntax);
+        return body.StartsWith("-- bsm:preprocess off", StringComparison.Ordinal)
+            ? body[..(body.IndexOf('\n') + 1)] + header + "\n" + body[(body.IndexOf('\n') + 1)..]
+            : header + "\n" + body;
+    }
+
+    /// <summary>
+    /// Rendered values of this environment's variables (and {env}, {db}) that appear in generated SQL: written into
+    /// the change, they would be the same in every environment.
+    /// </summary>
+    private static IEnumerable<string> EnvironmentValues(MigrationEngine engine, string sql)
+    {
+        var environment = engine.Environment;
+        var names = environment.Variables.Keys.Select(k => k).Concat(["env", "db"]);
+        foreach (var name in names.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            string value;
+            try
+            {
+                value = engine.Preprocessor.Resolve(name);
+            }
+            catch (MigrationException)
+            {
+                continue;
+            }
+
+            if (value.Length >= 4 && !string.Equals(value, "dbo", StringComparison.OrdinalIgnoreCase)
+                && System.Text.RegularExpressions.Regex.IsMatch(sql, $@"(?<![A-Za-z0-9_]){System.Text.RegularExpressions.Regex.Escape(value)}(?![A-Za-z0-9_])", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            {
+                yield return $"the script contains '{value}', the value of {{{name}}} in '{environment.Name}'. If it differs per environment, replace it with {{{name}}}.";
+            }
+        }
+    }
+
     public static int Tag(GlobalOptions g, string name)
     {
         RequireWorkingCopy(g, "tag");
@@ -971,9 +1165,41 @@ public static class Commands
         g.Out.Line("made by", $"Badger SQL Migrate {manifest.ToolVersion}");
     }
 
-    public static async Task<int> DiffSchema(GlobalOptions g, string? against, bool exitCode, CancellationToken ct)
+    public static async Task<int> DiffSchema(GlobalOptions g, string? against, bool exitCode, string? scriptPath, CancellationToken ct)
     {
         await using var ctx = await Connect(g, ct);
+        if (scriptPath is not null)
+        {
+            if (against is null)
+            {
+                throw new MigrationException("--script needs --against <environment>: it scripts what turns this database into that one.");
+            }
+
+            if (ctx.Provider.Scripter is not { } scripter)
+            {
+                throw new MigrationException($"{ctx.Provider.DisplayName} cannot script schema differences.");
+            }
+
+            await using var target = await Connect(g with { Environment = against, ConnectionString = null }, ct);
+            var script = await scripter.ScriptAsync(ctx.Session, target.Session, new SchemaScriptOptions { StateSchema = ctx.Environment.StateSchema, Exclude = DefaultScriptExclusions }, ct);
+            var text = new StringBuilder();
+            text.Append(ctx.Provider.FormatComment($"Turns {ctx.Environment.Name} ({ctx.Session.Description}) into {target.Environment.Name} ({target.Session.Description}). Generated by Badger SQL Migrate {ToolVersion}; review before running.")).Append('\n');
+            foreach (var line in script.Summary)
+            {
+                text.Append(ctx.Provider.FormatComment("  " + line)).Append('\n');
+            }
+
+            foreach (var warning in script.Warnings)
+            {
+                text.Append(ctx.Provider.FormatComment("WARNING: " + warning)).Append('\n');
+                g.Out.Warn(warning);
+            }
+
+            await File.WriteAllTextAsync(scriptPath, text.Append('\n').Append(script.Deploy).ToString(), Utf8NoBom, ct);
+            g.Out.Success($"wrote {scriptPath}: {script.Summary.Count} difference(s){(script.DataLoss ? ", with data loss" : string.Empty)}.");
+            return exitCode && script.Summary.Count > 0 ? NotUpToDate : Ok;
+        }
+
         string leftLabel, rightLabel, leftDump, rightDump;
         if (against is null)
         {
@@ -1459,6 +1685,27 @@ public static class Commands
         }
 
         var project = MigrationProject.Load(dir, provider.Id, environment.Name);
+        var (context, tunnel) = Prepare(g, provider, environment, ws.BaseDir);
+        try
+        {
+            var session = await provider.OpenSessionAsync(environment, context, ct);
+            var engine = new MigrationEngine(project, provider, environment, session, Actor.Current(ToolVersion), g.Out, ParseVariables(g.Variables))
+            {
+                AllowEnvironmentMismatch = g.ClaimEnvironment,
+                Preprocessing = config.Preprocessor,
+            };
+            return new ConnectedContext(environment, provider, session, engine, tunnel) { Context = context, Config = config };
+        }
+        catch
+        {
+            tunnel?.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>Sign-in and SSH tunnel for an environment.</summary>
+    private static (SessionContext Context, SshTunnel? Tunnel) Prepare(GlobalOptions g, IDatabaseProvider provider, DeploymentEnvironment environment, string baseDir)
+    {
         SshTunnel? tunnel = null;
         if (environment.Ssh is not null)
         {
@@ -1466,30 +1713,15 @@ public static class Commands
             g.Out.Detail($"ssh tunnel {environment.Ssh.User}@{environment.Ssh.Host} -> {tunnel.LocalEndpoint.Host}:{tunnel.LocalEndpoint.Port}");
         }
 
-        try
+        Action<string> prompt = m => Console.Error.WriteLine(m);
+        return (new SessionContext
         {
-            Action<string> prompt = m => Console.Error.WriteLine(m);
-            var context = new SessionContext
-            {
-                EndpointOverride = tunnel?.LocalEndpoint,
-                Tokens = EntraTokenProvider.Create(environment.Authentication, environment.Entra, environment.Name, prompt),
-                CreateTokenProvider = (kind, options) => EntraTokenProvider.Create(kind, options, environment.Name + ":keyvault", prompt),
-                Warn = g.Out.Warn,
-                BaseDirectory = ws.BaseDir,
-            };
-            var session = await provider.OpenSessionAsync(environment, context, ct);
-            var engine = new MigrationEngine(project, provider, environment, session, Actor.Current(ToolVersion), g.Out, ParseVariables(g.Variables))
-            {
-                AllowEnvironmentMismatch = g.ClaimEnvironment,
-                Preprocessing = config.Preprocessor,
-            };
-            return new ConnectedContext(environment, provider, session, engine, tunnel);
-        }
-        catch
-        {
-            tunnel?.Dispose();
-            throw;
-        }
+            EndpointOverride = tunnel?.LocalEndpoint,
+            Tokens = EntraTokenProvider.Create(environment.Authentication, environment.Entra, environment.Name, prompt),
+            CreateTokenProvider = (kind, options) => EntraTokenProvider.Create(kind, options, environment.Name + ":keyvault", prompt),
+            Warn = g.Out.Warn,
+            BaseDirectory = baseDir,
+        }, tunnel);
     }
 
     /// <summary>"schema.table" or "table", with each tool's default schema and table (RoundhousE: RoundhousE.ScriptsRun).</summary>
@@ -1585,6 +1817,10 @@ public static class Commands
 
     private sealed record ConnectedContext(DeploymentEnvironment Environment, IDatabaseProvider Provider, IDatabaseSession Session, MigrationEngine Engine, SshTunnel? Tunnel) : IAsyncDisposable
     {
+        public SessionContext Context { get; init; } = SessionContext.Empty;
+
+        public BsmConfig Config { get; init; } = null!;
+
         public async ValueTask DisposeAsync()
         {
             await Session.DisposeAsync();

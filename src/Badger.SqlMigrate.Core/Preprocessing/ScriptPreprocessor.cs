@@ -137,6 +137,27 @@ public sealed partial class ScriptPreprocessor
         return [.. refs.Where(r => sqlCmdSyntax || r.Syntax == "{}")];
     }
 
+    /// <summary>
+    /// Makes literal SQL (generated from a database, or taken from another tool) survive rendering unchanged:
+    /// {name} becomes {{name}}. When it also contains $(name) text and sqlcmd syntax is on, it is returned
+    /// unescaped with a "-- bsm:preprocess off" first line instead.
+    /// </summary>
+    public static string EscapeLiteral(string text, bool sqlCmdSyntax)
+    {
+        if (sqlCmdSyntax && SqlCmdTokenRegex().IsMatch(text))
+        {
+            return $"-- {OffDirective}\n" + text;
+        }
+
+        return LiteralBraceRegex().Replace(text, m => "{" + m.Value + "}");
+    }
+
+    [GeneratedRegex(@"(?<!\{)\{[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\}(?!\})")]
+    private static partial Regex LiteralBraceRegex();
+
+    [GeneratedRegex(@"\$\([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\)")]
+    private static partial Regex SqlCmdTokenRegex();
+
     /// <summary>True when the name is a built-in (including change.* which only exist while rendering).</summary>
     public static bool IsBuiltInName(string name) => ReservedPrefixes.Any(p => name.Equals(p, StringComparison.OrdinalIgnoreCase) || name.StartsWith(p + ".", StringComparison.OrdinalIgnoreCase));
 

@@ -32,6 +32,10 @@ public sealed class SqlServerProvider : IDatabaseProvider
 
     public ISchemaInspector Schema { get; } = new SqlServerSchemaInspector();
 
+    public ISchemaScripter Scripter { get; } = new Scripting.SqlServerScripter();
+
+    public IScratchDatabases ScratchDatabases => new Scripting.SqlServerScratchDatabases(this);
+
 
     public IEnvironmentResources? Resources { get; } = new SqlServerEnvironmentResources();
 

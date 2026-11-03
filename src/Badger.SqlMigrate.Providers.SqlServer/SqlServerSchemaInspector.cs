@@ -13,7 +13,7 @@ namespace Badger.SqlMigrate.Providers.SqlServer;
 /// Partitioning records functions (type, direction, boundaries), schemes (filegroups) and each partitioned index's
 /// scheme and column. Lines for these features appear only when they are used, so other schemas fingerprint as before.
 /// </summary>
-public sealed class SqlServerSchemaInspector : ISchemaInspector
+public sealed partial class SqlServerSchemaInspector : ISchemaInspector
 {
     private const string Sql = """
         SELECT CONCAT(N'schema|' COLLATE Latin1_General_BIN2, s.name) AS line
@@ -21,7 +21,7 @@ public sealed class SqlServerSchemaInspector : ISchemaInspector
         WHERE s.schema_id > 4 AND s.schema_id < 16384 AND s.name <> @state
 
         UNION ALL
-        SELECT CONCAT(N'column|' COLLATE Latin1_General_BIN2, s.name, '.', o.name, '|', c.column_id, '|', c.name, '|', TYPE_NAME(c.user_type_id),
+        SELECT CONCAT(N'column|' COLLATE Latin1_General_BIN2, s.name, '.', o.name, '|', ROW_NUMBER() OVER (PARTITION BY c.object_id ORDER BY c.column_id), '|', c.name, '|', TYPE_NAME(c.user_type_id),
                '|', c.max_length, '|', c.precision, '|', c.scale, '|', c.is_nullable, '|', c.is_identity,
                '|', ISNULL(c.collation_name, ''), '|', ISNULL(cc.definition, ''), '|', ISNULL(dc.definition, ''),
                '|', CASE WHEN dc.is_system_named = 1 THEN '<system>' ELSE ISNULL(dc.name, '') END,
@@ -160,7 +160,10 @@ public sealed class SqlServerSchemaInspector : ISchemaInspector
         WHERE h.name LIKE N'MSSQL[_]TemporalHistoryFor[_]%';
         """;
 
-    /// <summary>2: system-versioned tables and partitioning; module definitions without surrounding whitespace.</summary>
+    /// <summary>
+    /// 2: system-versioned tables and partitioning; module definitions normalized (whitespace, leading CREATE);
+    /// columns numbered by position (SQL Server never reuses a dropped column's id).
+    /// </summary>
     public int FormatVersion => 2;
 
     public async Task<string> CaptureAsync(IDatabaseSession session, string stateSchema, CancellationToken cancellationToken)
@@ -245,8 +248,19 @@ public sealed class SqlServerSchemaInspector : ISchemaInspector
             }
         }
 
-        return line[..(bar + 1)] + line[(bar + 1)..].Trim();
+        return line[..(bar + 1)] + NormalizeDefinition(line[(bar + 1)..]);
     }
+
+    /// <summary>
+    /// A module definition without surrounding whitespace and with its leading CREATE written one way: SQL Server
+    /// stores "CREATE OR ALTER VIEW" as "CREATE   VIEW" and ALTER VIEW as "CREATE VIEW", so the same view would
+    /// otherwise differ depending on how it was last created.
+    /// </summary>
+    public static string NormalizeDefinition(string definition) =>
+        LeadingCreateRegex().Replace(definition.Trim(), m => m.Groups["lead"].Value + "CREATE ", 1);
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\A(?<lead>(?:\s+|--[^\n]*\n|/\*.*?\*/)*)CREATE\s+(?:OR\s+ALTER\s+)?(?=VIEW|PROC|FUNCTION|TRIGGER)", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline)]
+    private static partial System.Text.RegularExpressions.Regex LeadingCreateRegex();
 
     private static readonly HashSet<string> Kinds = new(StringComparer.Ordinal) { "schema", "column", "index", "fk", "check", "module", "type", "sequence", "synonym", "temporal", "pfunction", "pscheme", "partitioned", "object" };
 }

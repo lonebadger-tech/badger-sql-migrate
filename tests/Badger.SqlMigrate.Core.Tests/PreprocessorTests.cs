@@ -171,4 +171,17 @@ public sealed class PreprocessorTests : IDisposable
         Assert.Equal(["FromCli"], db.Objects);
         Assert.Equal(VariableSource.CommandLine, engine.Preprocessor.Describe().Single(v => v.Name == "target").Source);
     }
+
+    [Fact]
+    public void Literal_sql_is_escaped_so_it_renders_unchanged()
+    {
+        var sql = "SELECT N'{name}', '{0}', '{\"a\":1}', {fn NOW()};";
+        var escaped = ScriptPreprocessor.EscapeLiteral(sql, sqlCmdSyntax: true);
+        Assert.Equal("SELECT N'{{name}}', '{0}', '{\"a\":1}', {fn NOW()};", escaped);
+        Assert.Equal(sql, Pre().Render(escaped, Ctx).Text);
+
+        var withSqlCmd = ScriptPreprocessor.EscapeLiteral("SELECT '$(x)', '{y}';", sqlCmdSyntax: true);
+        Assert.Equal("-- bsm:preprocess off\nSELECT '$(x)', '{y}';", withSqlCmd);
+        Assert.Equal("SELECT '$(x)', '{{y}}';", ScriptPreprocessor.EscapeLiteral("SELECT '$(x)', '{y}';", sqlCmdSyntax: false));
+    }
 }

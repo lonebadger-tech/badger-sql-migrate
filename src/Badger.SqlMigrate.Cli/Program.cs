@@ -44,8 +44,16 @@ var addRequires = new Option<string[]>("--requires", "-r") { Description = "Chan
 var addNote = new Option<string?>("--note", "-n") { Description = "Note stored in the plan." };
 var addNoTx = new Option<bool>("--notx") { Description = "Run outside a transaction." };
 var addIrreversible = new Option<bool>("--irreversible") { Description = "No revert script." };
-var add = new Command("add", "Add a change: creates changes/<name>/ scripts and appends it to bsm.plan.") { addName, addRequires, addNote, addNoTx, addIrreversible };
-add.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Add(g, r.GetValue(addName)!, r.GetValue(addRequires) ?? [], r.GetValue(addNote), r.GetValue(addNoTx), r.GetValue(addIrreversible))));
+var addFromDiff = new Option<bool>("--from-diff") { Description = "Generate deploy.sql and revert.sql from schema edits made in the environment's database (compared with a shadow database built from the plan)." };
+var addShadowEnv = new Option<string?>("--shadow-env") { Description = "Create the shadow database on this environment's server instead (it needs CREATE DATABASE rights)." };
+var addKeepShadow = new Option<bool>("--keep-shadow") { Description = "Do not drop the shadow database afterwards." };
+var addExclude = new Option<string[]>("--exclude") { Description = "Objects to leave out, as schema.name globs (e.g. audit.*). Repeatable." };
+var addDryRun = new Option<bool>("--dry-run") { Description = "With --from-diff: print the generated deploy script; write nothing." };
+var addNoRecord = new Option<bool>("--no-record") { Description = "With --from-diff: do not record the new change as applied in the database it came from." };
+var add = new Command("add", "Add a change: creates changes/<name>/ scripts and appends it to bsm.plan.") { addName, addRequires, addNote, addNoTx, addIrreversible, addFromDiff, addShadowEnv, addKeepShadow, addExclude, addDryRun, addNoRecord };
+add.SetAction((r, ct) => r.GetValue(addFromDiff)
+    ? Commands.Run(Globals(r), g => Commands.AddFromDiff(g, r.GetValue(addName)!, r.GetValue(addRequires) ?? [], r.GetValue(addNote), r.GetValue(addShadowEnv), r.GetValue(addKeepShadow), r.GetValue(addExclude) ?? [], r.GetValue(addDryRun), !r.GetValue(addNoRecord), ct))
+    : Commands.Run(Globals(r), g => Commands.Add(g, r.GetValue(addName)!, r.GetValue(addRequires) ?? [], r.GetValue(addNote), r.GetValue(addNoTx), r.GetValue(addIrreversible))));
 root.Subcommands.Add(add);
 
 // tag
@@ -127,8 +135,9 @@ root.Subcommands.Add(bundle);
 // diff-schema
 var diffAgainst = new Option<string?>("--against") { Description = "Compare with this environment's live database (default: this database's schema as recorded after its last deploy)." };
 var diffExit = new Option<bool>("--exit-code") { Description = "Exit with 3 when the schemas differ." };
-var diffSchema = new Command("diff-schema", "Show schema differences: live vs. last recorded (what drifted), or between two environments.") { diffAgainst, diffExit };
-diffSchema.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.DiffSchema(g, r.GetValue(diffAgainst), r.GetValue(diffExit), ct)));
+var diffScript = new Option<string?>("--script") { Description = "With --against: write T-SQL that turns this database into that one, to this file." };
+var diffSchema = new Command("diff-schema", "Show schema differences: live vs. last recorded (what drifted), or between two environments.") { diffAgainst, diffExit, diffScript };
+diffSchema.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.DiffSchema(g, r.GetValue(diffAgainst), r.GetValue(diffExit), r.GetValue(diffScript), ct)));
 root.Subcommands.Add(diffSchema);
 
 // verify
