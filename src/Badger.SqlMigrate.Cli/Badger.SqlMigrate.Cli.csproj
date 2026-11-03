@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Badger.SqlMigrate.Core\Badger.SqlMigrate.Core.csproj" />
+    <ProjectReference Include="..\Badger.SqlMigrate.Connectivity\Badger.SqlMigrate.Connectivity.csproj" />
+    <ProjectReference Include="..\Badger.SqlMigrate.Providers.SqlServer\Badger.SqlMigrate.Providers.SqlServer.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.0.14" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>badger</AssemblyName>
+    <RootNamespace>Badger.SqlMigrate.Cli</RootNamespace>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>badger</ToolCommandName>
+    <PackageId>Badger.SqlMigrate</PackageId>
+    <Description>Badger SQL Migrate: free, cross-platform, hash-certified database migrations with real up and down.</Description>
+  </PropertyGroup>
+
+</Project>

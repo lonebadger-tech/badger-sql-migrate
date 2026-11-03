@@ -1,0 +1,2 @@
+badger.plan merge=union
+*.sql text eol=lf

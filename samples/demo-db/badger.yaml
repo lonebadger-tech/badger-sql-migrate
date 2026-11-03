@@ -1,0 +1,43 @@
+# Badger SQL Migrate configuration for the demo database
+provider: sqlserver
+defaultEnvironment: local
+
+# {name} / $(name) in scripts. Nested groups become {group.name}; values may use other variables.
+variables:
+  AppRole: demo_reader
+  schemas:
+    reporting: reporting_{env}
+
+environments:
+  _azure:
+    database: DemoDb
+    tls: { mode: strict }
+    authentication: entraInteractive     # browser sign-in, MFA supported, token cached between runs
+    entra:
+      tenantId: ${env:DEMO_TENANT_ID}
+
+  local:
+    host: localhost
+    port: 1433
+    database: DemoDb
+    authentication: password
+    user: sa
+    password: ${env:BADGER_LOCAL_PASSWORD}
+    tls: { mode: mandatory, trustServerCertificate: true }
+
+  test:
+    extends: _azure
+    host: demo-test.database.windows.net
+
+  prod:
+    extends: _azure
+    host: demo-prod.database.windows.net
+    protected: true
+    allowRevert: false
+    ordering: strict
+    authentication: entraWorkloadIdentity
+    variables:
+      AppRole: demo_reader_prod
+    connectionProperties:
+      Connect Retry Count: 3
+      Command Timeout: 120
