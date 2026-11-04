@@ -16,6 +16,14 @@
   <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.14" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    <!-- MCP server for 'bsm mcp' (MIT). Core only: stdio without the hosting stack. -->
+    <PackageReference Include="ModelContextProtocol.Core" Version="2.3.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 'bsm ai-guide', the MCP guide tool and AGENTS.md for new projects. -->
+    <EmbeddedResource Include="..\..\docs\ai-guide.md" LogicalName="Badger.SqlMigrate.Cli.ai-guide.md" />
+    <EmbeddedResource Include="Resources\AGENTS.md" LogicalName="Badger.SqlMigrate.Cli.AGENTS.md" />
   </ItemGroup>
 
   <PropertyGroup>

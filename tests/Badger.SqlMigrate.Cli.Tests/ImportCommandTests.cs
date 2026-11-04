@@ -188,5 +188,30 @@ public sealed class ImportCommandTests : IDisposable
         Assert.True(plan.Changes[1].Flags.HasFlag(Badger.SqlMigrate.Core.Plan.ChangeFlags.NoTransaction));
         Assert.Contains("port: 5432", File.ReadAllText(Path.Combine(target, "bsm.yaml")), StringComparison.Ordinal);
     }
-}
 
+    [Fact]
+    public void Imported_sqlproj_passes_plan_check()
+    {
+        var source = Path.Combine(root, "ssdt");
+        Directory.CreateDirectory(source);
+        var sqlproj = Badger.SqlMigrate.Providers.SqlServer.Tests.SqlProjSample.WriteClassic(source);
+        var target = Path.Combine(root, "bsm");
+
+        Assert.Equal(0, Commands.ImportSqlProj(G(target), sqlproj, dryRun: false));
+
+        Assert.Equal(0, Commands.PlanCheck(G(target)));
+        Assert.Equal("dev", BsmConfig.Load(target).Variables["Environment"]);
+        var plan = File.ReadAllText(Path.Combine(target, "bsm.plan"));
+        Assert.Contains("create-dbo-customer [create-type-dbo-phone create-dbo-country]", plan, StringComparison.Ordinal);
+        Assert.Contains("# sqlproj Tables/Customer.sql: table dbo.Customer", plan, StringComparison.Ordinal);
+        Assert.Contains("'bsm baseline --from sqlproj' uses them", plan, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(target, "changes", "create-dbo-customer", "revert.sql")));
+        Assert.True(File.Exists(Path.Combine(target, "repeatable", "views", "dbo.vBigCustomers.sql")));
+        Assert.True(File.Exists(Path.Combine(target, "repeatable", "post-deploy", "Script.PostDeployment.sql")));
+
+        // The folder holding the .sqlproj works too; a dry run writes nothing.
+        var again = Path.Combine(root, "bsm2");
+        Assert.Equal(0, Commands.ImportSqlProj(G(again), source, dryRun: true));
+        Assert.False(Directory.Exists(again));
+    }
+}

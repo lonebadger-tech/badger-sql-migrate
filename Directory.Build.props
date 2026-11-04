@@ -10,6 +10,6 @@
     <Product>Badger SQL Migrate</Product>
     <Copyright>Copyright © Lone Badger Tech, LLC</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
   </PropertyGroup>
 </Project>

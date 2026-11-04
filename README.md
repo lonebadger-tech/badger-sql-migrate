@@ -77,7 +77,7 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 
 | Command | What it does |
 |---|---|
-| `init` | Create `bsm.yaml`, `bsm.plan`, folders, `.gitattributes` |
+| `init` | Create `bsm.yaml`, `bsm.plan`, folders, `.gitattributes`, `AGENTS.md` |
 | `add <name> [-r dep] [--notx] [--irreversible]` | Scaffold a change and append it to the plan |
 | `add <name> --from-diff [--shadow-env env]` | Generate the change from schema edits made in your database (compared with a shadow database built from the plan) |
 | `tag <name>` | Tag the last change |
@@ -93,16 +93,23 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 | `diff-schema [--against env] [--exit-code] [--script file]` | What changed since the last deploy, or how two environments differ; SQL to turn one into the other |
 | `verify` | Hash check, run verify scripts, detect schema drift |
 | `log` | Deploy/revert/failure history from the database |
-| `baseline --to x \| --from flyway\|dbup\|grate\|roundhouse` | Adopt an existing database without running scripts (up to x, or as far as the old tool's journal says) |
+| `baseline --to x \| --from flyway\|dbup\|grate\|roundhouse\|sqitch\|sqlproj` | Adopt an existing database without running scripts (up to x, as far as the old tool's journal says, or everything a dacpac publish created) |
 | `import flyway\|dbup\|grate\|sqitch <dir>` | Convert a Flyway, DbUp, grate/RoundhousE or Sqitch project into a new bsm project: migrations, reverts, repeatables, variables, environments |
+| `import sqlproj <file.sqlproj>` | Convert an SSDT / SQL Database Project: one change per table, type or schema in dependency order, views/procedures/functions/triggers as repeatables, the post-deployment script and SqlCmdVariables |
 | `doctor` | Check config, Entra sign-in and connectivity; show resources |
 | `env list` / `env show` | Environments (with templates) / one environment fully merged, secrets masked |
 | `env status` / `env provision [--allow-destructive]` | Compare / create or rotate per-environment resources (Always Encrypted keys) |
 | `vars` | Every variable for an environment with value and source |
 | `render <change> [--kind revert]` | The exact SQL a script becomes for an environment |
 | `auth clear` | Forget saved Entra sign-ins |
+| `ai-guide` | Print the guide for AI assistants writing changes |
+| `mcp` | MCP server over stdio for AI assistants: add changes, write scripts, check and lint, render. Project files only; never connects to a database |
 
 Global options: `-C <dir>`, `--bundle <file>`, `-e <environment>`, `--var name=value`, `--connection-string`, `--claim-environment`, `--json`, `-v`, `--no-color`. Exit codes: `0` ok, `1` failure, `3` not up to date (`status --exit-code`) or schemas differ (`diff-schema --exit-code`).
+
+### AI assistants
+
+`bsm init` writes an `AGENTS.md` that tells Claude, Copilot, Cursor and other assistants how to write changes bsm can certify, and `bsm ai-guide` prints the full guide ([docs/ai-guide.md](docs/ai-guide.md)). For assistants that support MCP, `bsm mcp -C db` exposes the same rules as tools, for example `claude mcp add bsm -- bsm mcp -C db`. The server only reads and writes project files: people still deploy.
 
 ### System-versioned tables and partitions
 
@@ -184,7 +191,7 @@ Adding a database vendor: see [docs/writing-a-provider.md](docs/writing-a-provid
 | `src/Badger.SqlMigrate.Connectivity` | Entra ID tokens, SSH tunnels, secrets (vendor-neutral) |
 | `src/Badger.SqlMigrate.Providers.SqlServer` | The SQL Server / Azure SQL provider |
 | `src/Badger.SqlMigrate.Providers.PostgreSql` | The PostgreSQL provider (Npgsql) |
-| `src/Badger.SqlMigrate.Cli` | The `bsm` command (packaged as the `Badger.SqlMigrate` .NET tool) |
+| `src/Badger.SqlMigrate.Cli` | The `bsm` command and its MCP server (packaged as the `Badger.SqlMigrate` .NET tool) |
 | `tests/` | Unit tests, the shared provider conformance suite, architecture tests |
 | `samples/demo-db` | A runnable sample project |
 | `docs/` | Configuration reference, methodology, provider guide, and the website generator (`docs/website/`) |

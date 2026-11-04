@@ -184,17 +184,31 @@ public sealed class BsmConfig
         return merged;
     }
 
-    public DeploymentEnvironment ResolveEnvironment(string? requested, string? connectionStringOverride)
+    /// <param name="offline">
+    /// For commands that never connect (vars, render, bsm mcp): sign-in settings are left out, so their secrets
+    /// (password, connection string, SSH keys, Entra client secrets) need not be set. Variables still resolve.
+    /// </param>
+    public DeploymentEnvironment ResolveEnvironment(string? requested, string? connectionStringOverride, bool offline = false)
     {
         var name = SelectEnvironmentName(requested);
         var merged = Merge(name);
+        if (offline)
+        {
+            foreach (var key in new[] { "password", "connectionString", "ssh", "entra", "alwaysEncrypted" })
+            {
+                merged.Remove(key);
+            }
+        }
+
         if (connectionStringOverride is not null)
         {
-            // An explicit --connection-string means "connect exactly here".
+            // An explicit --connection-string means "connect exactly here, as it says": the environment's server and
+            // sign-in settings no longer apply (they used to override the string's own user and password).
             merged["connectionString"] = connectionStringOverride;
-            merged.Remove("host");
-            merged.Remove("port");
-            merged.Remove("database");
+            foreach (var key in new[] { "host", "port", "database", "user", "password", "authentication" })
+            {
+                merged.Remove(key);
+            }
         }
 
         ResolveSecrets(merged, name);

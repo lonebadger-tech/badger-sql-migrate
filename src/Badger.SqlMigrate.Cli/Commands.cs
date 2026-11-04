@@ -16,7 +16,11 @@ using Badger.SqlMigrate.Providers.SqlServer;
 
 namespace Badger.SqlMigrate.Cli;
 
-public sealed record GlobalOptions(string ProjectDir, string? Environment, string? ConnectionString, string[] Variables, bool ClaimEnvironment, ConsoleOutput Out, string? Bundle = null);
+public sealed record GlobalOptions(string ProjectDir, string? Environment, string? ConnectionString, string[] Variables, bool ClaimEnvironment, ConsoleOutput Out, string? Bundle = null)
+{
+    /// <summary>init and import write AGENTS.md for AI assistants unless --no-agents-file.</summary>
+    public bool AgentsFile { get; init; } = true;
+}
 
 /// <summary>
 /// Where a command reads its project from. Normally both are --project; with --bundle the scripts come from the
@@ -24,7 +28,7 @@ public sealed record GlobalOptions(string ProjectDir, string? Environment, strin
 /// </summary>
 public sealed record Workspace(string ProjectDir, string ConfigDir, string BaseDir, BundleManifest? Bundle);
 
-public static class Commands
+public static partial class Commands
 {
     public const int Ok = 0;
     public const int Failed = 1;
@@ -132,7 +136,19 @@ public static class Commands
             """);
 
         WriteGitAttributes(dir);
+        var wroteAgents = g.AgentsFile && WriteAgentsFile(dir, provider);
+        if (g.Out.Json)
+        {
+            g.Out.WriteJson(new { provider = provider.Id, path = dir, agentsFile = wroteAgents });
+            return Ok;
+        }
+
         g.Out.Success($"initialized {provider.DisplayName} project in {dir}");
+        if (wroteAgents)
+        {
+            g.Out.Muted("AGENTS.md tells AI assistants how to write changes here (bsm ai-guide has the full guide).");
+        }
+
         g.Out.Info("next: bsm add <change-name>");
         return Ok;
     }
@@ -251,6 +267,14 @@ public static class Commands
         return WriteImport(g, imported, dryRun, Providers.Resolve(providerId));
     }
 
+    /// <summary>SQL Server only: SQL projects are T-SQL, read with the SQL Server provider's ScriptDom parser.</summary>
+    public static int ImportSqlProj(GlobalOptions g, string path, bool dryRun)
+    {
+        RequireWorkingCopy(g, "import");
+        var imported = SqlProjImporter.Import(new SqlProjImportOptions { Path = path, Parser = new TSqlObjectParser() });
+        return WriteImport(g, imported, dryRun, Providers.Resolve(SqlServerProvider.ProviderId));
+    }
+
     /// <summary>Writes an imported project into the (new) project folder: scripts, plan, bsm.yaml and .gitattributes.</summary>
     private static int WriteImport(GlobalOptions g, ImportedProject imported, bool dryRun, IDatabaseProvider provider)
     {
@@ -353,6 +377,10 @@ public static class Commands
             Directory.CreateDirectory(Path.Combine(dir, MigrationProject.EnvironmentsFolder));
             File.WriteAllText(Path.Combine(dir, BsmConfig.FileName), ImportYaml.Write(imported, provider.Id), Utf8NoBom);
             WriteGitAttributes(dir);
+            if (g.AgentsFile)
+            {
+                WriteAgentsFile(dir, provider);
+            }
         }
     }
 
@@ -388,57 +416,19 @@ public static class Commands
     public static int Add(GlobalOptions g, string name, string[] requires, string? note, bool noTx, bool irreversible)
     {
         RequireWorkingCopy(g, "add");
-        var dir = Path.GetFullPath(g.ProjectDir);
-        var config = BsmConfig.Load(dir);
-        var provider = Providers.Resolve(config.Provider);
-        if (!PlanFile.IsValidName(name))
+        var added = AddChange(g.ProjectDir, name, requires, note, noTx, irreversible);
+        if (g.Out.Json)
         {
-            throw new MigrationException($"Invalid change name '{name}'. Use letters, digits, '-', '_' or '.'.");
+            g.Out.WriteJson(added);
+            return Ok;
         }
 
-        var planPath = Path.Combine(dir, PlanFile.FileName);
-        var plan = PlanFile.Load(planPath);
-        if (plan.IndexOf(name) >= 0)
+        g.Out.Success($"added {added.Name}");
+        foreach (var file in added.Files)
         {
-            throw new MigrationException($"Change '{name}' already exists in the plan.");
+            g.Out.Info($"  {file}");
         }
 
-        foreach (var dep in requires)
-        {
-            if (plan.IndexOf(dep) < 0)
-            {
-                throw new MigrationException($"Required change '{dep}' is not in the plan.");
-            }
-        }
-
-        var changeDir = Path.Combine(dir, MigrationProject.ChangesFolder, name);
-        if (Directory.Exists(changeDir))
-        {
-            throw new MigrationException($"Folder {MigrationProject.ChangesFolder}/{name} already exists.");
-        }
-
-        Directory.CreateDirectory(changeDir);
-        File.WriteAllText(Path.Combine(changeDir, MigrationProject.DeployFile), provider.FormatComment($"Deploy {name}") + "\n\n", Utf8NoBom);
-        if (!irreversible)
-        {
-            File.WriteAllText(Path.Combine(changeDir, MigrationProject.RevertFile), provider.FormatComment($"Revert {name}: undo everything deploy.sql does") + "\n\n", Utf8NoBom);
-        }
-
-        File.WriteAllText(Path.Combine(changeDir, MigrationProject.VerifyFile), provider.FormatComment($"Verify {name}: raise an error if the deploy did not take effect (optional; delete if unused)") + "\n\n", Utf8NoBom);
-
-        var flags = (noTx ? ChangeFlags.NoTransaction : ChangeFlags.None) | (irreversible ? ChangeFlags.Irreversible : ChangeFlags.None);
-        var author = Environment.GetEnvironmentVariable("BSM_AUTHOR") ?? Environment.UserName.Replace(' ', '_');
-        var line = PlanFile.FormatChange(new PlanChange(name, requires, flags, DateTimeOffset.UtcNow, author, note, 0));
-        AppendLine(planPath, line);
-
-        g.Out.Success($"added {name}");
-        g.Out.Info($"  {MigrationProject.ChangesFolder}/{name}/{MigrationProject.DeployFile}");
-        if (!irreversible)
-        {
-            g.Out.Info($"  {MigrationProject.ChangesFolder}/{name}/{MigrationProject.RevertFile}");
-        }
-
-        g.Out.Info($"  {MigrationProject.ChangesFolder}/{name}/{MigrationProject.VerifyFile}");
         return Ok;
     }
 
@@ -639,64 +629,43 @@ public static class Commands
     public static int Tag(GlobalOptions g, string name)
     {
         RequireWorkingCopy(g, "tag");
-        var dir = Path.GetFullPath(g.ProjectDir);
-        if (!PlanFile.IsValidName(name))
+        var tagged = TagPlan(g.ProjectDir, name);
+        if (g.Out.Json)
         {
-            throw new MigrationException($"Invalid tag name '{name}'.");
+            g.Out.WriteJson(tagged);
+            return Ok;
         }
 
-        var planPath = Path.Combine(dir, PlanFile.FileName);
-        var plan = PlanFile.Load(planPath);
-        if (plan.Changes.Count == 0)
-        {
-            throw new MigrationException("The plan has no changes to tag.");
-        }
-
-        if (plan.Changes.Any(c => c.Tags.Contains(name, StringComparer.Ordinal)))
-        {
-            throw new MigrationException($"Tag '@{name}' already exists.");
-        }
-
-        AppendLine(planPath, "@" + name);
-        g.Out.Success($"tagged {plan.Changes[^1].Name} as @{name}");
+        g.Out.Success($"tagged {tagged.Change} as @{tagged.Tag}");
         return Ok;
     }
 
     public static int PlanCheck(GlobalOptions g)
     {
-        var (project, provider) = LoadProject(g);
-        var engine = new MigrationEngine(project, provider, new DeploymentEnvironment { Name = "check" }, OfflineSession.Instance, Actor.Current(ToolVersion), g.Out);
-        var lint = engine.Lint();
-        var errors = project.Problems.Concat(lint.Where(l => l.Diagnostic.Severity == LintSeverity.Error).Select(Format)).ToList();
-        var warnings = lint.Where(l => l.Diagnostic.Severity == LintSeverity.Warning).Select(Format).ToList();
-        CheckVariableReferences(g, project, errors, warnings);
-
+        var report = CheckProject(g);
         if (g.Out.Json)
         {
-            g.Out.WriteJson(new { ok = errors.Count == 0, changes = project.Changes.Count, planHead = project.HeadChainId, errors, warnings });
+            g.Out.WriteJson(report);
         }
         else
         {
-            foreach (var w in warnings)
+            foreach (var w in report.Warnings)
             {
                 g.Out.Warn(w);
             }
 
-            foreach (var e in errors)
+            foreach (var e in report.Errors)
             {
                 g.Out.Error(e);
             }
 
-            if (errors.Count == 0)
+            if (report.Ok)
             {
-                g.Out.Success($"plan ok: {project.Changes.Count} changes, {project.Repeatables.Count} repeatables, head {Short(project.HeadChainId)}");
+                g.Out.Success($"plan ok: {report.Changes} changes, {report.Repeatables} repeatables, head {Short(report.PlanHead)}");
             }
         }
 
-        return errors.Count == 0 ? Ok : Failed;
-
-        static string Format((string Change, string Script, LintDiagnostic Diagnostic) l) =>
-            $"{l.Change}/{l.Script}.sql line {l.Diagnostic.Line}: {l.Diagnostic.Message} [{l.Diagnostic.Code}]";
+        return report.Ok ? Ok : Failed;
     }
 
     /// <summary>
@@ -790,36 +759,13 @@ public static class Commands
 
     public static int Render(GlobalOptions g, string name, string kind)
     {
-        var (engine, project) = OfflineEngine(g);
-        string? script;
-        string? hash = null;
-        if (project.Find(name) is { } change)
+        var rendered = RenderScript(g, name, kind);
+        if (g.Out.Json)
         {
-            script = kind switch
-            {
-                "deploy" => change.DeployScript,
-                "revert" => change.RevertScript,
-                "verify" => change.VerifyScript,
-                _ => throw new MigrationException("--kind must be deploy, revert or verify."),
-            };
-            hash = change.ScriptHash;
-        }
-        else if (project.Repeatables.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.Ordinal)) is { } repeatable)
-        {
-            script = repeatable.Script;
-            kind = "repeatable";
-        }
-        else
-        {
-            throw new MigrationException($"'{name}' is not a change or repeatable (repeatables are named like views/vCustomer.sql or @dev/seed.sql).");
+            g.Out.WriteJson(rendered);
+            return Ok;
         }
 
-        if (script is null)
-        {
-            throw new MigrationException($"{name} has no {kind}.sql.");
-        }
-
-        var rendered = engine.Render(name, kind, script, hash);
         Console.Write(rendered.Text);
         if (!rendered.Text.EndsWith('\n'))
         {
@@ -846,7 +792,7 @@ public static class Commands
         var ws = Open(g);
         var config = BsmConfig.Load(ws.ConfigDir);
         var provider = Providers.Resolve(config.Provider);
-        var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
+        var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString, offline: true);
         var project = MigrationProject.Load(ws.ProjectDir, provider.Id, environment.Name, provider.Includes);
         var engine = new MigrationEngine(project, provider, environment, OfflineSession.Instance, Actor.Current(ToolVersion), g.Out, ParseVariables(g.Variables))
         {
@@ -1094,63 +1040,28 @@ public static class Commands
     public static int Rework(GlobalOptions g, string name, string? newName, string? note)
     {
         RequireWorkingCopy(g, "rework");
-        var dir = Path.GetFullPath(g.ProjectDir);
-        var config = BsmConfig.Load(dir);
-        var provider = Providers.Resolve(config.Provider);
-        var planPath = Path.Combine(dir, PlanFile.FileName);
-        var plan = PlanFile.Load(planPath);
-        var index = plan.IndexOf(name);
-        if (index < 0)
+        var reworked = ReworkChange(g.ProjectDir, name, newName, note);
+        if (g.Out.Json)
         {
-            throw new MigrationException($"Change '{name}' is not in the plan.");
+            g.Out.WriteJson(reworked);
+            return Ok;
         }
 
-        var oldDir = Path.Combine(dir, MigrationProject.ChangesFolder, name);
-        var oldDeploy = Path.Combine(oldDir, MigrationProject.DeployFile);
-        if (!File.Exists(oldDeploy))
+        g.Out.Success($"added {reworked.Name} (rework of {name})");
+        g.Out.Info($"  {reworked.Files[0]}   copy of {name}'s deploy script: edit this");
+        g.Out.Info($"  {reworked.Files[1]}   restores {name}'s version");
+        foreach (var file in reworked.Files.Skip(2))
         {
-            throw new MigrationException($"{MigrationProject.ChangesFolder}/{name}/{MigrationProject.DeployFile} does not exist.");
-        }
-
-        newName ??= NextRevisionName(name, n => plan.IndexOf(n) >= 0 || Directory.Exists(Path.Combine(dir, MigrationProject.ChangesFolder, n)));
-        if (!PlanFile.IsValidName(newName))
-        {
-            throw new MigrationException($"Invalid change name '{newName}'. Use letters, digits, '-', '_' or '.'.");
-        }
-
-        if (plan.IndexOf(newName) >= 0 || Directory.Exists(Path.Combine(dir, MigrationProject.ChangesFolder, newName)))
-        {
-            throw new MigrationException($"Change '{newName}' already exists.");
-        }
-
-        var deploy = ContentHasher.ReadNormalized(oldDeploy);
-        var newDir = Path.Combine(dir, MigrationProject.ChangesFolder, newName);
-        Directory.CreateDirectory(newDir);
-        File.WriteAllText(Path.Combine(newDir, MigrationProject.DeployFile), deploy, Utf8NoBom);
-        File.WriteAllText(
-            Path.Combine(newDir, MigrationProject.RevertFile),
-            provider.FormatComment($"Revert {newName}: restore what {name} deployed.") + "\n" +
-            provider.FormatComment($"Copied from {MigrationProject.ChangesFolder}/{name}/{MigrationProject.DeployFile}; edit it if that script cannot simply be run again.") + "\n\n" + deploy,
-            Utf8NoBom);
-        var oldVerify = Path.Combine(oldDir, MigrationProject.VerifyFile);
-        if (File.Exists(oldVerify))
-        {
-            File.Copy(oldVerify, Path.Combine(newDir, MigrationProject.VerifyFile));
-        }
-
-        var old = plan.Changes[index];
-        var author = Environment.GetEnvironmentVariable("BSM_AUTHOR") ?? Environment.UserName.Replace(' ', '_');
-        AppendLine(planPath, PlanFile.FormatChange(new PlanChange(newName, [name], old.Flags & ChangeFlags.NoTransaction, DateTimeOffset.UtcNow, author, note ?? $"rework of {name}", 0)));
-
-        g.Out.Success($"added {newName} (rework of {name})");
-        g.Out.Info($"  {MigrationProject.ChangesFolder}/{newName}/{MigrationProject.DeployFile}   copy of {name}'s deploy script: edit this");
-        g.Out.Info($"  {MigrationProject.ChangesFolder}/{newName}/{MigrationProject.RevertFile}   restores {name}'s version");
-        if (File.Exists(oldVerify))
-        {
-            g.Out.Info($"  {MigrationProject.ChangesFolder}/{newName}/{MigrationProject.VerifyFile}");
+            g.Out.Info($"  {file}");
         }
 
         g.Out.Muted($"leave {MigrationProject.ChangesFolder}/{name}/ as it was deployed. If you already edited it, move those edits here and restore it (e.g. git checkout -- {MigrationProject.ChangesFolder}/{name}).");
+        return Ok;
+    }
+
+    public static int AiGuideCommand()
+    {
+        Console.Write(AiGuide);
         return Ok;
     }
 
@@ -1402,18 +1313,49 @@ public static class Commands
 
     public static async Task<int> Baseline(GlobalOptions g, string? to, string? from, string? journal, bool skipChecksums, bool yes, CancellationToken ct)
     {
-        if ((to is null) == (from is null))
+        var fromSqlProj = string.Equals(from, SqlProjImporter.Tool, StringComparison.OrdinalIgnoreCase);
+        if (!fromSqlProj && (to is null) == (from is null))
         {
-            throw new MigrationException("Pass --to <change|@tag>, or --from flyway|dbup|grate to read what the database already has from that tool's journal.");
+            throw new MigrationException("Pass --to <change|@tag>, or --from flyway|dbup|grate|roundhouse|sqitch to read what the database already has from that tool's journal (--from sqlproj: published from the SQL project).");
         }
 
         await using var ctx = await Connect(g, ct);
         IReadOnlyList<string> repeatables = [];
-        if (from is not null)
+        var project = MigrationProject.Load(Open(g).ProjectDir, ctx.Provider.Id, ctx.Environment.Name, ctx.Provider.Includes);
+        string Rendered(RepeatableScript r) => ctx.Engine.Render(r.Name, "repeatable", r.Script).Text;
+        if (fromSqlProj)
+        {
+            // Published from the dacpac: everything imported is there, with no journal to read.
+            // --to may go further, over changes generated from older environments ('bsm add --from-diff') that this one also has.
+            var imported = SqlProjImporter.BaselineTarget(project) ?? throw new MigrationException("bsm.plan has no changes imported from a SQL project (notes starting with 'sqlproj').");
+            if (to is not null && project.Changes.ToList().FindIndex(c => c.Name == to) is var at && at >= 0 && at < project.Changes.ToList().FindIndex(c => c.Name == imported))
+            {
+                throw new MigrationException($"--to '{to}' stops before the last imported change '{imported}'; a database published from the project has all of them.");
+            }
+
+            to ??= imported;
+            if (!skipChecksums)
+            {
+                var (present, missing) = SqlProjImporter.CheckTables(project, await SqlServerCatalog.ReadTableNamesAsync(ctx.Session, ct));
+                if (present.Count == 0 && missing.Count > 0)
+                {
+                    throw new MigrationException($"'{ctx.Environment.Name}' has none of the project's tables, so it was not published from it. Use 'bsm deploy'.");
+                }
+
+                if (missing.Count > 0)
+                {
+                    throw new MigrationException($"'{ctx.Environment.Name}' lacks {missing.Count} of the project's tables ({string.Join(", ", missing.Take(5))}{(missing.Count > 5 ? ", ..." : string.Empty)}): publish the project to it first, or baseline part of the plan with --to (--skip-checksums skips this check).");
+                }
+            }
+
+            // Modules are matched by definition below. The permission and post-deployment scripts are not recorded:
+            // the database may have been published from an older version of them, and SSDT ran them on every
+            // publish, so they are safe to run again on the next deploy.
+            g.Out.Info($"published from the SQL project: recording changes up to '{to}'.");
+        }
+        else if (from is not null)
         {
             var (schema, table) = SplitTable(journal, from, ctx.Provider.DefaultSchema);
-            var project = MigrationProject.Load(Open(g).ProjectDir, ctx.Provider.Id, ctx.Environment.Name, ctx.Provider.Includes);
-            string Rendered(RepeatableScript r) => ctx.Engine.Render(r.Name, "repeatable", r.Script).Text;
             switch (from.ToLowerInvariant())
             {
                 case "flyway":
@@ -1447,15 +1389,32 @@ public static class Commands
         Confirm(g, yes, ctx.Environment, $"Record changes up to '{to}' as already applied on '{ctx.Environment.Name}' ({ctx.Session.Description}) without running them?");
         var names = await ctx.Engine.BaselineAsync(to!, ct);
         g.Out.Success($"baselined {names.Count} change(s).");
+
+        // Repeatables the database already has as written (the old tool's journal says so, or the live definition
+        // matches) are recorded too; the first deploy then re-applies only the ones that differ.
+        var matched = repeatables.ToHashSet(StringComparer.Ordinal);
+        if (ctx.Provider.Id == SqlServerProvider.ProviderId)
+        {
+            matched.UnionWith(RepeatableDefinitions.Matching(project, await SqlServerCatalog.ReadModuleDefinitionsAsync(ctx.Session, ct), Rendered));
+        }
+
+        var recorded = await ctx.Engine.BaselineRepeatablesAsync(matched, ct);
+        var rerun = project.Repeatables.Select(r => r.Name).Where(n => !matched.Contains(n)).ToList();
+        if (recorded.Count > 0)
+        {
+            g.Out.Success($"recorded {recorded.Count} repeatable(s) the database already has as written: {string.Join(", ", recorded)}.");
+        }
+
+        if (rerun.Count > 0)
+        {
+            g.Out.Info($"{rerun.Count} repeatable(s) differ from the database (or cannot be compared) and run on the next deploy: {string.Join(", ", rerun)}.");
+        }
+
         if (from is not null)
         {
-            var recorded = await ctx.Engine.BaselineRepeatablesAsync(repeatables.ToHashSet(StringComparer.Ordinal), ct);
-            if (recorded.Count > 0)
-            {
-                g.Out.Success($"recorded {recorded.Count} repeatable(s) {from} already applied with the same text: {string.Join(", ", recorded)}.");
-            }
-
-            g.Out.Info($"the next 'bsm deploy' applies later changes and any other repeatables. {from}'s own journal table is left in place; drop it when you no longer need it.");
+            g.Out.Info(string.Equals(from, SqlProjImporter.Tool, StringComparison.OrdinalIgnoreCase)
+                ? "the next 'bsm deploy' runs the permission and post-deployment scripts once (they may be newer than the published ones), then only what is added or edited after the import. Stop publishing the dacpac to this database."
+                : $"the next 'bsm deploy' applies later changes and any other repeatables. {from}'s own journal table is left in place; drop it when you no longer need it.");
         }
         return Ok;
     }

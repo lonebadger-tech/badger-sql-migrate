@@ -179,6 +179,28 @@ def releases():
     body = f"""
 <section class="release" id="v{VERSION}">
   <h2>Version {VERSION} <span class="date">{RELEASE_DATE}</span></h2>
+  <h3>AI assistants</h3>
+  <ul>
+    <li><code>bsm mcp</code> is a Model Context Protocol server for Claude Code, Claude Desktop, VS Code, Cursor and other MCP clients: tools to add changes with their scripts, set <code>!notx</code>, rework, write repeatables, run <code>plan check</code> with lint codes, lint SQL and render scripts. It reads and writes project files only and never connects to a database</li>
+    <li>A guide for AI assistants (<code>bsm ai-guide</code>, and the <a href="{BASE}/docs/ai/">AI assistants</a> page): how to write deploy, revert and verify scripts that bsm certifies, for SQL Server and PostgreSQL</li>
+    <li><code>bsm init</code> and <code>bsm import</code> write an <code>AGENTS.md</code> into new projects (<code>--no-agents-file</code> to skip)</li>
+    <li><code>--json</code> output for <code>add</code>, <code>rework</code>, <code>tag</code>, <code>init</code> and <code>render</code>; <code>plan check --json</code> lists each lint finding with its code, file and line</li>
+    <li><code>vars</code> and <code>render</code> no longer need the environment's password or other sign-in secrets</li>
+  </ul>
+  <h3>Fixes</h3>
+  <ul>
+    <li><code>--connection-string</code> is used as given: the environment's user, password and authentication no longer override the ones in the string</li>
+  </ul>
+  <h3>SQL projects (SSDT)</h3>
+  <ul>
+    <li><code>bsm import sqlproj</code> converts classic and SDK-style <code>.sqlproj</code> projects: one change per table, type, schema and other object, in dependency order with <code>[requires]</code> and generated reverts; views, procedures, functions and triggers become CREATE OR ALTER repeatables; the post-deployment script (with <code>:r</code> includes) and SqlCmdVariables come along; foreign-key cycles are split into later changes</li>
+    <li><code>bsm baseline --from sqlproj</code> adopts databases published from the dacpac without running anything (the post-deployment and permission scripts run once on the next deploy, since the database may have older versions); environments at different versions are adopted oldest first, capturing each one's lead with <code>bsm add --from-diff</code></li>
+    <li>Every <code>bsm baseline</code> on SQL Server records the repeatables whose live definition already matches the script and lists the ones that differ, so the first deploy re-applies only those</li>
+  </ul>
+</section>
+
+<section class="release" id="v0.3.0">
+  <h2>Version 0.3.0 <span class="date">November 2026</span></h2>
   <h3>PostgreSQL</h3>
   <ul>
     <li>A PostgreSQL provider, tested on PostgreSQL 12 through 18: <code>bsm init --provider postgresql</code></li>

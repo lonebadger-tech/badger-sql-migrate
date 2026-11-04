@@ -19,7 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 RELEASE_DATE = "November 2026"
 BASE = "/badger-sql-migrate"
 # Where release files are downloaded from: the public Azure blob container build/upload-release.sh fills.
@@ -97,6 +97,95 @@ def yaml(text, file=None):
 
 def sh(text, file=None):
     return code(text, "bash", file)
+
+
+def inline_md(text):
+    """`code`, **bold** and [links](url) in one line of Markdown."""
+    out, last = [], 0
+    for m in re.finditer(r"`([^`]+)`|\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)]+)\)", text):
+        out.append(html.escape(text[last:m.start()]))
+        if m.group(1) is not None:
+            out.append(f"<code>{html.escape(m.group(1))}</code>")
+        elif m.group(2) is not None:
+            out.append(f"<strong>{inline_md(m.group(2))}</strong>")
+        else:
+            out.append(f'<a href="{html.escape(m.group(4))}">{inline_md(m.group(3))}</a>')
+        last = m.end()
+    out.append(html.escape(text[last:]))
+    return "".join(out)
+
+
+LIST_ITEM = re.compile(r"^(- |\d+\. )")
+
+
+def markdown(text, skip_title=True):
+    """The Markdown docs/ai-guide.md uses: headings, paragraphs, lists (with indented continuations and code),
+    fenced code and tables. Not a general converter; keep the guide to these."""
+    lines = text.replace("\r\n", "\n").split("\n")
+    out, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if not stripped:
+            i += 1
+        elif stripped.startswith("```"):
+            lang, indent, body = stripped[3:].strip(), len(line) - len(line.lstrip()), []
+            i += 1
+            while i < len(lines) and not lines[i].strip().startswith("```"):
+                body.append(lines[i][indent:] if lines[i][:indent].strip() == "" else lines[i])
+                i += 1
+            i += 1
+            out.append(code("\n".join(body), lang))
+        elif stripped.startswith("#"):
+            level = len(stripped) - len(stripped.lstrip("#"))
+            title = stripped[level:].strip()
+            i += 1
+            if level == 1 and skip_title:
+                continue
+            slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+            out.append(f'<h{level} id="{slug}">{inline_md(title)}</h{level}>')
+        elif stripped.startswith("|"):
+            rows = []
+            while i < len(lines) and lines[i].strip().startswith("|"):
+                cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+                if not all(re.fullmatch(r":?-{3,}:?", c) for c in cells):
+                    rows.append(cells)
+                i += 1
+            head = "".join(f"<th>{inline_md(c)}</th>" for c in rows[0])
+            body = "".join("<tr>" + "".join(f"<td>{inline_md(c)}</td>" for c in r) + "</tr>" for r in rows[1:])
+            out.append(f"<table><tr>{head}</tr>{body}</table>")
+        elif LIST_ITEM.match(line):
+            ordered = not stripped.startswith("- ")
+            items = []
+            while i < len(lines):
+                current = lines[i]
+                if LIST_ITEM.match(current):
+                    items.append([LIST_ITEM.sub("", current, count=1)])
+                elif current.startswith("  "):
+                    items[-1].append(current[3:] if current.startswith("   ") else current[2:])
+                elif not current.strip() and i + 1 < len(lines) and (lines[i + 1].startswith("  ") or LIST_ITEM.match(lines[i + 1])):
+                    items[-1].append("")
+                else:
+                    break
+                i += 1
+            tag = "ol" if ordered else "ul"
+            out.append(f"<{tag}>" + "".join(f"<li>{item_html(item)}</li>" for item in items) + f"</{tag}>")
+        else:
+            para = []
+            while i < len(lines) and lines[i].strip() and not re.match(r"(#|```|\||- |\d+\. )", lines[i].strip()):
+                para.append(lines[i].strip())
+                i += 1
+            out.append(f"<p>{inline_md(' '.join(para))}</p>")
+    return "\n".join(out)
+
+
+def item_html(item_lines):
+    """A list item: its text, plus any indented code blocks or paragraphs under it."""
+    text = "\n".join(item_lines).strip("\n")
+    if "```" not in text and "\n\n" not in text:
+        return inline_md(" ".join(l.strip() for l in item_lines))
+    html_out = markdown(text, skip_title=False)
+    return html_out[3:-4] if html_out.startswith("<p>") and html_out.count("<p>") == 1 and html_out.endswith("</p>") else html_out
 
 
 # ---------------------------------------------------------------- layout

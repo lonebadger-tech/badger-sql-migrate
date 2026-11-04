@@ -57,6 +57,27 @@ public sealed class BsmConfigTests : IDisposable
         """;
 
     [Fact]
+    public void Connection_string_override_replaces_the_environments_server_and_sign_in()
+    {
+        var config = Load("""
+            provider: sqlserver
+            environments:
+              local:
+                host: localhost
+                database: App
+                authentication: password
+                user: sa
+                password: ${env:BSM_TEST_UNSET_SECRET}
+            """);
+        var env = config.ResolveEnvironment("local", "Server=other;Database=Db;User Id=u;Password=p");
+        Assert.Equal("Server=other;Database=Db;User Id=u;Password=p", env.ConnectionString);
+        Assert.Null(env.User);
+        Assert.Null(env.Password);
+        Assert.Null(env.Authentication);
+        Assert.Null(env.Host);
+    }
+
+    [Fact]
     public void Extends_deep_merges_and_children_win()
     {
         var dev = Load(Sample).ResolveEnvironment("dev", null);

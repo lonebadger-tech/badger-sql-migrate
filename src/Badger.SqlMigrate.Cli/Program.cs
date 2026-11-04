@@ -10,6 +10,7 @@ var vars = new Option<string[]>("--var") { Description = "Script variable, name=
 var json = new Option<bool>("--json") { Description = "Machine-readable output on stdout.", Recursive = true };
 var verbose = new Option<bool>("--verbose", "-v") { Description = "Show server messages and details.", Recursive = true };
 var noColor = new Option<bool>("--no-color") { Description = "Disable ANSI colors (also honors NO_COLOR).", Recursive = true };
+var noAgentsFile = new Option<bool>("--no-agents-file") { Description = "Do not write AGENTS.md (instructions for AI assistants) into the project.", Recursive = true };
 var bundleFile = new Option<string?>("--bundle") { Description = "Run from a verified bundle (bsm bundle create) instead of the project folder's scripts.", Recursive = true };
 
 GlobalOptions Globals(ParseResult r) => new(
@@ -19,7 +20,10 @@ GlobalOptions Globals(ParseResult r) => new(
     r.GetValue(vars) ?? [],
     r.GetValue(claim),
     new ConsoleOutput(r.GetValue(json), r.GetValue(verbose), r.GetValue(noColor)),
-    r.GetValue(bundleFile));
+    r.GetValue(bundleFile))
+{
+    AgentsFile = !r.GetValue(noAgentsFile),
+};
 
 var root = new RootCommand("Badger SQL Migrate - hash-certified, plan-based database migrations with real up and down.");
 root.Options.Add(project);
@@ -34,7 +38,7 @@ root.Options.Add(bundleFile);
 
 // init
 var initProvider = new Option<string>("--provider") { Description = "Database provider: sqlserver or postgresql.", DefaultValueFactory = _ => "sqlserver" };
-var init = new Command("init", "Create bsm.yaml, bsm.plan and folders in the project directory.") { initProvider };
+var init = new Command("init", "Create bsm.yaml, bsm.plan, folders and AGENTS.md in the project directory.") { initProvider, noAgentsFile };
 init.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Init(g, r.GetValue(initProvider)!)));
 root.Subcommands.Add(init);
 
@@ -152,16 +156,16 @@ log.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Log(g, r.GetValu
 root.Subcommands.Add(log);
 
 // baseline
-var baselineTo = new Option<string?>("--to") { Description = "Mark changes up to this one as already applied." };
-var baselineFrom = new Option<string?>("--from") { Description = "flyway | dbup | grate | roundhouse | sqitch: read what the database already has from that tool's journal (for projects made with 'bsm import')." };
-baselineFrom.AcceptOnlyFromAmong("flyway", "dbup", "grate", "roundhouse", "sqitch");
+var baselineTo = new Option<string?>("--to") { Description = "Mark changes up to this one as already applied (with --from sqlproj: further than the imported changes)." };
+var baselineFrom = new Option<string?>("--from") { Description = "flyway | dbup | grate | roundhouse | sqitch: read what the database already has from that tool's journal; sqlproj: the database was published from the SQL project (for projects made with 'bsm import')." };
+baselineFrom.AcceptOnlyFromAmong("flyway", "dbup", "grate", "roundhouse", "sqitch", "sqlproj");
 var baselineJournal = new Option<string?>("--journal") { Description = "The tool's journal table, [schema.]table (default: flyway_schema_history or SchemaVersions in dbo/public, grate.ScriptsRun, RoundhousE.ScriptsRun, sqitch.changes)." };
-var baselineSkipChecksums = new Option<bool>("--skip-checksums") { Description = "Do not compare Flyway's checksums, grate's hashes or Sqitch's script hashes with the imported scripts." };
+var baselineSkipChecksums = new Option<bool>("--skip-checksums") { Description = "Do not compare Flyway's checksums, grate's hashes or Sqitch's script hashes with the imported scripts (sqlproj: do not check that the project's tables exist)." };
 var baseline = new Command("baseline", "Adopt an existing database: record changes as applied without running them.") { baselineTo, baselineFrom, baselineJournal, baselineSkipChecksums, yes };
 baseline.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Baseline(g, r.GetValue(baselineTo), r.GetValue(baselineFrom), r.GetValue(baselineJournal), r.GetValue(baselineSkipChecksums), r.GetValue(yes), ct)));
 
 // import
-var import = new Command("import", "Convert another tool's migrations (Flyway, DbUp, grate, Sqitch) into a new bsm project (written to --project).");
+var import = new Command("import", "Convert another tool's migrations (Flyway, DbUp, grate, Sqitch, SQL projects) into a new bsm project (written to --project).") { noAgentsFile };
 var importPath = new Argument<string>("path") { Description = "The folder to import from." };
 var importDryRun = new Option<bool>("--dry-run") { Description = "Show what would be written without writing anything." };
 var importProvider = new Option<string?>("--provider") { Description = "The database the project targets: sqlserver (default) or postgresql. Sqitch projects for pg default to postgresql." };
@@ -187,6 +191,10 @@ var sqitchEngine = new Option<string?>("--engine") { Description = "Which engine
 var importSqitch = new Command("sqitch", "Import a Sqitch project: plan order, dependencies, tags, reworks and deploy/revert/verify scripts.") { importPath, sqitchEngine, importProvider, importDryRun };
 importSqitch.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.ImportSqitch(g, r.GetValue(importPath)!, r.GetValue(sqitchEngine), r.GetValue(importDryRun), r.GetValue(importProvider))));
 import.Subcommands.Add(importSqitch);
+var importSqlProjPath = new Argument<string>("path") { Description = "The .sqlproj file, or the folder holding it." };
+var importSqlProj = new Command("sqlproj", "Import an SSDT / SQL Database Project (.sqlproj): one change per table, type, schema ... in dependency order; views, procedures, functions and triggers as repeatables; the post-deployment script; SqlCmdVariables.") { importSqlProjPath, importDryRun };
+importSqlProj.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.ImportSqlProj(g, r.GetValue(importSqlProjPath)!, r.GetValue(importDryRun))));
+import.Subcommands.Add(importSqlProj);
 root.Subcommands.Add(import);
 root.Subcommands.Add(baseline);
 
@@ -228,6 +236,14 @@ root.Subcommands.Add(auth);
 var doctor = new Command("doctor", "Check configuration, sign-in and connectivity for an environment and explain problems.");
 doctor.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Doctor(g, ct)));
 root.Subcommands.Add(doctor);
+
+// AI tools
+var aiGuide = new Command("ai-guide", "Print the guide for AI assistants writing changes in a bsm project (Markdown).");
+aiGuide.SetAction(r => Commands.AiGuideCommand());
+root.Subcommands.Add(aiGuide);
+var mcp = new Command("mcp", "Run a Model Context Protocol server over stdio for AI assistants: tools that read and write this project's files. It never connects to a database.");
+mcp.SetAction((r, ct) => Commands.Run(Globals(r), g => Badger.SqlMigrate.Cli.Mcp.BsmMcpServer.RunAsync(g.ProjectDir, ct)));
+root.Subcommands.Add(mcp);
 
 // "@tag" is a plan target, not a response file.
 return await root.Parse(args, new ParserConfiguration { ResponseFileTokenReplacer = null }).InvokeAsync();

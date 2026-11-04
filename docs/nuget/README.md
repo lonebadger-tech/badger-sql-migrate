@@ -29,7 +29,16 @@ bsm plan check -C db
 bsm deploy -C db
 ```
 
+## AI assistants
+
+New projects get an `AGENTS.md` with the rules for writing changes, `bsm ai-guide` prints the full guide, and `bsm mcp -C db` is an MCP server for Claude, VS Code, Cursor and other clients (project files only; it never connects to a database):
+
+```bash
+claude mcp add bsm -- bsm mcp -C db
+```
+
 - [Quick start](https://lonebadger.tech/badger-sql-migrate/docs/quick-start/)
+- [AI assistants](https://lonebadger.tech/badger-sql-migrate/docs/ai/)
 - [Commands](https://lonebadger.tech/badger-sql-migrate/docs/commands/)
 - [CI/CD](https://lonebadger.tech/badger-sql-migrate/docs/ci-cd/)
 - [Examples](https://lonebadger.tech/badger-sql-migrate/examples/)

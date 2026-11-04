@@ -16,6 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Badger.SqlMigrate.Providers.SqlServer.Tests\SqlProjSample.cs" Link="SqlProjSample.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Badger.SqlMigrate.Cli\Badger.SqlMigrate.Cli.csproj" />
   </ItemGroup>
 

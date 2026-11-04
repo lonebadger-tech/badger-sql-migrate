@@ -1,5 +1,5 @@
 """The documentation section: /badger-sql-migrate/docs/..."""
-from build import BASE, VERSION, Page, code, sh, sql, yaml
+from build import BASE, REPO, VERSION, Page, code, markdown, sh, sql, yaml
 
 SIDEBAR = [
     ("Get started", [
@@ -7,6 +7,7 @@ SIDEBAR = [
         ("Install", "docs/install/"),
         ("Quick start", "docs/quick-start/"),
         ("Project layout", "docs/project/"),
+        ("AI assistants", "docs/ai/"),
     ]),
     ("Concepts", [
         ("The plan", "docs/plan/"),
@@ -52,7 +53,7 @@ def link(path, label):
 
 
 def pages():
-    return [overview(), install(), quick_start(), project(), plan(), changes(), certification(), revert(), fixing_changes(), generating(),
+    return [overview(), install(), quick_start(), project(), ai(), plan(), changes(), certification(), revert(), fixing_changes(), generating(),
             teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(), postgresql(),
             commands(), ci_cd(), bundles(), drift(), baseline(), importing(), journal(), troubleshooting(), extending()]
 
@@ -192,6 +193,62 @@ def project():
 
 
 # ---------------------------------------------------------------- concepts
+
+def ai():
+    with open(f"{REPO}/docs/ai-guide.md", encoding="utf-8") as f:
+        guide = markdown(f.read())
+    return doc("docs/ai/", "AI assistants", "Let Claude, Copilot, Cursor and other AI tools write changes that bsm can certify.", f"""
+<p>AI coding assistants write good SQL, but they don't know bsm's rules: named changes in the plan, a revert for every deploy, one transaction per change, and never editing what has been deployed. bsm gives them those rules three ways. Use any or all of them.</p>
+
+<h2 id="agents-md">AGENTS.md in every project</h2>
+<p><code>bsm init</code> and <code>bsm import</code> write an <code>AGENTS.md</code> into the project folder: a short version of the rules, filled in for the project's database. Claude Code, Copilot, Cursor, Codex and most other assistants read <code>AGENTS.md</code> on their own. Pass <code>--no-agents-file</code> to skip it, and keep or edit it like any other file: bsm never overwrites one that exists. Older projects can get one by running <code>bsm init</code> again in the folder; it only creates files that are missing.</p>
+
+<h2 id="guide">The full guide</h2>
+{sh('''bsm ai-guide > docs/bsm-ai-guide.md   # the guide for the installed version''')}
+<p><code>bsm ai-guide</code> prints the guide below as Markdown, matching the installed version, for assistants that can't browse. Every page of this site is also available as Markdown (add <code>index.md</code> to its address), and <a href="/llms.txt">llms.txt</a> lists them all.</p>
+
+<h2 id="mcp">The MCP server</h2>
+<p><code>bsm mcp</code> runs a <a href="https://modelcontextprotocol.io">Model Context Protocol</a> server over stdio for one project folder. Assistants that support MCP then add changes, write scripts and run the checks through tools instead of guessing at file formats and command output:</p>
+<table>
+<tr><th>Tool</th><th>Does</th></tr>
+<tr><td><code>project_info</code></td><td>The database dialect, environments, variable names and plan size</td></tr>
+<tr><td><code>plan_show</code>, <code>read_change</code></td><td>The plan, and a change's scripts</td></tr>
+<tr><td><code>add_change</code></td><td>Add a change with its deploy, revert and verify scripts in one call, like <code>bsm add</code></td></tr>
+<tr><td><code>write_change_script</code>, <code>update_change</code></td><td>Edit a change that hasn't been deployed: a script, or its <code>!notx</code>, <code>!irreversible</code>, requires and note</td></tr>
+<tr><td><code>rework_change</code></td><td>Supersede a deployed change, like <code>bsm rework</code></td></tr>
+<tr><td><code>write_repeatable</code></td><td>Create or replace a view, procedure, function or environment script</td></tr>
+<tr><td><code>check</code>, <code>lint_sql</code></td><td><code>plan check</code> with each lint finding's code, file and line; lint SQL before writing it</td></tr>
+<tr><td><code>render</code></td><td>A script with an environment's variables filled in</td></tr>
+<tr><td><code>guide</code></td><td>The guide below (also a resource, <code>bsm://guide</code>, and a <code>write-migration</code> prompt)</td></tr>
+</table>
+<p>The server reads and writes files in the project folder only. It never connects to a database and never needs a password, so an assistant can draft changes but a person deploys them with <code>bsm deploy</code>.</p>
+<p>Claude Code, from the repository root:</p>
+{sh('''claude mcp add bsm -- bsm mcp -C db''')}
+<p>Claude Desktop (<code>claude_desktop_config.json</code>), Cursor (<code>.cursor/mcp.json</code>) and other clients that use the same format:</p>
+{code('''{{
+  "mcpServers": {{
+    "bsm": {{ "command": "bsm", "args": ["mcp", "-C", "/path/to/repo/db"] }}
+  }}
+}}''', "json")}
+<p>VS Code (<code>.vscode/mcp.json</code>):</p>
+{code('''{{
+  "servers": {{
+    "bsm": {{ "type": "stdio", "command": "bsm", "args": ["mcp", "-C", "${{workspaceFolder}}/db"] }}
+  }}
+}}''', "json")}
+<p>Installed as a .NET tool, <code>bsm</code> is on the path; with the downloaded executable, give its full path as <code>command</code>.</p>
+
+<h2 id="review">Review what the assistant wrote</h2>
+<ul>
+  <li>Read every <code>revert.sql</code>: it must undo the deploy exactly. Try it locally with <code>bsm deploy</code>, <code>bsm revert --last 1</code>, <code>bsm deploy</code>, then <code>bsm verify</code>.</li>
+  <li>Run <code>bsm plan check</code> in CI so lint errors and undefined variables never merge.</li>
+  <li>Check that the assistant didn't edit a change that is already deployed: <code>bsm status</code> flags it as <em>edited after deploy</em>.</li>
+</ul>
+
+<hr>
+{guide}
+""")
+
 
 def plan():
     return doc("docs/plan/", "The plan", "bsm.plan is the single source of deploy order.", f"""
@@ -908,7 +965,7 @@ def always_encrypted():
 
 def commands():
     cmds = [
-        ("init", "[--provider sqlserver|postgresql]", "Create bsm.yaml, bsm.plan, folders and .gitattributes."),
+        ("init", "[--provider sqlserver|postgresql] [--no-agents-file]", "Create bsm.yaml, bsm.plan, folders, .gitattributes and AGENTS.md (instructions for AI assistants)."),
         ("add &lt;name&gt;", "[-r|--requires a b] [-n|--note text] [--notx] [--irreversible]", "Scaffold changes/&lt;name&gt;/ and append it to the plan."),
         ("add &lt;name&gt; --from-diff", "[--shadow-env env] [--keep-shadow] [--exclude schema.name…] [--dry-run] [--no-record] [-r …] [-n …]", "Generate deploy.sql and revert.sql from schema edits made in the environment's database, compared with a shadow database built from the plan; records the change as applied there."),
         ("tag &lt;name&gt;", "", "Tag the last change in the plan (use as @name)."),
@@ -925,13 +982,16 @@ def commands():
         ("diff-schema", "[--against env] [--exit-code] [--script file]", "Schema differences: live versus the schema recorded after the last deploy, or versus another environment. --exit-code returns 3 when they differ; --script writes SQL that turns this database into the other."),
         ("verify", "", "Hashes versus working copy, rendered-SQL drift, verify scripts (rolled back), schema drift. Exit 1 on problems."),
         ("log", "[-n|--limit 50]", "Deploy, revert, fail, repeatable and resource events, newest first."),
-        ("baseline", "--to x | --from flyway|dbup|grate|roundhouse|sqitch [--journal schema.table] [--skip-checksums] [-y]", "Record changes as applied without running them: up to x, or as far as the old tool's journal in the database says (with repeatables it already applied)."),
+        ("baseline", "--to x | --from flyway|dbup|grate|roundhouse|sqitch|sqlproj [--journal schema.table] [--skip-checksums] [-y]", "Record changes as applied without running them: up to x, or as far as the old tool's journal in the database says (with repeatables it already applied, or whose live definition matches). --from sqlproj: the database was published from the SQL project."),
         ("import flyway &lt;folder&gt;", "[--config file] [--location dir…] [--provider sqlserver|postgresql] [--dry-run]", "Convert a Flyway project into a new bsm project (written to -C). No database."),
         ("import dbup &lt;folder&gt;", "[--file-names] [--run-always glob…] [--no-variables] [--var name=value…] [--dry-run]", "Convert DbUp scripts into a new bsm project (written to -C). No database."),
         ("import grate &lt;folder&gt;", "[--folder key=name…] [--environment name…] [--ignore-directory-names] [--no-tokens] [--var name=value…] [--dry-run]", "Convert a grate or RoundhousE scripts folder into a new bsm project. No database."),
         ("import sqitch &lt;folder&gt;", "[--engine name] [--provider …] [--dry-run]", "Convert a Sqitch project into a new bsm project. No database."),
+        ("import sqlproj &lt;file.sqlproj|folder&gt;", "[--dry-run]", "Convert an SSDT / SQL Database Project into a new SQL Server bsm project: one change or repeatable per object, in dependency order. No database."),
         ("vars", "", "Every variable for the environment: value, source, description."),
         ("render &lt;name&gt;", "[-k|--kind deploy|revert|verify]", "Print a change or repeatable exactly as it would run."),
+        ("ai-guide", "", "Print the guide for AI assistants writing changes (Markdown). No database."),
+        ("mcp", "", "Run an MCP server over stdio for AI assistants: tools that read and write this project's files. No database. See " + link("docs/ai/", "AI assistants") + "."),
         ("env list", "", "Environments and templates."),
         ("env show", "", "The selected environment, merged, secrets masked."),
         ("env status", "", "Environment resources (Always Encrypted keys) versus the database."),
@@ -1099,7 +1159,7 @@ bsm status -e prod                          # initial-schema shown as (baseline)
 <p>Baseline only works on a database with no deployed changes, takes the deploy lock, records the environment, and writes a schema fingerprint so later drift is detected.</p>
 
 <h2>Coming from Flyway, DbUp or grate</h2>
-<p>For Flyway, DbUp, grate, RoundhousE and Sqitch, <code>bsm import</code> does the conversion and <code>bsm baseline --from</code> reads each database's history for you; see {link("docs/importing/", "Moving from other tools")}. For anything else:</p>
+<p>For Flyway, DbUp, grate, RoundhousE, Sqitch and SQL projects (SSDT), <code>bsm import</code> does the conversion and <code>bsm baseline --from</code> reads each database's history for you; see {link("docs/importing/", "Moving from other tools")}. For anything else:</p>
 <ul>
   <li>Convert your versioned scripts into changes (one folder each) in their existing order, or collapse history into one <code>initial-schema</code> change.</li>
   <li>Write revert scripts for the changes you might want to undo; mark the rest <code>!irreversible</code>.</li>
@@ -1111,19 +1171,20 @@ bsm status -e prod                          # initial-schema shown as (baseline)
 
 
 def importing():
-    return doc("docs/importing/", "Moving from other tools", "Convert a Flyway, DbUp, grate (or RoundhousE) or Sqitch project, then adopt the databases it already manages without running anything.", f"""
+    return doc("docs/importing/", "Moving from other tools", "Convert a Flyway, DbUp, grate (or RoundhousE), Sqitch or SQL Server Database Project (SSDT), then adopt the databases it already manages without running anything.", f"""
 {sh('''bsm import flyway ./flyway-project -C db --dry-run   # see what it would do
 bsm import flyway ./flyway-project -C db             # write a new bsm project in db/
 bsm plan check -C db
 bsm baseline --from flyway -C db -e prod             # once per existing database
 bsm deploy -C db -e prod                             # from now on''')}
-<p>Import writes a new project (it refuses a folder that already has one) and changes no database. Baseline reads the old tool's journal table in each database, records the changes it already ran, and runs nothing; the old journal table stays until you drop it. New, empty databases just run <code>bsm deploy</code>.</p>
+<p>Import writes a new project (it refuses a folder that already has one) and changes no database. Baseline reads the old tool's journal table in each database, records the changes it already ran, and runs nothing; the old journal table stays until you drop it. It also records the repeatables the database already has with the same definition (on SQL Server), so the first deploy re-applies only the ones that differ. New, empty databases just run <code>bsm deploy</code>.</p>
 <table>
 <tr><th>From</th><th>Import</th><th>Adopt existing databases</th></tr>
 <tr><td>{link("docs/importing/#flyway", "Flyway")}</td><td><code>bsm import flyway</code></td><td><code>bsm baseline --from flyway</code> (checksums checked)</td></tr>
 <tr><td>{link("docs/importing/#dbup", "DbUp")}</td><td><code>bsm import dbup</code></td><td><code>bsm baseline --from dbup</code></td></tr>
 <tr><td>{link("docs/importing/#grate", "grate, RoundhousE")}</td><td><code>bsm import grate</code></td><td><code>bsm baseline --from grate</code> or <code>--from roundhouse</code> (hashes checked)</td></tr>
 <tr><td>{link("docs/importing/#sqitch", "Sqitch")}</td><td><code>bsm import sqitch</code></td><td>PostgreSQL: <code>bsm baseline --from sqitch</code> (script hashes checked). Other engines: <code>bsm baseline --to &lt;change&gt;</code></td></tr>
+<tr><td>{link("docs/importing/#sqlproj", "SQL projects (SSDT)")}</td><td><code>bsm import sqlproj</code></td><td><code>bsm baseline --from sqlproj</code> (tables and module definitions checked)</td></tr>
 </table>
 <p>Imports target SQL Server unless you pass <code>--provider postgresql</code>; Sqitch projects for PostgreSQL (<code>engine = pg</code>) become PostgreSQL projects on their own, and Flyway's <code>jdbc:postgresql</code> URLs become PostgreSQL environments.</p>
 <p>Every import marks changes <code>!notx</code> when their scripts contain statements SQL Server refuses inside a transaction (the other tools often run without one), and lists everything it could not carry over.</p>
@@ -1198,6 +1259,52 @@ bsm import sqitch ./flipr -C bsm-db --engine pg      # use that engine's setting
 </ul>
 {sh('''bsm baseline --from sqitch -e prod      # reads sqitch.changes in the same PostgreSQL database''')}
 <p>On PostgreSQL, baseline reads Sqitch's registry (<code>sqitch.changes</code>), matches each deployed change by project, name and version (a reworked change is deployed once per version), and checks the SHA-1 Sqitch recorded for each deploy script against the imported one. Sqitch's registry schema stays until you drop it.</p>
+
+<h2 id="sqlproj">From SQL projects (SSDT)</h2>
+{sh('''bsm import sqlproj ./Shop/Shop.sqlproj -C db --dry-run
+bsm import sqlproj ./Shop/Shop.sqlproj -C db
+bsm plan check -C db
+bsm baseline --from sqlproj -C db -e prod     # databases already published from the dacpac''')}
+<p>A SQL project describes the database as it should be, and SSDT works out a script on each publish. bsm needs ordered, reviewable steps, so the import gives every object its own piece and puts them in dependency order. It reads classic projects (<code>&lt;Build Include&gt;</code> items) and SDK-style <code>Microsoft.Build.Sql</code> projects (every <code>.sql</code> file except <code>None</code>, <code>Content</code> and <code>Build Remove</code> items, <code>bin/</code> and <code>obj/</code>). It parses the scripts with ScriptDom and needs no Visual Studio, MSBuild or dacpac, so it runs the same on Windows, macOS and Linux; item paths written with <code>\\</code> or in the wrong case still resolve.</p>
+<table>
+<tr><th>In the project</th><th>In bsm</th></tr>
+<tr><td>Schemas, tables, types, sequences, synonyms, users, roles, partition functions and schemes, XML schema collections; indexes and constraints in files of their own</td><td>One change each (<code>changes/create-&lt;schema&gt;-&lt;name&gt;/</code>, <code>create-type-…</code>, <code>create-schema-…</code>), with a generated <code>revert.sql</code> and <code>[requires]</code> on the changes it needs. Indexes, constraints, grants and extended properties in an object's file stay with that object.</td></tr>
+<tr><td>Views, procedures, functions, triggers</td><td>Repeatables (<code>repeatable/views/dbo.vCustomer.sql</code> and so on) with <code>CREATE</code> turned into <code>CREATE OR ALTER</code>, and <code>-- bsm:requires</code> for the repeatables they use (a view on a view, a function in a view).</td></tr>
+<tr><td>A function or view a change needs (a computed column or check constraint uses it, it has an index, a <code>WITH SCHEMABINDING</code> object uses it)</td><td>A change instead: repeatables run after all changes, and CREATE OR ALTER would drop a view's indexes or fail on a schema-bound object. Edit it later with a new change.</td></tr>
+<tr><td>Standalone <code>GRANT</code>, <code>ALTER ROLE … ADD MEMBER</code></td><td>Repeatables under <code>permissions/</code>: they are safe to run again.</td></tr>
+<tr><td>Post-deployment script</td><td>A repeatable under <code>post-deploy/</code>, with <code>:r</code> includes inlined. SSDT ran it on every publish, so it is already safe to re-run; bsm runs it whenever it changes. Move data for one environment only into <code>environments/&lt;name&gt;/</code>.</td></tr>
+<tr><td>Pre-deployment script</td><td>Not imported, with a warning: bsm has no step before the changes. Turn work that is still needed into a change.</td></tr>
+<tr><td><code>SqlCmdVariable</code>s</td><td>Variables in <code>bsm.yaml</code> with their default values; <code>$(Name)</code> keeps working and <code>$(DatabaseName)</code> becomes <code>$(db)</code>. Put values from publish profiles under each environment.</td></tr>
+<tr><td>Database references</td><td><code>master</code> and <code>msdb</code> references are dropped. References to other databases are listed: their objects are not managed or ordered here. Same-database (composite) references are listed too; import those projects as well.</td></tr>
+</table>
+<p>Tables whose foreign keys reference each other cannot be created in any order, so the import moves one table's foreign keys into a later change, <code>add-foreign-keys-&lt;schema&gt;-&lt;table&gt;</code>, as SSDT's publish does. Other cycles keep project order and are reported. Procedures that call each other need no order: SQL Server resolves those names when they run.</p>
+<p>Every change's note starts with <code>sqlproj &lt;file&gt;:</code>. For a database already published from the dacpac, <code>bsm baseline --from sqlproj</code> checks that it has the project's tables, then records every imported change as applied. It also records the repeatables the database already has with exactly that definition, so the first deploy does not re-run them all; a view or procedure that differs (published from an older version, or edited by hand) is left out, and the next deploy applies it. The permission and post-deployment scripts are not recorded: the database may have been published with older versions of them, so the first deploy runs them once (SSDT ran them on every publish, so they are safe to run again). After that, stop publishing the dacpac to that database.</p>
+<p>Reverting an imported project goes back as far as its tables and types, but not past a schema that still holds views, procedures or functions: those are repeatables, which a revert leaves in place. <code>bsm revert --all</code> therefore stops at the first <code>create-schema-…</code> change; drop the repeatables' objects first if you really need an empty database.</p>
+<h3>Environments at different versions</h3>
+<p>A SQL project describes one state, but production is often behind staging, and staging behind development. Build the plan from the oldest environment forward, so each step is a change the older environments will deploy later:</p>
+<ol>
+  <li>Import the project at the release tag production runs, not the current branch. Baseline's table check only finds missing tables, not missing columns, so a newer project would pass it and be wrong.</li>
+  <li>Baseline production, then confirm it matches the plan exactly: the dry run must report no schema differences.</li>
+  <li>For each newer environment, oldest first: baseline it (<code>--from sqlproj</code> for the first, <code>--to</code> the previous environment's change after that), then capture what it has beyond the plan with <code>bsm add &lt;name&gt; --from-diff</code>. The new change is recorded there as applied.</li>
+</ol>
+{sh('''git -C Shop worktree add ../Shop-prod release-1.4      # the project as production runs it
+bsm import sqlproj ../Shop-prod/Shop.sqlproj -C db
+bsm baseline --from sqlproj -C db -e prod
+bsm add check --from-diff --dry-run -C db -e prod      # must say: no schema differences
+
+bsm baseline --from sqlproj -C db -e staging
+bsm add release-1.5 --from-diff -C db -e staging       # staging's lead over prod, recorded there as applied
+
+bsm baseline --to release-1.5 -C db -e dev
+bsm add release-1.6 --from-diff -C db -e dev''')}
+<p>Every baseline also records the repeatables whose definition in that database already matches the script, and lists the ones that differ. Those run on the next deploy (on SQL Server; other providers re-run them all). That makes the last step safe: the plan's views and procedures are production's versions, so update the repeatable files to the newest definitions, for example by importing the current project into a scratch folder and copying its <code>repeatable/</code> folder over. Each environment's next <code>bsm deploy</code> then runs the changes it lacks and only the repeatables that differ from what it has.</p>
+<p>Before relying on it:</p>
+<ul>
+  <li>Generated changes cover schema only. Data fixes an environment received (reference data, backfills) are not in them; add those as changes yourself.</li>
+  <li>A renamed column or table can come through as a drop and an add. Review every generated change, and turn those into renames (<code>sp_rename</code>) before another environment deploys them.</li>
+  <li>The environments must form a straight line: each has everything the older ones have. A hotfix made only in production shows up in staging's change as something to undo. Bring it into the newer environments first, or edit the generated change.</li>
+  <li>Try the whole sequence on copies of the databases first, and compare each with <code>bsm diff-schema --against</code> afterwards.</li>
+</ul>
 
 <h2>Text that must stay literal</h2>
 <p>None of these tools expands <code>{{name}}</code> or <code>$(name)</code>, but bsm does. The import escapes <code>{{name}}</code> to <code>{{{{name}}}}</code>, and if any script contains <code>$(name)</code> text it sets <code>preprocessor.sqlcmdSyntax: false</code> in <code>bsm.yaml</code>.</p>
