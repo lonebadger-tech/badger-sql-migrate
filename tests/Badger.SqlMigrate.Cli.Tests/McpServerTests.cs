@@ -18,15 +18,36 @@ public sealed class McpServerTests : IAsyncLifetime
         Assert.Equal(0, Commands.Init(G, "postgresql"));
         Commands.AddChange(root, "create-customer", [], null, false, false, "CREATE TABLE public.customer (id int PRIMARY KEY, name text NOT NULL);", "DROP TABLE public.customer;");
 
+        client = await ConnectAsync(protocolVersion: null);
+    }
+
+    /// <summary>
+    /// Starts 'bsm mcp'. With no protocol version the client probes for the newest revision (server/discover);
+    /// the probe gets a generous timeout because starting 'dotnet bsm.dll' can take seconds on a CI runner, and a
+    /// probe that times out makes the client fall back to initialize on a revision that no longer has it.
+    /// </summary>
+    private async Task<McpClient> ConnectAsync(string? protocolVersion)
+    {
         var bsm = Path.Combine(AppContext.BaseDirectory, "bsm.dll");
-        client = await McpClient.CreateAsync(new StdioClientTransport(new StdioClientTransportOptions
-        {
-            Name = "bsm",
-            Command = "dotnet",
-            Arguments = [bsm, "mcp", "-C", root],
-            // No BSM_LOCAL_PASSWORD: nothing the server does may need a connection secret.
-            EnvironmentVariables = new Dictionary<string, string?> { ["BSM_LOCAL_PASSWORD"] = null },
-        }));
+        return await McpClient.CreateAsync(
+            new StdioClientTransport(new StdioClientTransportOptions
+            {
+                Name = "bsm",
+                Command = "dotnet",
+                Arguments = [bsm, "mcp", "-C", root],
+                // No BSM_LOCAL_PASSWORD: nothing the server does may need a connection secret.
+                EnvironmentVariables = new Dictionary<string, string?> { ["BSM_LOCAL_PASSWORD"] = null },
+            }),
+            new McpClientOptions { ProtocolVersion = protocolVersion, DiscoverProbeTimeout = TimeSpan.FromSeconds(60), InitializationTimeout = TimeSpan.FromSeconds(60) });
+    }
+
+    [Fact]
+    public async Task Clients_using_the_initialize_handshake_work_too()
+    {
+        // Most clients today (Claude Code, Claude Desktop, VS Code, Cursor) start with initialize.
+        await using var older = await ConnectAsync("2025-06-18");
+        Assert.Equal("bsm", older.ServerInfo?.Name);
+        Assert.Contains(await older.ListToolsAsync(), t => t.Name == "add_change");
     }
 
     public async Task DisposeAsync()
