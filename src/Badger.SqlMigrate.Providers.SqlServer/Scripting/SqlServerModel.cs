@@ -285,7 +285,7 @@ internal sealed class SqlServerModel
         var checks = (await Q(ChecksSql)).GroupBy(r => Int(r["parent_object_id"]))
             .ToDictionary(g => g.Key, g => g.Select(r => new CheckConstraint(Bool(r["is_system_named"]) ? null : Str(r["name"]), Str(r["definition"])!, Bool(r["is_disabled"]))).ToList());
 
-        var tableRows = await Q(TablesSql);
+        var tableRows = await Q(await SqlServerCompatibility.AdaptAsync(session, TablesSql, ct).ConfigureAwait(false));
         var names = tableRows.ToDictionary(r => Int(r["object_id"]), r => new ObjectName(Str(r["schema_name"])!, Str(r["name"])!));
         foreach (var r in tableRows)
         {

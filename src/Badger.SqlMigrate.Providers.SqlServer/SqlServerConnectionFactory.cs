@@ -102,6 +102,17 @@ public static class SqlServerConnectionFactory
         return problems;
     }
 
+    /// <summary>
+    /// sqlserver://host[:port]/database. The port is shown only when the environment names one: a local default
+    /// instance (".", "(localdb)\MSSQLLocalDB") is usually reached over shared memory or a named pipe, not port 1433.
+    /// </summary>
+    internal static string Describe(DeploymentEnvironment environment, Endpoint target, string database, bool tunnel)
+    {
+        var explicitPort = environment.Port is not null
+            || (string.IsNullOrWhiteSpace(environment.Host) && environment.ConnectionString is { } cs && new SqlConnectionStringBuilder(cs).DataSource.Contains(',', StringComparison.Ordinal));
+        return $"sqlserver://{target.Host}{(explicitPort || tunnel ? $":{target.Port}" : string.Empty)}/{database}{(tunnel ? " (via ssh)" : string.Empty)}";
+    }
+
     public static Endpoint ResolveEndpoint(DeploymentEnvironment environment)
     {
         if (!string.IsNullOrWhiteSpace(environment.Host))
@@ -236,7 +247,7 @@ public static class SqlServerConnectionFactory
             }
         }
 
-        var description = $"sqlserver://{target.Host}:{target.Port}/{builder.InitialCatalog}{(context.EndpointOverride is null ? string.Empty : " (via ssh)")}";
+        var description = Describe(environment, target, builder.InitialCatalog, context.EndpointOverride is not null);
         return (connection, description, keyStores);
     }
 

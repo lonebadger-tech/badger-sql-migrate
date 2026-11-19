@@ -60,6 +60,12 @@ public interface IDatabaseProvider
     /// <summary>Creates temporary databases; null when the provider cannot.</summary>
     IScratchDatabases? ScratchDatabases => null;
 
+    /// <summary>Reads the schema into a vendor-neutral model for 'bsm convert'; null when the provider cannot.</summary>
+    Conversion.ISchemaExporter? Exporter => null;
+
+    /// <summary>Bulk reads and writes table data for 'bsm convert data'; null when the provider cannot.</summary>
+    Conversion.IDataTransfer? Data => null;
+
     /// <summary>The schema unqualified names live in ("dbo" on SQL Server, "public" on PostgreSQL).</summary>
     string DefaultSchema => "dbo";
 

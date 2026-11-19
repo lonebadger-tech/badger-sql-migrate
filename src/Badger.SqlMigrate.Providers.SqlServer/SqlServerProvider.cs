@@ -39,6 +39,10 @@ public sealed class SqlServerProvider : IDatabaseProvider
 
     public IEnvironmentResources? Resources { get; } = new SqlServerEnvironmentResources();
 
+    public Core.Conversion.ISchemaExporter Exporter { get; } = new Conversion.SqlServerExporter();
+
+    public Core.Conversion.IDataTransfer Data { get; } = new Conversion.SqlServerDataTransfer();
+
     /// <summary>Registers a custom Always Encrypted key store provider for all environments (library use).</summary>
     public static void RegisterKeyStoreProvider(string name, SqlColumnEncryptionKeyStoreProvider provider) => KeyStoreProviders.Register(name, provider);
 
@@ -69,6 +73,13 @@ public sealed class SqlServerProvider : IDatabaseProvider
         try
         {
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (SqlException ex) when (ex.Number == 4060)
+        {
+            // Cannot open database "x" requested by the login.
+            var database = connection.Database.Length > 0 ? connection.Database : ResolveDatabaseName(environment);
+            await connection.DisposeAsync().ConfigureAwait(false);
+            throw new MigrationException($"Could not open database '{database}' ({description}): it does not exist, or this login may not open it. bsm deploys into an existing database; create it first (CREATE DATABASE [{database}]).", ex);
         }
         catch (SqlException ex)
         {

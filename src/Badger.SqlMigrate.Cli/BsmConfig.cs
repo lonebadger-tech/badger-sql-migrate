@@ -188,7 +188,9 @@ public sealed class BsmConfig
     /// For commands that never connect (vars, render, bsm mcp): sign-in settings are left out, so their secrets
     /// (password, connection string, SSH keys, Entra client secrets) need not be set. Variables still resolve.
     /// </param>
-    public DeploymentEnvironment ResolveEnvironment(string? requested, string? connectionStringOverride, bool offline = false)
+    /// <param name="offline">Nothing will connect: leave out connection secrets.</param>
+    /// <param name="keepUnresolved">Keep unset ${env:...} / missing ${file:...} references as written instead of failing (for showing an environment).</param>
+    public DeploymentEnvironment ResolveEnvironment(string? requested, string? connectionStringOverride, bool offline = false, bool keepUnresolved = false)
     {
         var name = SelectEnvironmentName(requested);
         var merged = Merge(name);
@@ -211,7 +213,7 @@ public sealed class BsmConfig
             }
         }
 
-        ResolveSecrets(merged, name);
+        ResolveSecrets(merged, name, keepUnresolved);
 
         EnvironmentDto dto;
         try
@@ -310,7 +312,7 @@ public sealed class BsmConfig
         }
     }
 
-    private static void ResolveSecrets(JsonNode? node, string environment)
+    private static void ResolveSecrets(JsonNode? node, string environment, bool lenient)
     {
         switch (node)
         {
@@ -319,11 +321,11 @@ public sealed class BsmConfig
                 {
                     if (obj[key] is JsonValue value && value.TryGetValue<string>(out var text))
                     {
-                        obj[key] = Resolve(text, environment);
+                        obj[key] = Resolve(text, environment, lenient);
                     }
                     else
                     {
-                        ResolveSecrets(obj[key], environment);
+                        ResolveSecrets(obj[key], environment, lenient);
                     }
                 }
 
@@ -333,11 +335,11 @@ public sealed class BsmConfig
                 {
                     if (array[i] is JsonValue value && value.TryGetValue<string>(out var text))
                     {
-                        array[i] = Resolve(text, environment);
+                        array[i] = Resolve(text, environment, lenient);
                     }
                     else
                     {
-                        ResolveSecrets(array[i], environment);
+                        ResolveSecrets(array[i], environment, lenient);
                     }
                 }
 
@@ -345,11 +347,15 @@ public sealed class BsmConfig
         }
     }
 
-    private static string? Resolve(string text, string environment)
+    private static string? Resolve(string text, string environment, bool lenient)
     {
         try
         {
             return SecretResolver.Resolve(text);
+        }
+        catch (MigrationException) when (lenient)
+        {
+            return text;
         }
         catch (MigrationException ex)
         {

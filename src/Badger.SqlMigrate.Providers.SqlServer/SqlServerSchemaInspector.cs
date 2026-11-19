@@ -169,7 +169,8 @@ public sealed partial class SqlServerSchemaInspector : ISchemaInspector
     public async Task<string> CaptureAsync(IDatabaseSession session, string stateSchema, CancellationToken cancellationToken)
     {
         var boundaries = session is not SqlServerSession { Fingerprint.PartitionBoundaries: PartitionBoundaries.Ignore };
-        var rows = await session.QueryAsync(Sql, new Dictionary<string, object?> { ["state"] = stateSchema, ["boundaries"] = boundaries ? 1 : 0 }, cancellationToken).ConfigureAwait(false);
+        var sql = await SqlServerCompatibility.AdaptAsync(session, Sql, cancellationToken).ConfigureAwait(false);
+        var rows = await session.QueryAsync(sql, new Dictionary<string, object?> { ["state"] = stateSchema, ["boundaries"] = boundaries ? 1 : 0 }, cancellationToken).ConfigureAwait(false);
         var renames = (await session.QueryAsync(AnonymousHistorySql, null, cancellationToken).ConfigureAwait(false))
             .Select(r => (From: (string)r["history"]!, To: $"MSSQL_TemporalHistoryFor_<{r["parent"]}>"))
             .OrderByDescending(r => r.From.Length)

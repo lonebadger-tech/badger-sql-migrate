@@ -193,8 +193,11 @@ public sealed class FakeProvider : IDatabaseProvider, IStateStore, IDeployLock, 
     }
 
     // ISchemaInspector
+    /// <summary>When set, capturing the schema fails with this (e.g. a catalog query the server cannot run).</summary>
+    public Exception? CaptureFailure { get; set; }
+
     public Task<string> CaptureAsync(IDatabaseSession session, string stateSchema, CancellationToken cancellationToken) =>
-        Task.FromResult(string.Join('\n', Db(session).Objects.Order(StringComparer.Ordinal)));
+        CaptureFailure is { } failure ? Task.FromException<string>(failure) : Task.FromResult(string.Join('\n', Db(session).Objects.Order(StringComparer.Ordinal)));
 
     // IStateStore
     public Task EnsureCreatedAsync(IDatabaseSession session, string schema, CancellationToken cancellationToken)

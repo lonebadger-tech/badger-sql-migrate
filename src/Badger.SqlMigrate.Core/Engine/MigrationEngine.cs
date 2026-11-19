@@ -43,6 +43,9 @@ public sealed record RevertOptions
 
     public bool DryRun { get; init; }
 
+    /// <summary>With <see cref="DryRun"/>: only work out what would be reverted, without logging it (for a confirmation prompt).</summary>
+    public bool Quiet { get; init; }
+
     /// <summary>
     /// Revert even though the revert script now renders differently than at deploy time
     /// (a variable used by it changed value).
@@ -271,7 +274,7 @@ public sealed class MigrationEngine
             ? []
             : await DeployRepeatablesAsync(options.DryRun, cancellationToken).ConfigureAwait(false);
 
-        if (!options.DryRun && (deployed.Count > 0 || repeatables.Count > 0))
+        if (!options.DryRun && (deployed.Count > 0 || repeatables.Count > 0 || await SnapshotMissingAsync(cancellationToken).ConfigureAwait(false)))
         {
             await CaptureSnapshotAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -296,7 +299,7 @@ public sealed class MigrationEngine
         await CheckEnvironmentAsync(cancellationToken).ConfigureAwait(false);
         if (options.Repeatables.Count > 0)
         {
-            return new RevertResult([], options.DryRun) { Repeatables = await RevertRepeatablesAsync(options.Repeatables, options.DryRun, cancellationToken).ConfigureAwait(false) };
+            return new RevertResult([], options.DryRun) { Repeatables = await RevertRepeatablesAsync(options.Repeatables, options.DryRun, options.Quiet, cancellationToken).ConfigureAwait(false) };
         }
 
         var status = await StatusAsync(cancellationToken).ConfigureAwait(false);
@@ -331,7 +334,11 @@ public sealed class MigrationEngine
         {
             if (options.DryRun)
             {
-                log.Info($"would revert {row.Name}");
+                if (!options.Quiet)
+                {
+                    log.Info($"would revert {row.Name}");
+                }
+
                 reverted.Add(row.Name);
                 continue;
             }
@@ -401,7 +408,11 @@ public sealed class MigrationEngine
             recorded = (await provider.StateStore.GetLatestSchemaSnapshotAsync(session, Schema, cancellationToken).ConfigureAwait(false))?.Fingerprint;
             var dump = await provider.Schema.CaptureAsync(session, Schema, cancellationToken).ConfigureAwait(false);
             live = ContentHasher.Hash(dump);
-            if (recorded is not null && !string.Equals(recorded, live, StringComparison.Ordinal))
+            if (recorded is null)
+            {
+                log.Warn("no schema fingerprint is recorded for this database, so drift cannot be checked; 'bsm deploy' records one.");
+            }
+            else if (!string.Equals(recorded, live, StringComparison.Ordinal))
             {
                 if (await RecordedWithOtherSchemaFormatAsync(cancellationToken).ConfigureAwait(false))
                 {
@@ -843,7 +854,7 @@ public sealed class MigrationEngine
     /// Re-applies each repeatable's previous definition (stored at its last apply) and records it as current, so
     /// the next deploy re-applies the working copy unless that is changed too.
     /// </summary>
-    private async Task<IReadOnlyList<string>> RevertRepeatablesAsync(IReadOnlyList<string> names, bool dryRun, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<string>> RevertRepeatablesAsync(IReadOnlyList<string> names, bool dryRun, bool quiet, CancellationToken cancellationToken)
     {
         var stored = await provider.StateStore.ExistsAsync(session, Schema, cancellationToken).ConfigureAwait(false)
             ? (await provider.StateStore.GetRepeatablesAsync(session, Schema, cancellationToken).ConfigureAwait(false)).ToDictionary(r => r.Name, StringComparer.Ordinal)
@@ -870,7 +881,11 @@ public sealed class MigrationEngine
         {
             if (dryRun)
             {
-                log.Info($"would restore repeatable {row.Name} to {Short(row.PreviousHash!)}");
+                if (!quiet)
+                {
+                    log.Info($"would restore repeatable {row.Name} to {Short(row.PreviousHash!)}");
+                }
+
                 restored.Add(row.Name);
                 continue;
             }
@@ -961,6 +976,22 @@ public sealed class MigrationEngine
         }
     }
 
+    /// <summary>Changes are applied but no fingerprint was ever recorded (e.g. an earlier capture failed): a deploy records one.</summary>
+    private async Task<bool> SnapshotMissingAsync(CancellationToken cancellationToken)
+    {
+        if (!provider.Capabilities.SupportsSchemaFingerprint || !await provider.StateStore.ExistsAsync(session, Schema, cancellationToken).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        return (await provider.StateStore.GetAppliedChangesAsync(session, Schema, cancellationToken).ConfigureAwait(false)).Count > 0
+            && await provider.StateStore.GetLatestSchemaSnapshotAsync(session, Schema, cancellationToken).ConfigureAwait(false) is null;
+    }
+
+    /// <summary>
+    /// Records the schema fingerprint after the changes are committed. A failure here must not look like a failed
+    /// deploy (the changes are in): it is reported as a warning, and the next deploy records the fingerprint.
+    /// </summary>
     private async Task CaptureSnapshotAsync(CancellationToken cancellationToken)
     {
         if (!provider.Capabilities.SupportsSchemaFingerprint)
@@ -968,6 +999,23 @@ public sealed class MigrationEngine
             return;
         }
 
+        try
+        {
+            await CaptureSnapshotCoreAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            if (session.InTransaction)
+            {
+                await session.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+
+            log.Warn($"the changes are applied, but the schema fingerprint could not be recorded: {ex.Message.Split('\n')[0]} Drift detection needs it: fix the cause and run 'bsm deploy' again, which records it.");
+        }
+    }
+
+    private async Task CaptureSnapshotCoreAsync(CancellationToken cancellationToken)
+    {
         var dump = await provider.Schema.CaptureAsync(session, Schema, cancellationToken).ConfigureAwait(false);
         var applied = await provider.StateStore.GetAppliedChangesAsync(session, Schema, cancellationToken).ConfigureAwait(false);
         var snapshot = new SchemaSnapshot(ContentHasher.Hash(dump), dump, DateTimeOffset.UtcNow, applied.Count == 0 ? null : applied[^1].ChainId);

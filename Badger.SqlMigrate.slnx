@@ -2,15 +2,20 @@
   <Folder Name="/src/">
     <Project Path="src/Badger.SqlMigrate.Cli/Badger.SqlMigrate.Cli.csproj" />
     <Project Path="src/Badger.SqlMigrate.Connectivity/Badger.SqlMigrate.Connectivity.csproj" />
+    <Project Path="src/Badger.SqlMigrate.Conversion/Badger.SqlMigrate.Conversion.csproj" />
     <Project Path="src/Badger.SqlMigrate.Core/Badger.SqlMigrate.Core.csproj" />
     <Project Path="src/Badger.SqlMigrate.Providers.PostgreSql/Badger.SqlMigrate.Providers.PostgreSql.csproj" />
+    <Project Path="src/Badger.SqlMigrate.Providers.Sqlite/Badger.SqlMigrate.Providers.Sqlite.csproj" />
     <Project Path="src/Badger.SqlMigrate.Providers.SqlServer/Badger.SqlMigrate.Providers.SqlServer.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Badger.SqlMigrate.ArchitectureTests/Badger.SqlMigrate.ArchitectureTests.csproj" />
     <Project Path="tests/Badger.SqlMigrate.Cli.Tests/Badger.SqlMigrate.Cli.Tests.csproj" />
+    <Project Path="tests/Badger.SqlMigrate.Conversion.IntegrationTests/Badger.SqlMigrate.Conversion.IntegrationTests.csproj" />
+    <Project Path="tests/Badger.SqlMigrate.Conversion.Tests/Badger.SqlMigrate.Conversion.Tests.csproj" />
     <Project Path="tests/Badger.SqlMigrate.Core.Tests/Badger.SqlMigrate.Core.Tests.csproj" />
     <Project Path="tests/Badger.SqlMigrate.Providers.PostgreSql.Tests/Badger.SqlMigrate.Providers.PostgreSql.Tests.csproj" />
+    <Project Path="tests/Badger.SqlMigrate.Providers.Sqlite.Tests/Badger.SqlMigrate.Providers.Sqlite.Tests.csproj" />
     <Project Path="tests/Badger.SqlMigrate.Providers.SqlServer.Tests/Badger.SqlMigrate.Providers.SqlServer.Tests.csproj" />
     <Project Path="tests/Badger.SqlMigrate.Providers.Testing/Badger.SqlMigrate.Providers.Testing.csproj" />
   </Folder>

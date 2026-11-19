@@ -16,4 +16,9 @@
   <PropertyGroup>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Badger.SqlMigrate.Conversion" />
+    <InternalsVisibleTo Include="Badger.SqlMigrate.Providers.SqlServer.Tests" />
+  </ItemGroup>
+
 </Project>

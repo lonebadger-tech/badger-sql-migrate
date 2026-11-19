@@ -6,7 +6,7 @@
 
 Free, open-source, cross-platform (Windows, macOS, Linux) database migrations with **real up and down**, **named changes instead of version numbers**, and **SHA-256 hash certification** of everything that reaches a database.
 
-Providers: **SQL Server / Azure SQL** and **PostgreSQL** (`bsm init --provider postgresql`). The engine is vendor-neutral, so MySQL and SQLite can be added as providers without touching the engine or CLI.
+Providers: **SQL Server / Azure SQL**, **PostgreSQL** (`bsm init --provider postgresql`) and **SQLite** (`bsm init --provider sqlite`). The engine is vendor-neutral, so MySQL can be added as a provider without touching the engine or CLI.
 
 - **Documentation:** [lonebadger.tech/badger-sql-migrate](https://lonebadger.tech/badger-sql-migrate/) (also as Markdown for AI assistants: [llms.txt](https://www.lonebadger.tech/llms.txt))
 - **Download:** [standalone binaries](https://lonebadger.tech/badger-sql-migrate/download/) or `dotnet tool install -g Badger.SqlMigrate`
@@ -96,6 +96,7 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 | `baseline --to x \| --from flyway\|dbup\|grate\|roundhouse\|sqitch\|sqlproj` | Adopt an existing database without running scripts (up to x, as far as the old tool's journal says, or everything a dacpac publish created) |
 | `import flyway\|dbup\|grate\|sqitch <dir>` | Convert a Flyway, DbUp, grate/RoundhousE or Sqitch project into a new bsm project: migrations, reverts, repeatables, variables, environments |
 | `import sqlproj <file.sqlproj>` | Convert an SSDT / SQL Database Project: one change per table, type or schema in dependency order, views/procedures/functions/triggers as repeatables, the post-deployment script and SqlCmdVariables |
+| `convert schema --out <dir>` / `convert data --target <dir>` | Convert a live database between SQL Server, PostgreSQL and SQLite, in any direction: a new project for the other provider (tables, keys, indexes; views, routines and triggers translated, with `CONVERSION.md` listing what to review), then copy the rows and compare counts |
 | `doctor` | Check config, Entra sign-in and connectivity; show resources |
 | `env list` / `env show` | Environments (with templates) / one environment fully merged, secrets masked |
 | `env status` / `env provision [--allow-destructive]` | Compare / create or rotate per-environment resources (Always Encrypted keys) |
