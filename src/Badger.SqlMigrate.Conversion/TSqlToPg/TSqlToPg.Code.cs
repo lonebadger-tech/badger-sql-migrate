@@ -55,8 +55,27 @@ internal sealed partial class TSqlToPgTranslator
         }
     }
 
+    /// <summary>Trigger pieces from the last <see cref="Code"/> call: each event's function and CREATE TRIGGER.</summary>
+    private readonly List<(PortableCode Function, PortableCode Trigger)> triggerParts = [];
+
+    /// <summary>The object as PostgreSQL definitions with target names, for a second translator to continue from.</summary>
+    public IReadOnlyList<PortableCode> Intermediate(PortableCode code, IReadOnlyList<PortableCode> all)
+    {
+        var translated = Code(code, all);
+        if (code.Kind == PortableCodeKind.Trigger && triggerParts.Count > 0)
+        {
+            return triggerParts.SelectMany(p => new[] { p.Function, p.Trigger }).ToList();
+        }
+
+        // The script without its header comment lines.
+        var body = string.Join('\n', translated.Script.Split('\n').SkipWhile(l => l.StartsWith("--", StringComparison.Ordinal)));
+        body = System.Text.RegularExpressions.Regex.Replace(body, @"\ACREATE OR REPLACE VIEW", "CREATE VIEW");
+        return [code with { Name = ctx.TargetName(code.Name), Definition = body, Table = code.Table is { } t ? ctx.TargetName(t) : null, Language = code.Kind == PortableCodeKind.View ? "sql" : "plpgsql" }];
+    }
+
     public TranslatedCode Code(PortableCode code, IReadOnlyList<PortableCode> all)
     {
+        triggerParts.Clear();
         var target = ctx.Qualified(code.Name);
         scope = new Scope(code.Name.ToString());
         var folder = code.Kind switch
@@ -270,7 +289,8 @@ internal sealed partial class TSqlToPgTranslator
             body.Line("RETURN NULL;");
             var prologue = scope.UsesRowCount ? $"v_rowcount := (SELECT count(*) FROM {(scope.HasInserted ? "inserted" : "deleted")});" : null;
             var function = $"{schema}.{ctx.Quote(name + suffix + "_fn")}";
-            sb.Append(Routine("FUNCTION", function, [], "RETURNS trigger\n", body, prologue)).Append('\n');
+            var functionScript = Routine("FUNCTION", function, [], "RETURNS trigger\n", body, prologue);
+            sb.Append(functionScript).Append('\n');
             var triggerName = ctx.Quote(name + suffix);
             var referencing = e switch
             {
@@ -278,8 +298,18 @@ internal sealed partial class TSqlToPgTranslator
                 TriggerActionType.Delete => "REFERENCING OLD TABLE AS deleted",
                 _ => "REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted",
             };
+            var createTrigger = $"CREATE TRIGGER {triggerName} AFTER {e.ToString().ToUpperInvariant()} ON {table}\n    {referencing}\n    FOR EACH STATEMENT EXECUTE FUNCTION {function}();";
             sb.Append($"DROP TRIGGER IF EXISTS {triggerName} ON {table};\n");
-            sb.Append($"CREATE TRIGGER {triggerName} AFTER {e.ToString().ToUpperInvariant()} ON {table}\n    {referencing}\n    FOR EACH STATEMENT EXECUTE FUNCTION {function}();\n\n");
+            sb.Append(createTrigger).Append("\n\n");
+            var functionName = new PortableName(ctx.Names.Schema(code.Name.Schema), name + suffix + "_fn");
+            triggerParts.Add((
+                new PortableCode(PortableCodeKind.Function, functionName, functionScript) { Language = "plpgsql" },
+                new PortableCode(PortableCodeKind.Trigger, new PortableName(functionName.Schema, name + suffix), createTrigger)
+                {
+                    Language = "plpgsql",
+                    Table = code.Table is { } triggerTable ? ctx.TargetName(triggerTable) : null,
+                    TriggerFunction = functionName,
+                }));
             outer.Issues.AddRange(scope.Issues);
             outer.UsesRowCount |= scope.UsesRowCount;
             scope = outer;

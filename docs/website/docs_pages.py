@@ -1019,7 +1019,7 @@ def commands():
         ("import grate &lt;folder&gt;", "[--folder key=name…] [--environment name…] [--ignore-directory-names] [--no-tokens] [--var name=value…] [--dry-run]", "Convert a grate or RoundhousE scripts folder into a new bsm project. No database."),
         ("import sqitch &lt;folder&gt;", "[--engine name] [--provider …] [--dry-run]", "Convert a Sqitch project into a new bsm project. No database."),
         ("import sqlproj &lt;file.sqlproj|folder&gt;", "[--dry-run]", "Convert an SSDT / SQL Database Project into a new SQL Server bsm project: one change or repeatable per object, in dependency order. No database."),
-        ("convert schema --out &lt;folder&gt;", "[--from-provider p] [--to p] [--names lower|snake|keep] [--case-sensitive] [--exclude glob…] [--dry-run]", "Read a SQL Server or PostgreSQL database's catalog and write a new project for the other provider: tables, keys and indexes as changes; views, routines and triggers translated as repeatables; CONVERSION.md listing what to review."),
+        ("convert schema --out &lt;folder&gt;", "[--from-provider p] [--to p] [--names lower|snake|keep] [--case-sensitive] [--exclude glob…] [--dry-run]", "Read a SQL Server, PostgreSQL or SQLite database's catalog and write a new project for another provider: tables, keys and indexes as changes; views, routines and triggers translated as repeatables; CONVERSION.md listing what to review."),
         ("convert data --target &lt;folder&gt;", "[--target-env env] [--from-provider p] [--tables glob…] [--truncate]", "Copy every table's rows into the deployed, converted project's database, then compare row counts."),
         ("vars", "", "Every variable for the environment: value, source, description."),
         ("render &lt;name&gt;", "[-k|--kind deploy|revert|verify]", "Print a change or repeatable exactly as it would run."),
@@ -1532,14 +1532,14 @@ FROM pg_tables WHERE schemaname = :'schema' \\gexec''', "changes/reference-data/
 
 
 def converting():
-    return doc("docs/converting/", "Converting between databases", "Move a live database from SQL Server to PostgreSQL or back: its schema becomes a new bsm project for the other provider, then its rows are copied and checked.", f"""
+    return doc("docs/converting/", "Converting between databases", "Move a live database between SQL Server, PostgreSQL and SQLite, in any direction: its schema becomes a new bsm project for the other provider, then its rows are copied and checked.", f"""
 {sh('''bsm convert schema -C db -e prod --out ../db-pg               # read prod's catalog, write a PostgreSQL project
 # read ../db-pg/CONVERSION.md, set the connection in ../db-pg/bsm.yaml
 bsm plan check -C ../db-pg
 bsm deploy -C ../db-pg                                       # create the schema in PostgreSQL
 bsm convert data -C db -e prod --target ../db-pg             # copy every row, compare counts
 bsm verify -C ../db-pg''')}
-<p>The source is an environment of the project in <code>-C</code>, or any database: <code>--from-provider sqlserver --connection-string "..."</code>. The target provider is the other one. Conversion reads the database itself (its catalog), not the project's scripts, so it also works for databases bsm has never managed.</p>
+<p>The source is an environment of the project in <code>-C</code>, or any database: <code>--from-provider sqlserver --connection-string "..."</code>. Between SQL Server and PostgreSQL the target is the other one; to or from SQLite, pass <code>--to</code> (for example <code>bsm convert schema --from-provider sqlite --connection-string "Data Source=app.db" --to postgresql --out db</code>). Conversion reads the database itself (its catalog), not the project's scripts, so it also works for databases bsm has never managed.</p>
 
 <h2 id="what">What is converted</h2>
 <table>
@@ -1584,7 +1584,7 @@ bsm verify -C ../db-pg''')}
 </table>
 
 <h2 id="data">Copying the data</h2>
-<p><code>bsm convert data</code> copies every table, parents before children, with the same name mapping <code>convert schema</code> used (it reads <code>convert.json</code> in the converted project). Into SQL Server it uses bulk copy (identity values kept, triggers not fired, constraints checked afterwards); into PostgreSQL, <code>COPY</code> in one transaction with foreign keys deferred and user triggers off, so a failure leaves nothing behind. Identities and sequences are moved past the copied values, and row counts are compared at the end (exit code 1 when they differ).</p>
+<p><code>bsm convert data</code> copies every table, parents before children, with the same name mapping <code>convert schema</code> used (it reads <code>convert.json</code> in the converted project). Into SQL Server it uses bulk copy (identity values kept, triggers not fired, constraints checked afterwards); into PostgreSQL, <code>COPY</code> in one transaction with foreign keys deferred and user triggers off; into SQLite, prepared inserts in one transaction with foreign keys deferred and the tables' triggers set aside until the commit. PostgreSQL and SQLite loads leave nothing behind when they fail. Identities and sequences are moved past the copied values, and row counts are compared at the end (exit code 1 when they differ).</p>
 <p>The target tables must be empty; <code>--truncate</code> empties them first. <code>--tables "sales.*"</code> copies only some. Run it after deploying the converted project, while the source is not being written to.</p>
 """)
 
@@ -1613,6 +1613,18 @@ def troubleshooting():
         ("“This database belongs to environment 'test'…”", "You are pointing one environment's settings at another environment's database. Check <code>--env</code> and the host/database. If the database was copied on purpose, pass <code>--claim-environment</code> once."),
         ("“Timed out … waiting for the deploy lock”", "Another deploy is running against the database. Wait, or raise <code>lockTimeoutSeconds</code>."),
         ("“… cannot run inside a transaction”", "Lint BSM001. Mark the change <code>!notx</code> in the plan and make the script re-runnable."),
+<h2 id="sqlite">SQLite</h2>
+<p>SQLite is a different shape of database, so converting to or from it changes more than the dialect:</p>
+<table>
+<tr><th>Topic</th><th>What the conversion does</th></tr>
+<tr><td>Schemas</td><td>SQLite has none. Tables in the source's default schema keep their names; others get the schema as a prefix (<code>sales.Customer</code> becomes <code>sales_customer</code>). From SQLite, everything lands in <code>dbo</code> or <code>public</code>.</td></tr>
+<tr><td>Types</td><td>To SQLite, columns keep a descriptive declared type (<code>VARCHAR(50)</code>, <code>DATETIME</code>, <code>BOOLEAN</code>, <code>NUMERIC(12,2)</code>) whose affinity stores the values; dates are ISO 8601 text (UTC for time-zone-aware values), booleans 0/1 with a check, JSON with <code>json_valid</code>. Decimals with fractions become REAL in SQLite: keep money in integer cents if exactness matters. From SQLite, declared types are read with SQLite's affinity rules; a column with no declared type becomes text.</td></tr>
+<tr><td>Keys</td><td><code>INTEGER PRIMARY KEY</code> (the rowid) and identities map to each other (<code>AUTOINCREMENT</code>, so numbers are never reused). Foreign keys are part of <code>CREATE TABLE</code> in SQLite. <code>COLLATE NOCASE</code> maps to the case-insensitive collations on the other side.</td></tr>
+<tr><td>Sequences, functions, procedures</td><td>SQLite has none. Sequences and the defaults that use them are dropped and flagged; routines are kept commented out. A function whose body is a single expression is written in place where views use it.</td></tr>
+<tr><td>Triggers</td><td>SQLite triggers are row-level, one event each, and hold only SQL. To SQLite: PL/pgSQL and T-SQL logic is flattened (IF branches become WHERE guards, RAISE becomes <code>RAISE(ABORT, ...)</code>, a BEFORE trigger's changes to NEW become an UPDATE of the row, statement triggers run per row over that row). From SQLite: each trigger becomes a PL/pgSQL trigger function, or a SQL Server trigger over <code>inserted</code>/<code>deleted</code>.</td></tr>
+<tr><td>Views</td><td>SQLite functions (<code>ifnull</code>, <code>instr</code>, <code>group_concat</code>, <code>strftime</code>, <code>datetime('now', '-30 days')</code>, <code>iif</code> ...) and PostgreSQL and T-SQL ones are mapped to each other. SQL Server and SQLite convert by way of PostgreSQL's syntax, so both directions use the same, tested mappings.</td></tr>
+</table>
+
         ("“unknown variable {x}”", "Define it under <code>variables:</code>, pass <code>--var x=…</code>, write <code>{{x}}</code> for a literal, or set <code>preprocessor.unknown: keep</code>."),
         ("“renders differently than when it was deployed”", "A variable used by the change changed value. Run <code>bsm vars</code>; restore the value, or use <code>--allow-variable-drift</code> if the change is intended."),
         ("“Changes … come before changes already deployed” (strict ordering)", "A change merged above changes already in this database. In dev, use <code>--ordering dependency</code> or <code>rebase</code>; production should never see this if it only receives released plans."),

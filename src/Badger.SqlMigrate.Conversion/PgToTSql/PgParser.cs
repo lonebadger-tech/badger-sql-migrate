@@ -17,11 +17,15 @@ internal sealed class PgParser
     private readonly List<Token> tokens;
     private int pos;
 
-    public PgParser(string text)
+    /// <param name="sqlite">Read SQLite: [name] and `name` identifiers, ==, a IS b, GLOB, INSERT OR REPLACE.</param>
+    public PgParser(string text, bool sqlite = false)
     {
         this.text = text;
-        tokens = PgLexer.Tokenize(text);
+        this.sqlite = sqlite;
+        tokens = PgLexer.Tokenize(text, sqlite);
     }
+
+    private readonly bool sqlite;
 
     private static readonly HashSet<string> Reserved = new(StringComparer.Ordinal)
     {
@@ -525,6 +529,7 @@ internal sealed class PgParser
                 case "with":
                 case "values":
                 case "insert":
+                case "replace" when sqlite:
                 case "update":
                 case "delete":
                 {
@@ -759,7 +764,7 @@ internal sealed class PgParser
             (with, recursive) = With();
         }
 
-        if (IsWord("insert"))
+        if (IsWord("insert") || (sqlite && IsWord("replace") && IsWord("into", 1)))
         {
             return Insert(with);
         }
@@ -817,7 +822,20 @@ internal sealed class PgParser
 
     private PgStatement Insert(List<PgCte> with)
     {
-        ExpectWord("insert");
+        string? orAction = null;
+        if (AcceptWord("replace"))
+        {
+            orAction = "OR REPLACE";
+        }
+        else
+        {
+            ExpectWord("insert");
+            if (AcceptWord("or"))
+            {
+                orAction = "OR " + Next().Value.ToUpperInvariant();
+            }
+        }
+
         ExpectWord("into");
         var table = QualifiedName();
         string? alias = AcceptWord("as") ? Identifier() : null;
@@ -848,7 +866,7 @@ internal sealed class PgParser
         }
 
         var (returning, into) = Returning();
-        return new PgInsert(with, table, alias, columns, source, defaults, returning, into) { OnConflict = onConflict };
+        return new PgInsert(with, table, alias, columns, source, defaults, returning, into) { OnConflict = onConflict ?? orAction };
     }
 
     private (List<PgTarget>, List<PgExpr>) Returning()
@@ -871,6 +889,11 @@ internal sealed class PgParser
     private PgStatement Update(List<PgCte> with)
     {
         ExpectWord("update");
+        if (sqlite && AcceptWord("or"))
+        {
+            Next();
+        }
+
         AcceptWord("only");
         var table = QualifiedName();
         string? alias = AcceptWord("as") ? Identifier() : IsIdentifierStart ? Identifier() : null;
@@ -1359,6 +1382,13 @@ internal sealed class PgParser
                 }
                 else
                 {
+                    if (sqlite && !(IsWord("null") || IsWord("true") || IsWord("false") || IsWord("unknown")))
+                    {
+                        // SQLite: a IS b means IS NOT DISTINCT FROM.
+                        e = new PgIsDistinct(e, Comparison(), !not);
+                        continue;
+                    }
+
                     var what = Next().Value;
                     if (what is not ("null" or "true" or "false" or "unknown"))
                     {
@@ -1375,7 +1405,7 @@ internal sealed class PgParser
         }
     }
 
-    private static readonly HashSet<string> ComparisonOps = new(StringComparer.Ordinal) { "=", "<>", "!=", "<", ">", "<=", ">=" };
+    private static readonly HashSet<string> ComparisonOps = new(StringComparer.Ordinal) { "=", "==", "<>", "!=", "<", ">", "<=", ">=" };
 
     private PgExpr Comparison()
     {
@@ -1386,6 +1416,10 @@ internal sealed class PgParser
             if (op == "!=")
             {
                 op = "<>";
+            }
+            else if (op == "==")
+            {
+                op = "=";
             }
 
             if (IsWord("any") || IsWord("all") || IsWord("some"))
@@ -1427,6 +1461,11 @@ internal sealed class PgParser
                 var pattern = Other();
                 var escape = AcceptWord("escape") ? Other() : null;
                 left = new PgLike(left, op, pattern, escape, not);
+            }
+            else if (sqlite && (AcceptWord("glob") || AcceptWord("regexp")))
+            {
+                var op = Peek(-1).Value;
+                left = new PgLike(left, op, Other(), null, not);
             }
             else if (AcceptWords("similar", "to"))
             {
@@ -2046,6 +2085,63 @@ internal sealed class PgParser
         }
     }
 
+    // ------------------------------------------------------------------ SQLite triggers
+
+    public SqliteTriggerDef SqliteTrigger()
+    {
+        ExpectWord("create");
+        _ = AcceptWord("temp") || AcceptWord("temporary");
+        ExpectWord("trigger");
+        AcceptWords("if", "not", "exists");
+        var name = QualifiedName().Last;
+        var timing = "BEFORE";
+        if (AcceptWords("instead", "of"))
+        {
+            timing = "INSTEAD OF";
+        }
+        else if (AcceptWord("after"))
+        {
+            timing = "AFTER";
+        }
+        else
+        {
+            AcceptWord("before");
+        }
+
+        var ev = Next().Value.ToUpperInvariant();
+        var columns = new List<string>();
+        if (ev == "UPDATE" && AcceptWord("of"))
+        {
+            do
+            {
+                columns.Add(Identifier());
+            }
+            while (AcceptPunct(","));
+        }
+
+        ExpectWord("on");
+        var table = QualifiedName();
+        AcceptWords("for", "each", "row");
+        PgExpr? when = AcceptWord("when") ? Expr() : null;
+        ExpectWord("begin");
+        var body = StatementsUntil(() => IsWord("end") && (IsPunct(";", 1) || Peek(1).Kind == TokenKind.End));
+        ExpectWord("end");
+        return new SqliteTriggerDef(name, timing, ev, columns, table, when, body);
+    }
+
+    /// <summary>A SQLite view: CREATE [TEMP] VIEW [IF NOT EXISTS] name [(columns)] AS query.</summary>
+    public (string Name, IReadOnlyList<string> Columns, PgQuery Query) SqliteView()
+    {
+        ExpectWord("create");
+        _ = AcceptWord("temp") || AcceptWord("temporary");
+        ExpectWord("view");
+        AcceptWords("if", "not", "exists");
+        var name = QualifiedName().Last;
+        var columns = IsPunct("(") ? NameList() : [];
+        ExpectWord("as");
+        return (name, columns, QueryOnly());
+    }
+
     // ------------------------------------------------------------------ CREATE FUNCTION / PROCEDURE headers
 
     /// <summary>Parses pg_get_functiondef output: name, arguments, RETURNS, LANGUAGE and the body text.</summary>
@@ -2146,6 +2242,9 @@ internal sealed class PgParser
         return new RoutineHeader(name, procedure, args, returns, table, setOf, language, body ?? string.Empty);
     }
 }
+
+/// <summary>A SQLite CREATE TRIGGER: one event, row level, a body of SQL statements.</summary>
+internal sealed record SqliteTriggerDef(string Name, string Timing, string Event, IReadOnlyList<string> Columns, PgName Table, PgExpr? When, IReadOnlyList<PgStatement> Body);
 
 internal sealed record RoutineArg(string Mode, string? Name, string Type, PgExpr? Default);
 

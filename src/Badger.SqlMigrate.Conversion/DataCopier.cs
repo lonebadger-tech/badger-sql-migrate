@@ -34,7 +34,7 @@ public static class DataCopier
         CancellationToken cancellationToken)
     {
         var tables = Order(ctx.Schema.Tables.Where(t => options.Include(t.Name)).ToList());
-        var targets = tables.Select(t => new PortableName(ctx.Names.Schema(t.Name.Schema), ctx.Names.Name(t.Name.Name))).ToList();
+        var targets = tables.Select(t => ctx.TargetName(t.Name)).ToList();
 
         // Every target table must exist, and be empty unless --truncate.
         var plans = new List<(PortableTable Table, PortableName Target, List<TransferColumn> From, List<TransferColumn> To, List<string> Skipped)>();

@@ -265,6 +265,11 @@ internal sealed partial class PgToTSqlTranslator(ConversionContext ctx) : ITrans
                 return "(" + Query(s.Query, QueryContext.Subquery) + ")";
             case PgExtract x:
                 return Extract(x.Field, Value(x.Source));
+            case PgAtTimeZone z when StringArg(z.Zone)?.Equals("utc", StringComparison.OrdinalIgnoreCase) == true:
+                // now() AT TIME ZONE 'utc': the current UTC time; otherwise convert to UTC and drop the offset.
+                return Unparen(z.Operand) is PgCall { Function.Last: "now" or "current_timestamp" or "transaction_timestamp" or "statement_timestamp" or "clock_timestamp" }
+                    ? "SYSUTCDATETIME()"
+                    : $"CAST(({Value(z.Operand)}) AT TIME ZONE 'UTC' AS datetime2)";
             case PgAtTimeZone z:
                 return $"({Value(z.Operand)} AT TIME ZONE {Value(z.Zone)})" + Note("AT TIME ZONE: SQL Server takes Windows time zone names, not IANA names");
             case PgCollate c:

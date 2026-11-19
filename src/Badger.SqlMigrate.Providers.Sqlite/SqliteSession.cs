@@ -30,6 +30,10 @@ public sealed class SqliteSession : IDatabaseSession
 
     public bool InTransaction => transaction is not null;
 
+    internal SqliteConnection Connection => connection;
+
+    internal SqliteTransaction? Transaction => transaction;
+
     public TimeSpan? CommandTimeout { get; set; }
 
     public Task BeginTransactionAsync(CancellationToken cancellationToken)

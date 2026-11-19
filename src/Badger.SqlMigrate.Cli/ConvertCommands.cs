@@ -79,7 +79,12 @@ public static partial class Commands
         }
     }
 
-    private static string OtherProvider(string provider) => ConversionContext.DialectOf(provider) == Dialect.SqlServer ? "postgresql" : "sqlserver";
+    private static string OtherProvider(string provider) => ConversionContext.DialectOf(provider) switch
+    {
+        Dialect.SqlServer => "postgresql",
+        Dialect.PostgreSql => "sqlserver",
+        _ => throw new MigrationException("Pass --to sqlserver or --to postgresql: a SQLite database can become either."),
+    };
 
     private static Func<PortableName, bool> Globs(IEnumerable<string> patterns)
     {

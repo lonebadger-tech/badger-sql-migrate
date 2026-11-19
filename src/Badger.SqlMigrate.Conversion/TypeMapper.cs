@@ -12,8 +12,13 @@ public sealed record TypeMapping(string Type, string? Check = null, string? Note
 /// <summary>Maps column types between PostgreSQL and SQL Server.</summary>
 public static partial class TypeMapper
 {
-    public static TypeMapping Map(string sourceType, ConversionContext ctx) =>
-        ctx.Source == Dialect.PostgreSql ? PgToTSql(sourceType, ctx) : TSqlToPg(sourceType, ctx);
+    public static TypeMapping Map(string sourceType, ConversionContext ctx) => (ctx.Source, ctx.Target) switch
+    {
+        (_, Dialect.Sqlite) => ToSqlite(sourceType, ctx),
+        (Dialect.Sqlite, _) => FromSqlite(sourceType, ctx),
+        (Dialect.PostgreSql, _) => PgToTSql(sourceType, ctx),
+        _ => TSqlToPg(sourceType, ctx),
+    };
 
     // ------------------------------------------------------------------ PostgreSQL → SQL Server
 

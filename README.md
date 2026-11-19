@@ -96,7 +96,7 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 | `baseline --to x \| --from flyway\|dbup\|grate\|roundhouse\|sqitch\|sqlproj` | Adopt an existing database without running scripts (up to x, as far as the old tool's journal says, or everything a dacpac publish created) |
 | `import flyway\|dbup\|grate\|sqitch <dir>` | Convert a Flyway, DbUp, grate/RoundhousE or Sqitch project into a new bsm project: migrations, reverts, repeatables, variables, environments |
 | `import sqlproj <file.sqlproj>` | Convert an SSDT / SQL Database Project: one change per table, type or schema in dependency order, views/procedures/functions/triggers as repeatables, the post-deployment script and SqlCmdVariables |
-| `convert schema --out <dir>` / `convert data --target <dir>` | Convert a live SQL Server database to PostgreSQL or back: a new project for the other provider (tables, keys, indexes; views, routines and triggers translated, with `CONVERSION.md` listing what to review), then copy the rows and compare counts |
+| `convert schema --out <dir>` / `convert data --target <dir>` | Convert a live database between SQL Server, PostgreSQL and SQLite, in any direction: a new project for the other provider (tables, keys, indexes; views, routines and triggers translated, with `CONVERSION.md` listing what to review), then copy the rows and compare counts |
 | `doctor` | Check config, Entra sign-in and connectivity; show resources |
 | `env list` / `env show` | Environments (with templates) / one environment fully merged, secrets masked |
 | `env status` / `env provision [--allow-destructive]` | Compare / create or rotate per-environment resources (Always Encrypted keys) |

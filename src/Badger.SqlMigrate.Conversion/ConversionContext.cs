@@ -6,6 +6,7 @@ public enum Dialect
 {
     PostgreSql,
     SqlServer,
+    Sqlite,
 }
 
 public sealed record ConversionOptions
@@ -40,8 +41,8 @@ public sealed class ConversionContext
         }
 
         var style = options.Names ?? (Target == Dialect.PostgreSql ? NameStyle.Lower : NameStyle.Keep);
-        Names = new NameMapper(schema.DefaultSchema, Target == Dialect.PostgreSql ? "public" : "dbo", style);
-        CaseInsensitiveCollation = Target == Dialect.PostgreSql && schema.CaseInsensitive && !options.CaseSensitive;
+        Names = new NameMapper(schema.DefaultSchema, DefaultSchemaOf(Target), style);
+        CaseInsensitiveCollation = Target is Dialect.PostgreSql or Dialect.Sqlite && schema.CaseInsensitive && !options.CaseSensitive;
         enums = schema.Enums.ToDictionary(e => e.Name.Key, StringComparer.OrdinalIgnoreCase);
         domains = schema.Domains.ToDictionary(d => d.Name.Key, StringComparer.OrdinalIgnoreCase);
 
@@ -74,6 +75,13 @@ public sealed class ConversionContext
     {
         var t = sourceType.Trim().ToLowerInvariant();
         var name = t.Split('(')[0].Trim();
+        if (Source == Dialect.Sqlite)
+        {
+            return t.Contains("bool", StringComparison.Ordinal) ? ColumnKind.Boolean
+                : t.Contains("char", StringComparison.Ordinal) || t.Contains("clob", StringComparison.Ordinal) || t.Contains("text", StringComparison.Ordinal) ? ColumnKind.Text
+                : ColumnKind.Other;
+        }
+
         if (Source == Dialect.SqlServer)
         {
             return name switch
@@ -117,13 +125,65 @@ public sealed class ConversionContext
 
     public PortableDomain? Domain(string schema, string name) => domains.GetValueOrDefault($"{schema}.{name}".ToLowerInvariant());
 
-    /// <summary>A schema-qualified name in the target, quoted as needed.</summary>
-    public string Qualified(PortableName name) => $"{Quote(Names.Schema(name.Schema))}.{Quote(Names.Name(name.Name))}";
+    public static string DefaultSchemaOf(Dialect dialect) => dialect switch
+    {
+        Dialect.PostgreSql => "public",
+        Dialect.Sqlite => "main",
+        _ => "dbo",
+    };
 
-    public string QualifiedTarget(string schema, string name) => $"{Quote(schema)}.{Quote(name)}";
+    /// <summary>
+    /// A table, view or other schema object's name in the target. SQLite has no schemas: objects outside the source's
+    /// default schema get the schema as a prefix (sales.Customer becomes sales_customer), so names never collide.
+    /// </summary>
+    public PortableName TargetName(PortableName source) => TargetName(source.Schema, source.Name);
+
+    public PortableName TargetName(string schema, string name)
+    {
+        if (Target != Dialect.Sqlite)
+        {
+            return new PortableName(Names.Schema(schema), Names.Name(name));
+        }
+
+        var flat = string.Equals(schema, Schema.DefaultSchema, StringComparison.OrdinalIgnoreCase) || string.Equals(schema, "main", StringComparison.OrdinalIgnoreCase)
+            ? Names.Name(name)
+            : Names.Name(schema + "_" + name);
+        return new PortableName("main", flat);
+    }
+
+    /// <summary>A schema-qualified name in the target, quoted as needed (SQLite: the bare name).</summary>
+    public string Qualified(PortableName name)
+    {
+        var target = TargetName(name);
+        return Target == Dialect.Sqlite ? Quote(target.Name) : $"{Quote(target.Schema)}.{Quote(target.Name)}";
+    }
+
+    public string QualifiedTarget(string schema, string name) => Target == Dialect.Sqlite ? Quote(name) : $"{Quote(schema)}.{Quote(name)}";
 
     /// <summary>A target identifier, quoted when the target dialect needs it.</summary>
-    public string Quote(string name) => Target == Dialect.PostgreSql ? Providers.PostgreSql.Scripting.Sql.Ident(name) : TSqlQuote(name);
+    public string Quote(string name) => Target switch
+    {
+        Dialect.PostgreSql => Providers.PostgreSql.Scripting.Sql.Ident(name),
+        Dialect.Sqlite => SqliteQuote(name),
+        _ => TSqlQuote(name),
+    };
+
+    public static string SqliteQuote(string name) =>
+        System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z_][A-Za-z0-9_]*$") && !SqliteReserved.Contains(name) ? name : "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
+
+    private static readonly HashSet<string> SqliteReserved = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "abort", "action", "add", "after", "all", "alter", "always", "analyze", "and", "as", "asc", "attach", "autoincrement", "before", "begin", "between", "by",
+        "cascade", "case", "cast", "check", "collate", "column", "commit", "conflict", "constraint", "create", "cross", "current", "current_date", "current_time",
+        "current_timestamp", "database", "default", "deferrable", "deferred", "delete", "desc", "detach", "distinct", "do", "drop", "each", "else", "end", "escape",
+        "except", "exclude", "exclusive", "exists", "explain", "fail", "filter", "first", "following", "for", "foreign", "from", "full", "generated", "glob", "group",
+        "groups", "having", "if", "ignore", "immediate", "in", "index", "indexed", "initially", "inner", "insert", "instead", "intersect", "into", "is", "isnull",
+        "join", "key", "last", "left", "like", "limit", "match", "materialized", "natural", "no", "not", "nothing", "notnull", "null", "nulls", "of", "offset", "on",
+        "or", "order", "others", "outer", "over", "partition", "plan", "pragma", "preceding", "primary", "query", "raise", "range", "recursive", "references",
+        "regexp", "reindex", "release", "rename", "replace", "restrict", "returning", "right", "rollback", "row", "rows", "savepoint", "select", "set", "table",
+        "temp", "temporary", "then", "ties", "to", "transaction", "trigger", "unbounded", "union", "unique", "update", "using", "vacuum", "values", "view",
+        "virtual", "when", "where", "window", "with", "without",
+    };
 
     /// <summary>Source name mapped and quoted for the target.</summary>
     public string Ident(string sourceName) => Quote(Names.Name(sourceName));
@@ -131,13 +191,21 @@ public sealed class ConversionContext
     public static string TSqlQuote(string name) =>
         System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z_@#][A-Za-z0-9_@#$]*$") && !TSqlReserved.Contains(name) ? name : Providers.SqlServer.Scripting.Sql.Quote(name);
 
-    public string Literal(string text) => Target == Dialect.PostgreSql ? Providers.PostgreSql.Scripting.Sql.Literal(text) : Providers.SqlServer.Scripting.Sql.Literal(text);
+    public string Literal(string text) => Target == Dialect.SqlServer ? Providers.SqlServer.Scripting.Sql.Literal(text) : Providers.PostgreSql.Scripting.Sql.Literal(text);
 
     public static Dialect DialectOf(string provider) => provider.ToLowerInvariant() switch
     {
         "postgresql" or "postgres" => Dialect.PostgreSql,
         "sqlserver" => Dialect.SqlServer,
-        _ => throw new Core.MigrationException($"bsm convert works between sqlserver and postgresql, not '{provider}'."),
+        "sqlite" or "sqlite3" => Dialect.Sqlite,
+        _ => throw new Core.MigrationException($"bsm convert works between sqlserver, postgresql and sqlite, not '{provider}'."),
+    };
+
+    public static string ProviderOf(Dialect dialect) => dialect switch
+    {
+        Dialect.PostgreSql => "postgresql",
+        Dialect.Sqlite => "sqlite",
+        _ => "sqlserver",
     };
 
     private static readonly HashSet<string> TSqlReserved = new(StringComparer.OrdinalIgnoreCase)

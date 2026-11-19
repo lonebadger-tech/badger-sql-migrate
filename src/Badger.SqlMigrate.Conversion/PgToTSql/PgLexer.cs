@@ -29,11 +29,12 @@ internal static class PgLexer
 {
     private static readonly string[] Operators =
     [
-        "->>", "#>>", "!~~*", "~~*", "!~~", "!~*", "||/", "::", ":=", "..", "=>", "<>", "!=", ">=", "<=", "||", "->", "#>", "@>", "<@", "~~", "~*", "!~", "&&",
+        "==", "->>", "#>>", "!~~*", "~~*", "!~~", "!~*", "||/", "::", ":=", "..", "=>", "<>", "!=", ">=", "<=", "||", "->", "#>", "@>", "<@", "~~", "~*", "!~", "&&",
         "<<", ">>", "?|", "?&", "|/", "@@", "-|-",
     ];
 
-    public static List<Token> Tokenize(string text)
+    /// <param name="sqlite">Also read SQLite's [name] and `name` identifiers.</param>
+    public static List<Token> Tokenize(string text, bool sqlite = false)
     {
         var tokens = new List<Token>();
         var i = 0;
@@ -93,6 +94,22 @@ internal static class PgLexer
             {
                 var value = ReadQuoted(text, ref i, '\'', escapes: false);
                 tokens.Add(new Token(TokenKind.String, text[start..i], value, start, i));
+                continue;
+            }
+
+            if (sqlite && c == '`')
+            {
+                var value = ReadQuoted(text, ref i, '`', escapes: false);
+                tokens.Add(new Token(TokenKind.QuotedIdent, text[start..i], value, start, i));
+                continue;
+            }
+
+            if (sqlite && c == '[')
+            {
+                var close = text.IndexOf(']', i + 1);
+                var end = close < 0 ? text.Length : close + 1;
+                tokens.Add(new Token(TokenKind.QuotedIdent, text[start..end], text[(i + 1)..(close < 0 ? text.Length : close)], start, end));
+                i = end;
                 continue;
             }
 

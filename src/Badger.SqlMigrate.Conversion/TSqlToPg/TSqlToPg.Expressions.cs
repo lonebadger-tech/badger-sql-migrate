@@ -11,7 +11,7 @@ namespace Badger.SqlMigrate.Conversion.TSqlToPg;
 /// silently. Column and variable types are only partly known (see <see cref="ConversionContext.ColumnKindOf"/>), so
 /// "+" becomes "||" only when one side is known to be text.
 /// </summary>
-internal sealed partial class TSqlToPgTranslator(ConversionContext ctx) : ITranslator
+internal sealed partial class TSqlToPgTranslator(ConversionContext ctx) : PgToTSql.IIntermediateTranslator
 {
     /// <summary>State for the object being translated.</summary>
     private Scope scope = new("expression");

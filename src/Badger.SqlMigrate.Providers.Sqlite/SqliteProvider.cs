@@ -37,6 +37,10 @@ public sealed class SqliteProvider : IDatabaseProvider
 
     public IScratchDatabases ScratchDatabases { get; } = new Scripting.SqliteScratchDatabases();
 
+    public Core.Conversion.ISchemaExporter Exporter { get; } = new Conversion.SqliteExporter();
+
+    public Core.Conversion.IDataTransfer Data { get; } = new Conversion.SqliteDataTransfer();
+
     public string DefaultSchema => "main";
 
     public IReadOnlyList<string> ValidateEnvironment(DeploymentEnvironment environment) => SqliteConnectionFactory.Validate(environment);
