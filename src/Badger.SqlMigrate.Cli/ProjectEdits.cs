@@ -339,6 +339,7 @@ public static partial class Commands
             var start = new System.Diagnostics.ProcessStartInfo("git", ["config", "user.name"])
             {
                 WorkingDirectory = Directory.Exists(projectDir) ? Path.GetFullPath(projectDir) : Directory.GetCurrentDirectory(),
+                RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -349,8 +350,18 @@ public static partial class Commands
                 return null;
             }
 
-            var name = git.StandardOutput.ReadToEnd().Trim();
-            return git.WaitForExit(3000) && git.ExitCode == 0 && name.Length > 0 ? name : null;
+            // Git for Windows waits on an inherited stdin that never closes (the MCP server's pipe), so give it none.
+            git.StandardInput.Close();
+            var output = git.StandardOutput.ReadToEndAsync();
+            _ = git.StandardError.ReadToEndAsync();
+            if (!git.WaitForExit(3000))
+            {
+                git.Kill(entireProcessTree: true);
+                return null;
+            }
+
+            var name = output.GetAwaiter().GetResult().Trim();
+            return git.ExitCode == 0 && name.Length > 0 ? name : null;
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {

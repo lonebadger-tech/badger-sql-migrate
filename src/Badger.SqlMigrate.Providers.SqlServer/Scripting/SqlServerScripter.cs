@@ -635,7 +635,7 @@ public sealed partial class SqlServerScripter : ISchemaScripter
             ? $"ALTER TABLE {table.Quoted} DROP CONSTRAINT {Sql.Quote(n)};"
             : DropByLookup(table, k.Primary
                 ? $"SELECT name FROM sys.key_constraints WHERE parent_object_id = OBJECT_ID(N'{Escape(table.Quoted)}') AND type = 'PK'"
-                : $"SELECT k.name FROM sys.key_constraints k WHERE k.parent_object_id = OBJECT_ID(N'{Escape(table.Quoted)}') AND k.type = 'UQ' AND (SELECT STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY ic.key_ordinal) FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id WHERE ic.object_id = k.parent_object_id AND ic.index_id = k.unique_index_id AND ic.key_ordinal > 0) = {Sql.Literal(string.Join(",", k.Columns.Select(c => c.Name)))}");
+                : $"SELECT k.name FROM sys.key_constraints k WHERE k.parent_object_id = OBJECT_ID(N'{Escape(table.Quoted)}') AND k.type = 'UQ' AND {ColumnList("sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id WHERE ic.object_id = k.parent_object_id AND ic.index_id = k.unique_index_id AND ic.key_ordinal > 0", "ic.key_ordinal")} = {Sql.Literal(string.Join(",", k.Columns.Select(c => c.Name)))}");
 
         private static string DropCheckSql(ObjectName table, CheckConstraint c) => c.Name is { } n
             ? $"ALTER TABLE {table.Quoted} DROP CONSTRAINT {Sql.Quote(n)};"
@@ -643,7 +643,11 @@ public sealed partial class SqlServerScripter : ISchemaScripter
 
         private static string DropForeignKeySql(ObjectName table, ForeignKey f) => f.Name is { } n
             ? $"ALTER TABLE {table.Quoted} DROP CONSTRAINT {Sql.Quote(n)};"
-            : DropByLookup(table, $"SELECT fk.name FROM sys.foreign_keys fk WHERE fk.parent_object_id = OBJECT_ID(N'{Escape(table.Quoted)}') AND fk.referenced_object_id = OBJECT_ID(N'{Escape(f.Referenced.Quoted)}') AND (SELECT STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY fkc.constraint_column_id) FROM sys.foreign_key_columns fkc JOIN sys.columns c ON c.object_id = fkc.parent_object_id AND c.column_id = fkc.parent_column_id WHERE fkc.constraint_object_id = fk.object_id) = {Sql.Literal(string.Join(",", f.Columns))}");
+            : DropByLookup(table, $"SELECT fk.name FROM sys.foreign_keys fk WHERE fk.parent_object_id = OBJECT_ID(N'{Escape(table.Quoted)}') AND fk.referenced_object_id = OBJECT_ID(N'{Escape(f.Referenced.Quoted)}') AND {ColumnList("sys.foreign_key_columns fkc JOIN sys.columns c ON c.object_id = fkc.parent_object_id AND c.column_id = fkc.parent_column_id WHERE fkc.constraint_object_id = fk.object_id", "fkc.constraint_column_id")} = {Sql.Literal(string.Join(",", f.Columns))}");
+
+        // The comma-separated names of c.name rows, in order. FOR XML PATH rather than STRING_AGG, which needs SQL Server 2017.
+        private static string ColumnList(string fromWhere, string orderBy) =>
+            $"STUFF((SELECT N',' + c.name FROM {fromWhere} ORDER BY {orderBy} FOR XML PATH(''), TYPE).value(N'.', N'nvarchar(max)'), 1, 1, N'')";
 
         private static string Escape(string text) => text.Replace("'", "''", StringComparison.Ordinal);
 

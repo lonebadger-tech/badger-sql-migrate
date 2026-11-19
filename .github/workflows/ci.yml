@@ -1,9 +1,24 @@
 name: ci
 
+# CI runs on pull requests only, never on pushes to dev or main (the pull request already ran it).
+# - brockweaver's pull requests run on open and on every push.
+# - Anyone else's run only after brockweaver approves them: the repository requires approval of workflow runs from
+#   all external contributors (Settings > Actions > General), so each run waits for "Approve and run workflows".
+#   Read the changes first, ci.yml included: an approved run uses the pull request's copy of this file.
+# - dev and main require every job below to pass before a pull request can merge.
+# - Actions > ci > Run workflow runs it by hand on any branch.
+# Jobs deliberately have no 'if:' conditions: a skipped job counts as a passed required check.
 on:
-  push:
-    branches: [dev, main]
   pull_request:
+  workflow_dispatch:
+
+# A newer run for the same pull request cancels the older one.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -18,9 +33,53 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet build -c Release
-      # SQL Server and PostgreSQL (18) database tests run where Docker is available (ubuntu) and skip elsewhere.
+      # SQLite tests run everywhere. SQL Server (2022) and PostgreSQL (18) database tests run where Docker is
+      # available (ubuntu) and skip elsewhere; the jobs below cover the other versions.
       - run: dotnet test -c Release --no-build
       - run: dotnet run -c Release --no-build --project src/Badger.SqlMigrate.Cli -- plan check -C samples/demo-db
+
+  # Every supported SQL Server version with a Linux container image: the provider's tests against each.
+  sqlserver:
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['2017', '2019', '2022', '2025']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test tests/Badger.SqlMigrate.Providers.SqlServer.Tests -c Release
+        env:
+          BSM_TEST_SQLSERVER_IMAGE: mcr.microsoft.com/mssql/server:${{ matrix.version }}-latest
+
+  # SQL Server 2016 SP1, the oldest supported version, has no Linux image: LocalDB on Windows.
+  sqlserver-2016:
+    name: sqlserver (2016 SP1 LocalDB)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Install SQL Server 2016 SP1 Express LocalDB
+        shell: pwsh
+        run: |
+          $msi = Join-Path $env:RUNNER_TEMP 'SqlLocalDB2016.msi'
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest 'https://download.microsoft.com/download/9/0/7/907AD35F-9F9C-43A5-9789-52470555DB90/ENU/SqlLocalDB.msi' -OutFile $msi
+          $hash = (Get-FileHash $msi -Algorithm SHA256).Hash
+          if ($hash -ne '413E739B79068BA0D91A8C62DB14BCCD37591E86515F4AE74F4C91C270F02D45') { throw "unexpected SqlLocalDB.msi hash $hash" }
+          $p = Start-Process msiexec -ArgumentList '/i', $msi, '/qn', '/norestart', 'IACCEPTSQLLOCALDBLICENSETERMS=YES' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "SqlLocalDB.msi exited with $($p.ExitCode)" }
+          $sqllocaldb = 'C:\Program Files\Microsoft SQL Server\130\Tools\Binn\SqlLocalDB.exe'
+          & $sqllocaldb versions
+          & $sqllocaldb create bsm2016 13.0 -s
+          if ($LASTEXITCODE -ne 0) { throw 'could not create the LocalDB 2016 instance' }
+      - run: dotnet test tests/Badger.SqlMigrate.Providers.SqlServer.Tests -c Release
+        env:
+          BSM_TEST_SQLSERVER: Server=(localdb)\bsm2016;Integrated Security=true;TrustServerCertificate=true
 
   # Every supported PostgreSQL major version: the provider's conformance and feature tests against each.
   postgresql:

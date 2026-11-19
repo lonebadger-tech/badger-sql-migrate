@@ -30,6 +30,12 @@ public sealed class SqlServerSession : IDatabaseSession
     /// <summary>Whether sys.tables has the history retention columns (SQL Server 2017+); null until checked.</summary>
     internal bool? HasHistoryRetention { get; set; }
 
+    /// <summary>Whether sys.column_master_keys has allow_enclave_computations (SQL Server 2019+); null until checked.</summary>
+    internal bool? HasEnclaveComputations { get; set; }
+
+    /// <summary>Whether sys.columns has graph_type (graph tables, SQL Server 2017+); null until checked.</summary>
+    internal bool? HasGraphTables { get; set; }
+
     /// <summary>Always Encrypted key stores registered on this connection (used to provision keys).</summary>
     internal IReadOnlyDictionary<string, SqlColumnEncryptionKeyStoreProvider>? KeyStores { get; }
 

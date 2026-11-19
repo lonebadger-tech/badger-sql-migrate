@@ -4,7 +4,7 @@ using Badger.SqlMigrate.Core.Configuration;
 
 var project = new Option<string>("--project", "-C") { Description = "Project directory containing bsm.yaml and bsm.plan.", Recursive = true, DefaultValueFactory = _ => "." };
 var environment = new Option<string?>("--env", "-e") { Description = "Environment from bsm.yaml (or BSM_ENV; default: defaultEnvironment).", Recursive = true };
-var connection = new Option<string?>("--connection-string") { Description = "Override the environment's connection string.", Recursive = true };
+var connection = new Option<string?>("--connection-string") { Description = "Connect exactly as this connection string says (replaces the environment's server, sign-in and TLS settings).", Recursive = true };
 var claim = new Option<bool>("--claim-environment") { Description = "Allow a database recorded under another environment name (e.g. restored from prod) and record this one.", Recursive = true };
 var vars = new Option<string[]>("--var") { Description = "Script variable, name=value. Repeatable.", Recursive = true };
 var json = new Option<bool>("--json") { Description = "Machine-readable output on stdout.", Recursive = true };

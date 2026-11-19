@@ -51,7 +51,7 @@ public sealed class PostgreSqlSchemaInspector : ISchemaInspector
                || '|' || format_type(a.atttypid, a.atttypmod) || '|' || a.attnotnull::text
                || '|' || COALESCE(pg_get_expr(d.adbin, d.adrelid), '') || '|' || a.attidentity::text || '|' || a.attgenerated::text
                || '|' || COALESCE(CASE WHEN a.attcollation <> t.typcollation THEN co.collname END, '')
-               || CASE WHEN a.attoptions IS NOT NULL OR a.attstorage <> t.typstorage THEN '|' || COALESCE(array_to_string(a.attoptions, ','), '') || '|' || a.attstorage::text ELSE '' END
+               || CASE WHEN array_to_string(ARRAY(SELECT o FROM unnest(a.attoptions) AS o WHERE left(o, 3) <> 'pg_'), ',') <> '' OR a.attstorage <> t.typstorage THEN '|' || array_to_string(ARRAY(SELECT o FROM unnest(a.attoptions) AS o WHERE left(o, 3) <> 'pg_'), ',') || '|' || a.attstorage::text ELSE '' END
         FROM pg_attribute a
         JOIN rel c ON c.oid = a.attrelid
         JOIN ns n ON n.oid = c.relnamespace

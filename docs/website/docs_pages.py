@@ -84,7 +84,7 @@ def overview():
 </ul>
 
 <h2>Supported databases</h2>
-<p>SQL Server 2016 SP1 and later (on Windows, Linux and containers), Azure SQL Database and Azure SQL Managed Instance. The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}); SQL Server is the only provider today.</p>
+<p>SQL Server 2016 SP1 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance; features that need a newer server, such as history retention for temporal tables (2017) or Always Encrypted with secure enclaves (2019), need it only where you use them. PostgreSQL 12 and later. SQLite, with the engine built in. The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
 """)
 
 
@@ -93,7 +93,7 @@ def install():
 <h2>.NET tool</h2>
 {sh('''dotnet tool install --global Badger.SqlMigrate
 bsm --version''')}
-<p>Requires the .NET 10 SDK. Pin a version per repository with a local tool manifest (<code>dotnet new tool-manifest</code>, then <code>dotnet tool install Badger.SqlMigrate</code>) and run it as <code>dotnet bsm</code>. (Pass options after the command: <code>dotnet bsm add --help</code>. <code>dotnet tool run bsm add --help</code> shows dotnet's own help instead.)</p>
+<p>Requires the .NET 10 SDK. Pin a version per repository with a local tool manifest (<code>dotnet new tool-manifest</code>, then <code>dotnet tool install Badger.SqlMigrate</code>) and run it as <code>dotnet bsm</code>. (Pass options after the command: <code>dotnet bsm add --help</code>. <code>dotnet tool run bsm add --help</code> shows dotnet's own help instead.) <code>dotnet bsm</code> is found only in the folder that holds <code>.config/dotnet-tools.json</code> and the folders below it: elsewhere dotnet says <em>"dotnet-bsm does not exist"</em>. Create the manifest at the repository root, or run <code>dotnet bsm</code> from below the folder that has it.</p>
 
 <h2>Standalone executable</h2>
 <p>{link("download/", "Download")} the archive for your platform and put <code>bsm</code> on your <code>PATH</code>. The executables are self-contained: no .NET runtime needed. Builds exist for Windows (x64, Arm64), macOS (Apple silicon, Intel) and Linux (x64, Arm64, Alpine x64), plus a portable build for any OS with the .NET 10 runtime.</p>
@@ -850,7 +850,7 @@ def connections():
 <p>The bastion's host key must be in <code>known_hosts</code> (<code>ssh-keyscan bastion.example.com &gt;&gt; ~/.ssh/known_hosts</code>) or pinned with <code>hostKeyFingerprint</code>. <code>insecureSkipHostKeyCheck: true</code> exists for throwaway environments and prints a warning every time.</p>
 
 <h2>Overriding for one run</h2>
-<p><code>--connection-string "..."</code> connects exactly there, replacing the environment's host, port and database; authentication and other settings still apply.</p>
+<p><code>--connection-string "..."</code> connects exactly as the string says: it replaces the environment's host, port, database, sign-in (<code>authentication</code>, <code>user</code>, <code>password</code>) and <code>tls</code>, so a SQL login string signs in as that login even when the environment says <code>authentication: integrated</code>. The environment's other settings (<code>connectionProperties</code>, <code>ssh</code>, variables, policies) still apply.</p>
 """)
 
 

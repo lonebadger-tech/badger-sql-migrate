@@ -92,15 +92,24 @@ public sealed class SqlServerProvider : IDatabaseProvider
 
     public async Task<IReadOnlyList<KeyValuePair<string, string>>> DescribeAsync(IDatabaseSession session, CancellationToken cancellationToken)
     {
+        // sys.dm_exec_connections needs VIEW SERVER STATE (VIEW DATABASE STATE on Azure SQL Database), which a
+        // least-privilege deploy login often lacks: without it, doctor still reports everything else.
         const string sql = """
+            SET NOCOUNT ON;
+            DECLARE @encrypted nvarchar(40) = N'unknown (needs VIEW SERVER STATE)';
+            BEGIN TRY
+                SELECT @encrypted = encrypt_option FROM sys.dm_exec_connections WHERE session_id = @@SPID;
+            END TRY
+            BEGIN CATCH
+            END CATCH;
             SELECT
                 CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128)) AS version,
                 CAST(SERVERPROPERTY('Edition') AS nvarchar(128)) AS edition,
                 CAST(SERVERPROPERTY('EngineEdition') AS int) AS engine_edition,
                 SUSER_SNAME() AS login,
                 DB_NAME() AS [database],
-                (SELECT encrypt_option FROM sys.dm_exec_connections WHERE session_id = @@SPID) AS encrypted,
-                (SELECT auth_scheme FROM sys.dm_exec_connections WHERE session_id = @@SPID) AS auth_scheme
+                @encrypted AS encrypted,
+                CAST(CONNECTIONPROPERTY('auth_scheme') AS nvarchar(40)) AS auth_scheme;
             """;
         var row = (await session.QueryAsync(sql, null, cancellationToken).ConfigureAwait(false))[0];
         var engine = Convert.ToInt32(row["engine_edition"], System.Globalization.CultureInfo.InvariantCulture) switch

@@ -44,7 +44,7 @@ public sealed class ScripterTests(SqlServerFixture fixture)
         CREATE PROCEDURE dbo.usp_Old AS SELECT 1 AS one;
         """;
 
-    private const string Edits = """
+    private const string EditsTemplate = """
         ALTER TABLE dbo.Customer ALTER COLUMN Email nvarchar(200) NULL;
         ALTER TABLE dbo.Customer ADD Phone dbo.Phone NULL, Created datetime2(3) NOT NULL CONSTRAINT DF_Customer_Created DEFAULT (sysutcdatetime());
         ALTER TABLE dbo.Customer DROP COLUMN Old;
@@ -71,7 +71,7 @@ public sealed class ScripterTests(SqlServerFixture fixture)
             ValidFrom datetime2 GENERATED ALWAYS AS ROW START HIDDEN NOT NULL,
             ValidTo datetime2 GENERATED ALWAYS AS ROW END HIDDEN NOT NULL,
             PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo))
-        WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.PriceHistory, HISTORY_RETENTION_PERIOD = 6 MONTHS));
+        WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.PriceHistory{retention}));
         ALTER SEQUENCE dbo.seq INCREMENT BY 5;
         DROP SYNONYM dbo.syn;
         CREATE SYNONYM dbo.syn FOR dbo.[Order];
@@ -90,6 +90,9 @@ public sealed class ScripterTests(SqlServerFixture fixture)
         GO
         CREATE TRIGGER dbo.trOrder ON dbo.[Order] AFTER INSERT AS SET NOCOUNT ON;
         """;
+
+    // HISTORY_RETENTION_PERIOD needs SQL Server 2017.
+    private string Edits => EditsTemplate.Replace("{retention}", fixture.SupportsHistoryRetention ? ", HISTORY_RETENTION_PERIOD = 6 MONTHS" : string.Empty, StringComparison.Ordinal);
 
     [SkippableFact]
     public async Task Deploy_turns_a_into_b_and_revert_turns_it_back()

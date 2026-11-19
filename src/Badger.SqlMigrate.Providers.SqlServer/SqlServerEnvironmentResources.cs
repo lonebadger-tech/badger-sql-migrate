@@ -90,8 +90,9 @@ public sealed class SqlServerEnvironmentResources : IEnvironmentResources
             return [];
         }
 
+        var enclaves = await SqlServerCompatibility.HasEnclaveComputationsAsync(session, cancellationToken).ConfigureAwait(false);
         var dbCmks = (await session.QueryAsync(
-            "SELECT name, key_store_provider_name, key_path, allow_enclave_computations FROM sys.column_master_keys;", null, cancellationToken).ConfigureAwait(false))
+            $"SELECT name, key_store_provider_name, key_path, {(enclaves ? "allow_enclave_computations" : "CAST(0 AS bit) AS allow_enclave_computations")} FROM sys.column_master_keys;", null, cancellationToken).ConfigureAwait(false))
             .ToDictionary(r => (string)r["name"]!, StringComparer.Ordinal);
         var dbCekValues = (await session.QueryAsync("""
             SELECT k.name AS cek, m.name AS cmk
@@ -106,6 +107,13 @@ public sealed class SqlServerEnvironmentResources : IEnvironmentResources
         foreach (var (name, cmk) in settings.ColumnMasterKeys.OrderBy(k => k.Key, StringComparer.Ordinal))
         {
             var store = KeyStoreProviders.Normalize(cmk.KeyStore);
+            if (cmk.EnclaveComputations && !enclaves)
+            {
+                actions.Add(new(ResourceActionKind.Conflict, CmkType, name,
+                    "enclaveComputations needs Always Encrypted with secure enclaves (SQL Server 2019 or later, or Azure SQL); this server does not support it. Remove enclaveComputations for this environment or use a newer server."));
+                continue;
+            }
+
             if (!dbCmks.TryGetValue(name, out var row))
             {
                 actions.Add(new(ResourceActionKind.Apply, CmkType, name, $"create {CmkType} in {store}{(cmk.EnclaveComputations ? " (enclave-enabled)" : string.Empty)}"));

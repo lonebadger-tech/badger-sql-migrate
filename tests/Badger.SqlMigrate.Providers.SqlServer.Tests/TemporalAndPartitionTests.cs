@@ -10,7 +10,7 @@ namespace Badger.SqlMigrate.Providers.SqlServer.Tests;
 [Collection("sqlserver")]
 public sealed class TemporalAndPartitionTests(SqlServerFixture fixture)
 {
-    private const string Deploy = """
+    private const string DeployTemplate = """
         CREATE PARTITION FUNCTION pfSaleDate (date) AS RANGE RIGHT FOR VALUES ('2026-01-01', '2026-02-01');
         CREATE PARTITION SCHEME psSaleDate AS PARTITION pfSaleDate ALL TO ([PRIMARY]);
         CREATE TABLE dbo.Sale (
@@ -34,7 +34,7 @@ public sealed class TemporalAndPartitionTests(SqlServerFixture fixture)
             ValidFrom datetime2 GENERATED ALWAYS AS ROW START NOT NULL,
             ValidTo datetime2 GENERATED ALWAYS AS ROW END NOT NULL,
             PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo))
-        WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.RateHistory, HISTORY_RETENTION_PERIOD = 6 MONTHS));
+        WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.RateHistory{retention}));
         """;
 
     private const string Revert = """
@@ -56,6 +56,11 @@ public sealed class TemporalAndPartitionTests(SqlServerFixture fixture)
 
     private readonly SqlServerProvider provider = new();
 
+    // SQL Server 2016 has no HISTORY_RETENTION_PERIOD: history is kept forever, fingerprinted as -1 / INFINITE.
+    private string Deploy => DeployTemplate.Replace("{retention}", fixture.SupportsHistoryRetention ? ", HISTORY_RETENTION_PERIOD = 6 MONTHS" : string.Empty, StringComparison.Ordinal);
+
+    private string RateRetention => fixture.SupportsHistoryRetention ? "6|MONTH" : "-1|INFINITE";
+
     [SkippableFact]
     public async Task Temporal_and_partitioned_schemas_fingerprint_the_same_on_every_database_and_round_trip()
     {
@@ -73,7 +78,7 @@ public sealed class TemporalAndPartitionTests(SqlServerFixture fixture)
         }
 
         Assert.Contains("temporal|dbo.Price|SYSTEM_VERSIONED_TEMPORAL_TABLE|ValidFrom|ValidTo|dbo.MSSQL_TemporalHistoryFor_<dbo.Price>|-1|INFINITE", dump, StringComparison.Ordinal);
-        Assert.Contains("temporal|dbo.Rate|SYSTEM_VERSIONED_TEMPORAL_TABLE|ValidFrom|ValidTo|dbo.RateHistory|6|MONTH", dump, StringComparison.Ordinal);
+        Assert.Contains($"temporal|dbo.Rate|SYSTEM_VERSIONED_TEMPORAL_TABLE|ValidFrom|ValidTo|dbo.RateHistory|{RateRetention}", dump, StringComparison.Ordinal);
         Assert.Contains("|AS_ROW_START|hidden", dump, StringComparison.Ordinal);
         Assert.Contains("pfunction|pfSaleDate|date|3|10|0||RIGHT|2026-01-01,2026-02-01", dump, StringComparison.Ordinal);
         Assert.Contains("pscheme|psSaleDate|pfSaleDate|PRIMARY,PRIMARY,PRIMARY,PRIMARY\n", dump, StringComparison.Ordinal);
@@ -116,6 +121,25 @@ public sealed class TemporalAndPartitionTests(SqlServerFixture fixture)
 
         var schema = await provider.Exporter.ExportAsync(e.Session, new Core.Conversion.ExportOptions { StateSchema = "bsm" }, CancellationToken.None);
         Assert.Contains(schema.Tables, t => t.Name.Name == "Rate");
+    }
+
+    [SkippableFact]
+    public async Task Servers_without_graph_tables_still_list_the_columns_to_copy()
+    {
+        // sys.columns.graph_type arrived in SQL Server 2017; 'bsm convert data' failed on 2016 with "Invalid column name".
+        Skip.If(fixture.MasterConnectionString is null, fixture.UnavailableReason);
+        using var project = new ProjectDir();
+        project.Change("sales-and-prices", Deploy, Revert);
+        await using var db = await DatabaseAsync();
+        await using var e = await EngineAsync(db.Environment(), project);
+        await e.Engine.DeployAsync(new DeployOptions());
+        var price = new Core.Conversion.PortableName("dbo", "Price");
+        var current = await provider.Data!.ColumnsAsync(e.Session, price, CancellationToken.None);
+
+        ((SqlServerSession)e.Session).HasGraphTables = false;
+        var old = await provider.Data.ColumnsAsync(e.Session, price, CancellationToken.None);
+        Assert.Equal(["Id", "Amount", "ValidFrom", "ValidTo"], old.Select(c => c.Name));
+        Assert.Equal(current, old);
     }
 
     [SkippableFact]

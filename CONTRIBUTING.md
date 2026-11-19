@@ -18,7 +18,7 @@ dotnet test
 dotnet run --project src/Badger.SqlMigrate.Cli -- plan check -C samples/demo-db
 ```
 
-- The SQL Server conformance tests start SQL Server 2022 in Docker with Testcontainers, or use the server in `BSM_TEST_SQLSERVER=<connection string>`. Without either they're skipped, and CI runs them on Linux.
+- The SQL Server tests start SQL Server 2022 in Docker with Testcontainers (another version with `BSM_TEST_SQLSERVER_IMAGE=mcr.microsoft.com/mssql/server:2019-latest`), or use the server in `BSM_TEST_SQLSERVER=<connection string>`, such as LocalDB: `Server=(localdb)\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true`. The PostgreSQL tests do the same with `BSM_TEST_POSTGRES_IMAGE` and `BSM_TEST_POSTGRES`. Without Docker or a connection string they're skipped. The SQLite tests need nothing.
 - Warnings are errors (`TreatWarningsAsErrors`), so the build must be clean.
 - `tests/Badger.SqlMigrate.ArchitectureTests` fails the build if the engine, connectivity or CLI reference a database driver directly. Vendor code belongs in a provider.
 
@@ -30,7 +30,8 @@ dotnet run --project src/Badger.SqlMigrate.Cli -- plan check -C samples/demo-db
    - `README.md` and `docs/` for repository docs.
    - `docs/website/` for the website pages (they're generated from there). Preview them with `python3 docs/website/build.py <empty folder>`.
    - `CHANGELOG.md`, under **Unreleased**.
-4. Make sure `dotnet build` and `dotnet test` pass. CI runs both on Windows, macOS and Linux.
+4. Make sure `dotnet build` and `dotnet test` pass.
+5. A maintainer reviews it. CI doesn't start on its own for contributors' pull requests: a maintainer reads the changes and approves each workflow run (again after new pushes). It builds and tests on Windows, macOS and Linux, then runs the database tests against every supported version: SQL Server 2016 SP1 (LocalDB), 2017, 2019, 2022 and 2025, and PostgreSQL 12 to 18. `dev` and `main` only accept a pull request once all of it passes.
 
 By submitting a pull request you agree that your contribution is licensed under the [MIT license](LICENSE), like the rest of the project.
 

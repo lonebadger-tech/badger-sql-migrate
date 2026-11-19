@@ -25,6 +25,43 @@ internal static class SqlServerCompatibility
             .Replace("t.history_retention_period", "CAST(-1 AS int)", StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// sys.column_master_keys.allow_enclave_computations (Always Encrypted with secure enclaves) arrived in SQL Server 2019.
+    /// Older servers cannot create enclave-enabled keys, so every column master key there is reported as not enclave-enabled.
+    /// </summary>
+    public static async Task<bool> HasEnclaveComputationsAsync(IDatabaseSession session, CancellationToken cancellationToken)
+    {
+        if (session is SqlServerSession { HasEnclaveComputations: { } known })
+        {
+            return known;
+        }
+
+        var present = await HasColumnAsync(session, "sys.column_master_keys", "allow_enclave_computations", cancellationToken).ConfigureAwait(false);
+        if (session is SqlServerSession s)
+        {
+            s.HasEnclaveComputations = present;
+        }
+
+        return present;
+    }
+
+    /// <summary>sys.columns.graph_type (graph node and edge tables) arrived in SQL Server 2017.</summary>
+    public static async Task<bool> HasGraphTablesAsync(IDatabaseSession session, CancellationToken cancellationToken)
+    {
+        if (session is SqlServerSession { HasGraphTables: { } known })
+        {
+            return known;
+        }
+
+        var present = await HasColumnAsync(session, "sys.columns", "graph_type", cancellationToken).ConfigureAwait(false);
+        if (session is SqlServerSession s)
+        {
+            s.HasGraphTables = present;
+        }
+
+        return present;
+    }
+
     private static async Task<bool> HasRetentionAsync(IDatabaseSession session, CancellationToken cancellationToken)
     {
         if (session is SqlServerSession { HasHistoryRetention: { } known })
@@ -32,13 +69,21 @@ internal static class SqlServerCompatibility
             return known;
         }
 
-        var rows = await session.QueryAsync("SELECT CASE WHEN COL_LENGTH('sys.tables', 'history_retention_period') IS NULL THEN 0 ELSE 1 END AS present;", null, cancellationToken).ConfigureAwait(false);
-        var present = Convert.ToInt32(rows[0]["present"], System.Globalization.CultureInfo.InvariantCulture) == 1;
+        var present = await HasColumnAsync(session, "sys.tables", "history_retention_period", cancellationToken).ConfigureAwait(false);
         if (session is SqlServerSession s)
         {
             s.HasHistoryRetention = present;
         }
 
         return present;
+    }
+
+    private static async Task<bool> HasColumnAsync(IDatabaseSession session, string view, string column, CancellationToken cancellationToken)
+    {
+        var rows = await session.QueryAsync(
+            "SELECT CASE WHEN COL_LENGTH(@view, @column) IS NULL THEN 0 ELSE 1 END AS present;",
+            new Dictionary<string, object?> { ["view"] = view, ["column"] = column },
+            cancellationToken).ConfigureAwait(false);
+        return Convert.ToInt32(rows[0]["present"], System.Globalization.CultureInfo.InvariantCulture) == 1;
     }
 }
