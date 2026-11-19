@@ -204,10 +204,11 @@ public sealed class BsmConfig
 
         if (connectionStringOverride is not null)
         {
-            // An explicit --connection-string means "connect exactly here, as it says": the environment's server and
-            // sign-in settings no longer apply (they used to override the string's own user and password).
+            // An explicit --connection-string means "connect exactly here, as it says": the environment's server,
+            // sign-in and TLS settings no longer apply (they used to override the string's own user, password and
+            // Encrypt / TrustServerCertificate).
             merged["connectionString"] = connectionStringOverride;
-            foreach (var key in new[] { "host", "port", "database", "user", "password", "authentication" })
+            foreach (var key in new[] { "host", "port", "database", "user", "password", "authentication", "tls" })
             {
                 merged.Remove(key);
             }

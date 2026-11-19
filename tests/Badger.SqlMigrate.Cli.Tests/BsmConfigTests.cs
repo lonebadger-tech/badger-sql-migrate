@@ -2,6 +2,7 @@ using Badger.SqlMigrate.Cli;
 using Badger.SqlMigrate.Core;
 using Badger.SqlMigrate.Core.Configuration;
 using Badger.SqlMigrate.Core.Preprocessing;
+using Badger.SqlMigrate.Core.Providers;
 
 namespace Badger.SqlMigrate.Cli.Tests;
 
@@ -75,6 +76,34 @@ public sealed class BsmConfigTests : IDisposable
         Assert.Null(env.Password);
         Assert.Null(env.Authentication);
         Assert.Null(env.Host);
+    }
+
+    [Fact]
+    public void A_sql_login_override_signs_in_with_its_own_credentials_when_the_environment_says_integrated()
+    {
+        // Dogfooding finding 17: with 0.3.0 the environment's 'authentication: integrated' won over the override's
+        // User ID/Password ("Cannot generate SSPI context" on Azure SQL), and its tls settings won over Encrypt.
+        var config = Load("""
+            provider: sqlserver
+            environments:
+              dev:
+                authentication: integrated
+                tls: { mode: mandatory, trustServerCertificate: true }
+            """);
+        var env = config.ResolveEnvironment("dev", "Server=tcp:example.database.windows.net,1433;Database=rn_dev;User ID=deployer;Password=p;Encrypt=True;TrustServerCertificate=False");
+        Assert.Null(env.Authentication);
+
+        var (connection, _, _) = Providers.SqlServer.SqlServerConnectionFactory.Create(env, SessionContext.Empty);
+        using (connection)
+        {
+            var built = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connection.ConnectionString);
+            Assert.False(built.IntegratedSecurity);
+            Assert.Equal("deployer", built.UserID);
+            Assert.Equal("tcp:example.database.windows.net,1433", built.DataSource);
+            Assert.Equal("rn_dev", built.InitialCatalog);
+            Assert.Equal(Microsoft.Data.SqlClient.SqlConnectionEncryptOption.Mandatory, built.Encrypt);
+            Assert.False(built.TrustServerCertificate);
+        }
     }
 
     [Fact]
