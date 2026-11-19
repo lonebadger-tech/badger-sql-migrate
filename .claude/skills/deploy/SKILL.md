@@ -27,13 +27,13 @@ publish step blindly.
   does not list V.
 - `dotnet test` passes. The SQL Server tests need Docker running (Testcontainers); if they skip, say so.
 - `az account show` works (needed by the mirror step). If not, ask the user to run `az login`.
-- `../badger-website` exists, is on `dev`, and is clean apart from unrelated work (leave that alone).
+- `gh auth status` works (the website step pushes to and merges in `lonebadger-tech/badger-website`).
 
 ## 2. Summary for the user
 
 Show V, the commits since the previous tag (`git log --oneline $(git describe --tags --abbrev=0)..dev`), and
 what will happen: push dev, push tag vV (release workflow: tests, binaries, nuget.org, GitHub release), mirror
-to the downloads container, website PR. Ask to proceed.
+to the downloads container, website update and deploy. Ask to proceed.
 
 ## 3. Push dev and wait for CI
 
@@ -69,23 +69,19 @@ place: the website build reads sizes and hashes from it.
 
 ## 6. Website
 
-The site lives in `../badger-website` (`site/`), deploys on every push to its `dev`, and takes changes through a PR.
+Run `/update-website badger-sql-migrate V release` (the account-wide skill; source and product registry in the
+badger-website repo, `skills/update-website/` and `PRODUCTS.md`). It regenerates `site/badger-sql-migrate/` with
+`docs/website/build.py` in a temporary worktree of badger-website, opens a PR into `dev`, merges it (which deploys),
+watches the deploy and checks the live pages. Run it from this repo after step 5, so `artifacts/SHA256SUMS` is in
+place. Before it commits, spot-check that the download page shows V and the hashes from `artifacts/SHA256SUMS`.
+After it finishes, check https://www.lonebadger.tech/badger-sql-migrate/releases/ shows V and one download link
+returns 200.
 
-```bash
-cd ../badger-website
-git switch -c migrate-V-release origin/dev
-python3 ../badger-sql-migrate/docs/website/build.py site
-git add site/badger-sql-migrate && git commit -m "Badger SQL Migrate: V release pages and download hashes"
-git push -u origin migrate-V-release
-gh pr create --base dev --title "Badger SQL Migrate V" --body "Release pages and download hashes for the vV release build."
-```
-
-End commits and the PR body with the attribution lines from the session's system reminder. Spot-check that the
-download page shows V and the hashes from `artifacts/SHA256SUMS`. Merging the PR deploys the site: give the user
-the PR link and merge only if they say so. After the merge, check
-https://www.lonebadger.tech/badger-sql-migrate/releases/ shows V and one download link returns 200.
+If the skill isn't available on this machine, do it by hand: in a worktree of badger-website off `origin/dev`, run
+`python3 <this repo>/docs/website/build.py <worktree>/site`, commit `site/badger-sql-migrate`, open a PR into
+`dev` and merge it.
 
 ## 7. Report
 
-The release URL, the nuget.org version, the mirror URL, the website PR (and whether it is merged and live), and
+The release URL, the nuget.org version, the mirror URL, the website PR and deploy (and whether it is live), and
 anything that was skipped or still pending.
