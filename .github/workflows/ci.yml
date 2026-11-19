@@ -1,21 +1,20 @@
 name: ci
 
 # CI runs on pull requests only, never on pushes to dev or main (the pull request already ran it).
-# - A maintainer's own pull request runs on open and on every push.
-# - Anyone else's pull request runs only when a maintainer approves it (approve again to re-run after new pushes),
-#   so outside changes cannot spend Actions minutes on their own.
+# - brockweaver's pull requests run on open and on every push.
+# - Anyone else's run only after brockweaver approves them: the repository requires approval of workflow runs from
+#   all external contributors (Settings > Actions > General), so each run waits for "Approve and run workflows".
+#   Read the changes first, ci.yml included: an approved run uses the pull request's copy of this file.
+# - dev and main require every job below to pass before a pull request can merge.
 # - Actions > ci > Run workflow runs it by hand on any branch.
-# Maintainers: the 'brockweaver' login in each job's 'if' below.
+# Jobs deliberately have no 'if:' conditions: a skipped job counts as a passed required check.
 on:
   pull_request:
-  pull_request_review:
-    types: [submitted]
   workflow_dispatch:
 
-# A newer run of the same kind for the same pull request cancels the older one (a new push cancels the previous push's
-# run, a new approval the previous approval's); comment-only reviews never cancel an approved run.
+# A newer run for the same pull request cancels the older one.
 concurrency:
-  group: ci-${{ github.event_name }}-${{ github.event.review.state || 'none' }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -23,10 +22,6 @@ permissions:
 
 jobs:
   build:
-    if: >-
-      github.event_name == 'workflow_dispatch'
-      || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'brockweaver')
-      || (github.event_name == 'pull_request_review' && github.event.review.state == 'approved' && github.event.review.user.login == 'brockweaver')
     strategy:
       fail-fast: false
       matrix:
@@ -45,10 +40,6 @@ jobs:
 
   # Every supported SQL Server version with a Linux container image: the provider's tests against each.
   sqlserver:
-    if: >-
-      github.event_name == 'workflow_dispatch'
-      || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'brockweaver')
-      || (github.event_name == 'pull_request_review' && github.event.review.state == 'approved' && github.event.review.user.login == 'brockweaver')
     strategy:
       fail-fast: false
       matrix:
@@ -66,10 +57,6 @@ jobs:
   # SQL Server 2016 SP1, the oldest supported version, has no Linux image: LocalDB on Windows.
   sqlserver-2016:
     name: sqlserver (2016 SP1 LocalDB)
-    if: >-
-      github.event_name == 'workflow_dispatch'
-      || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'brockweaver')
-      || (github.event_name == 'pull_request_review' && github.event.review.state == 'approved' && github.event.review.user.login == 'brockweaver')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -96,10 +83,6 @@ jobs:
 
   # Every supported PostgreSQL major version: the provider's conformance and feature tests against each.
   postgresql:
-    if: >-
-      github.event_name == 'workflow_dispatch'
-      || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'brockweaver')
-      || (github.event_name == 'pull_request_review' && github.event.review.state == 'approved' && github.event.review.user.login == 'brockweaver')
     strategy:
       fail-fast: false
       matrix:

@@ -31,7 +31,7 @@ dotnet run --project src/Badger.SqlMigrate.Cli -- plan check -C samples/demo-db
    - `docs/website/` for the website pages (they're generated from there). Preview them with `python3 docs/website/build.py <empty folder>`.
    - `CHANGELOG.md`, under **Unreleased**.
 4. Make sure `dotnet build` and `dotnet test` pass.
-5. A maintainer reviews it. CI starts when a maintainer approves the pull request (and again on each re-approval after new pushes), not when it's opened: it builds and tests on Windows, macOS and Linux, then runs the database tests against every supported version: SQL Server 2016 SP1 (LocalDB), 2017, 2019, 2022 and 2025, and PostgreSQL 12 to 18. A pull request is merged once all of it passes.
+5. A maintainer reviews it. CI doesn't start on its own for contributors' pull requests: a maintainer reads the changes and approves each workflow run (again after new pushes). It builds and tests on Windows, macOS and Linux, then runs the database tests against every supported version: SQL Server 2016 SP1 (LocalDB), 2017, 2019, 2022 and 2025, and PostgreSQL 12 to 18. `dev` and `main` only accept a pull request once all of it passes.
 
 By submitting a pull request you agree that your contribution is licensed under the [MIT license](LICENSE), like the rest of the project.
 
