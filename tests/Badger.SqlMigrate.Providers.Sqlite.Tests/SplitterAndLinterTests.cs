@@ -98,4 +98,37 @@ public sealed class SplitterAndLinterTests
     }
 
     private static LintContext Context(ChangeFlags flags = ChangeFlags.None) => new("change", "deploy", flags);
+
+    [Fact]
+    public void Sql_newer_than_the_minimum_version_is_a_warning()
+    {
+        const string script = """
+            CREATE TABLE t (id INTEGER PRIMARY KEY, a TEXT, b TEXT, c TEXT GENERATED ALWAYS AS (upper(a))) STRICT;
+            ALTER TABLE t DROP COLUMN b;
+            INSERT INTO t (a) VALUES ('RETURNING ->> iif(') RETURNING id;
+            UPDATE t SET a = s.a FROM (SELECT 1 AS id, 'x' AS a) AS s WHERE s.id = t.id;
+            -- iif(x) in a comment is fine
+            UPDATE t SET a = (SELECT a FROM t AS u WHERE u.id = t.id);
+            SELECT a ->> '$.x', "iif(" FROM t;
+            """;
+
+        var warnings = linter.Lint(script, new LintContext("x", "deploy", ChangeFlags.None)).Where(d => d.Code == "BSM008").ToList();
+
+        Assert.All(warnings, w => Assert.Equal(LintSeverity.Warning, w.Severity));
+        Assert.Equal(
+            [(1, "A generated column"), (1, "A STRICT table"), (2, "ALTER TABLE ... DROP COLUMN"), (3, "RETURNING"), (4, "UPDATE ... FROM"), (7, "The -> and ->> operators")],
+            warnings.Select(w => (w.Line, w.Message[..w.Message.IndexOf(" needs SQLite", StringComparison.Ordinal)])));
+        Assert.Contains("needs SQLite 3.35 or later, but sqlite.minVersion in bsm.yaml is 3.26", warnings[2].Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_higher_minimum_version_allows_newer_sql()
+    {
+        var newer = new SqliteLinter(new SqliteOptions { MinVersion = new Version(3, 37) });
+
+        var codes = newer.Lint("ALTER TABLE t DROP COLUMN b;\nCREATE TABLE s (id INTEGER) STRICT;\nSELECT unixepoch();", new LintContext("x", "deploy", ChangeFlags.None))
+            .Where(d => d.Code == "BSM008").Select(d => d.Message).ToList();
+
+        Assert.Equal(["unixepoch() needs SQLite 3.38 or later, but sqlite.minVersion in bsm.yaml is 3.37. Rewrite it for older engines, or raise sqlite.minVersion if every program that opens this database has SQLite 3.38 or later."], codes);
+    }
 }

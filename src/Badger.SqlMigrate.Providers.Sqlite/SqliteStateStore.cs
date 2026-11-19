@@ -17,7 +17,7 @@ public sealed partial class SqliteStateStore : IStateStore
 
     public async Task<bool> ExistsAsync(IDatabaseSession session, string schema, CancellationToken cancellationToken)
     {
-        var rows = await session.QueryAsync("SELECT count(*) AS n FROM sqlite_schema WHERE type = 'table' AND name = @name;", new Dictionary<string, object?> { ["name"] = Prefix(schema) + "changes" }, cancellationToken).ConfigureAwait(false);
+        var rows = await session.QueryAsync("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = @name;", new Dictionary<string, object?> { ["name"] = Prefix(schema) + "changes" }, cancellationToken).ConfigureAwait(false);
         return Convert.ToInt64(rows[0]["n"], CultureInfo.InvariantCulture) > 0;
     }
 

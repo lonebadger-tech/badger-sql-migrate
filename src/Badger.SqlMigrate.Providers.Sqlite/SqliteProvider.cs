@@ -1,4 +1,5 @@
 using System.Globalization;
+using Badger.SqlMigrate.Core;
 using Badger.SqlMigrate.Core.Configuration;
 using Badger.SqlMigrate.Core.Providers;
 using Microsoft.Data.Sqlite;
@@ -6,9 +7,17 @@ using Microsoft.Data.Sqlite;
 namespace Badger.SqlMigrate.Providers.Sqlite;
 
 /// <summary>SQLite 3 database files (bundled engine: nothing to install).</summary>
-public sealed class SqliteProvider : IDatabaseProvider
+public sealed class SqliteProvider(SqliteOptions options) : IDatabaseProvider
 {
     public const string ProviderId = "sqlite";
+
+    public SqliteProvider()
+        : this(SqliteOptions.Default)
+    {
+    }
+
+    /// <summary>The project's 'sqlite:' settings (the oldest SQLite that opens its databases).</summary>
+    public SqliteOptions Options { get; } = options;
 
     public string Id => ProviderId;
 
@@ -23,7 +32,7 @@ public sealed class SqliteProvider : IDatabaseProvider
 
     public IScriptParser Parser { get; } = new SqliteStatementSplitter();
 
-    public IScriptLinter Linter { get; } = new SqliteLinter();
+    public IScriptLinter Linter { get; } = new SqliteLinter(options);
 
     public IStateStore StateStore { get; } = new SqliteStateStore();
 
@@ -33,7 +42,7 @@ public sealed class SqliteProvider : IDatabaseProvider
 
     public IEnvironmentResources? Resources => null;
 
-    public ISchemaScripter Scripter { get; } = new Scripting.SqliteScripter();
+    public ISchemaScripter Scripter { get; } = new Scripting.SqliteScripter(options);
 
     public IScratchDatabases ScratchDatabases { get; } = new Scripting.SqliteScratchDatabases();
 
@@ -52,7 +61,16 @@ public sealed class SqliteProvider : IDatabaseProvider
     public async Task<IDatabaseSession> OpenSessionAsync(DeploymentEnvironment environment, SessionContext context, CancellationToken cancellationToken)
     {
         var builder = SqliteConnectionFactory.Build(environment);
-        var connection = new SqliteConnection(builder.ConnectionString);
+        SqliteConnection connection;
+        try
+        {
+            connection = new SqliteConnection(builder.ConnectionString);
+        }
+        catch (TypeInitializationException ex) when (ex.InnerException is not null)
+        {
+            throw new MigrationException("Could not load SQLite: " + (SqliteNativeLibrary.Description ?? ex.GetBaseException().Message), ex);
+        }
+
         try
         {
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -79,6 +97,7 @@ public sealed class SqliteProvider : IDatabaseProvider
         return
         [
             new("server", "SQLite " + S("version")),
+            new("engine", SqliteNativeLibrary.Description ?? "built in"),
             new("database", session is SqliteSession s ? s.Path : session.Description),
             new("journal mode", S("journal_mode")),
             new("encoding", S("encoding")),

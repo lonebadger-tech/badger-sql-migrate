@@ -110,7 +110,7 @@ public sealed class SqliteDataTransfer : IDataTransfer
         await session.ExecuteAsync("PRAGMA defer_foreign_keys = ON;", null, cancellationToken).ConfigureAwait(false);
         suspendedTriggers.Clear();
         var names = tables.Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var r in await session.QueryAsync("SELECT name, tbl_name, sql FROM main.sqlite_schema WHERE type = 'trigger' AND sql IS NOT NULL;", null, cancellationToken).ConfigureAwait(false))
+        foreach (var r in await session.QueryAsync("SELECT name, tbl_name, sql FROM main.sqlite_master WHERE type = 'trigger' AND sql IS NOT NULL;", null, cancellationToken).ConfigureAwait(false))
         {
             if (names.Contains((string)r["tbl_name"]!))
             {

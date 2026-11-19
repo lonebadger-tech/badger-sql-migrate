@@ -32,7 +32,7 @@ public static partial class Commands
     {
         var dir = Path.GetFullPath(projectDir);
         var config = BsmConfig.Load(dir);
-        var provider = Providers.Resolve(config.Provider);
+        var provider = config.CreateProvider();
         if (!PlanFile.IsValidName(name))
         {
             throw new MigrationException($"Invalid change name '{name}'. Use letters, digits, '-', '_' or '.'.");
@@ -95,7 +95,7 @@ public static partial class Commands
     {
         var dir = Path.GetFullPath(projectDir);
         var config = BsmConfig.Load(dir);
-        var provider = Providers.Resolve(config.Provider);
+        var provider = config.CreateProvider();
         var planPath = Path.Combine(dir, PlanFile.FileName);
         var plan = PlanFile.Load(planPath);
         var index = plan.IndexOf(name);
@@ -239,7 +239,7 @@ public static partial class Commands
     public static IReadOnlyList<LintFinding> LintSql(string projectDir, string sql, string kind, bool noTx)
     {
         var config = BsmConfig.Load(Path.GetFullPath(projectDir));
-        var provider = Providers.Resolve(config.Provider);
+        var provider = config.CreateProvider();
         var flags = noTx ? ChangeFlags.NoTransaction : ChangeFlags.None;
         return provider.Linter.Lint(NormalizeScript(sql), new LintContext("snippet", kind, flags))
             .Select(d => new LintFinding("snippet", d.Line, d.Code, d.Severity.ToString().ToLowerInvariant(), d.Message)).ToList();

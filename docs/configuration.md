@@ -27,6 +27,14 @@ environments:
     ordering: strict
 ```
 
+For `provider: sqlite`, a top-level `sqlite:` block holds `minVersion`, the oldest SQLite that opens the project's databases (default `"3.26"`, the oldest bsm supports). Generated changes use only SQL that version understands, and lint warns (BSM008) about newer SQL. Quote it: unquoted, YAML reads `3.30` as `3.3`.
+
+```yaml
+provider: sqlite
+sqlite:
+  minVersion: "3.35"              # every program that opens these files has SQLite 3.35 or later
+```
+
 Secrets never belong in the file: any string may use `${env:NAME}` or `${file:path}`. They are resolved only for the environment being used, so a missing production secret never breaks a dev run.
 
 ## Environments

@@ -33,7 +33,7 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet build -c Release
-      # SQLite tests run everywhere. SQL Server (2022) and PostgreSQL (18) database tests run where Docker is
+      # SQLite tests (bundled engine) run everywhere. SQL Server (2022) and PostgreSQL (18) database tests run where Docker is
       # available (ubuntu) and skip elsewhere; the jobs below cover the other versions.
       - run: dotnet test -c Release --no-build
       - run: dotnet run -c Release --no-build --project src/Badger.SqlMigrate.Cli -- plan check -C samples/demo-db
@@ -80,6 +80,45 @@ jobs:
       - run: dotnet test tests/Badger.SqlMigrate.Providers.SqlServer.Tests -c Release
         env:
           BSM_TEST_SQLSERVER: Server=(localdb)\bsm2016;Integrated Security=true;TrustServerCertificate=true
+
+  # The build jobs test SQLite with the engine bsm ships. Other programs open the same files with the SQLite their
+  # Linux distribution ships, back to 3.26 (RHEL 8, the oldest bsm supports): the provider's tests against each of those.
+  sqlite:
+    name: sqlite (${{ matrix.version }}, ${{ matrix.distro }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { version: '3.26.0', distro: 'AlmaLinux 8', image: 'almalinux:8', library: /usr/lib64/libsqlite3.so.0 }
+          - { version: '3.34.1', distro: 'AlmaLinux 9', image: 'almalinux:9', library: /usr/lib64/libsqlite3.so.0 }
+          - { version: '3.37.2', distro: 'Ubuntu 22.04', image: 'ubuntu:22.04', library: /usr/lib/x86_64-linux-gnu/libsqlite3.so.0 }
+          - { version: '3.40.1', distro: 'Debian 12', image: 'debian:12', library: /usr/lib/x86_64-linux-gnu/libsqlite3.so.0 }
+          - { version: '3.45.1', distro: 'Ubuntu 24.04', image: 'ubuntu:24.04', library: /usr/lib/x86_64-linux-gnu/libsqlite3.so.0 }
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    steps:
+      - name: Install the distribution's SQLite and what .NET needs
+        run: |
+          if command -v dnf >/dev/null; then
+            dnf install -y sqlite-libs libicu tar gzip findutils git
+          else
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libsqlite3-0 libicu-dev ca-certificates curl git
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      # BSM_TEST_SQLITE_VERSION makes the run fail if the tests did not get the distribution's library.
+      - run: dotnet test tests/Badger.SqlMigrate.Providers.Sqlite.Tests -c Release
+        env:
+          BSM_SQLITE_LIBRARY: ${{ matrix.library }}
+          BSM_TEST_SQLITE_VERSION: ${{ matrix.version }}
+      # Without BSM_SQLITE_LIBRARY bsm picks the engine itself: the built-in one, or the system's where the built-in one
+      # cannot load (it needs glibc 2.33; AlmaLinux 8 has 2.28).
+      - name: Test the engine bsm picks on this distribution
+        if: always()
+        run: dotnet test tests/Badger.SqlMigrate.Providers.Sqlite.Tests -c Release --no-build
 
   # Every supported PostgreSQL major version: the provider's conformance and feature tests against each.
   postgresql:

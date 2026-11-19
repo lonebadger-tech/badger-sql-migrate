@@ -25,7 +25,7 @@ public sealed class ProjectTools(string projectDir)
     public object ProjectInfo() => Run(() =>
     {
         var config = BsmConfig.Load(root);
-        var provider = Commands.Providers.Resolve(config.Provider);
+        var provider = config.CreateProvider();
         var project = MigrationProject.Load(root, provider.Id, includes: provider.Includes);
         return new
         {
@@ -56,7 +56,7 @@ public sealed class ProjectTools(string projectDir)
     public object PlanShow() => Run(() =>
     {
         var config = BsmConfig.Load(root);
-        var provider = Commands.Providers.Resolve(config.Provider);
+        var provider = config.CreateProvider();
         var project = MigrationProject.Load(root, provider.Id, includes: provider.Includes);
         return new
         {

@@ -5,13 +5,19 @@ namespace Badger.SqlMigrate.Providers.Sqlite.Scripting;
 
 /// <summary>
 /// Scripts the differences between two SQLite databases: "deploy" turns the first into the second, "revert" the
-/// second back into the first. SQLite's ALTER TABLE can only rename tables and columns, add a column and drop a
-/// simple one, so every other table change is the rebuild SQLite documents: create the new table under a temporary
-/// name, copy the rows, drop the old table, rename, and re-create its indexes and triggers. Views and triggers that
-/// refer to a rebuilt table are dropped first and re-created after, because SQLite re-checks them on rename.
+/// second back into the first. SQLite's ALTER TABLE can only rename tables and columns, add a column and (from 3.35,
+/// when sqlite.minVersion allows it) drop a simple one, so every other table change is the rebuild SQLite documents:
+/// create the new table under a temporary name, copy the rows, drop the old table, rename, and re-create its indexes
+/// and triggers. Views and triggers that refer to a rebuilt table are dropped first and re-created after, because
+/// SQLite re-checks them on rename.
 /// </summary>
-public sealed partial class SqliteScripter : ISchemaScripter
+public sealed partial class SqliteScripter(SqliteOptions sqlite) : ISchemaScripter
 {
+    public SqliteScripter()
+        : this(SqliteOptions.Default)
+    {
+    }
+
     public async Task<SchemaScript> ScriptAsync(IDatabaseSession from, IDatabaseSession to, SchemaScriptOptions options, CancellationToken cancellationToken)
     {
         var patterns = options.Exclude.Select(p => new Regex("^" + Regex.Escape(p).Replace(@"\*", ".*", StringComparison.Ordinal).Replace(@"\?", ".", StringComparison.Ordinal) + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)).ToList();
@@ -21,8 +27,8 @@ public sealed partial class SqliteScripter : ISchemaScripter
         var target = await SqliteModel.ReadAsync(to, options.StateSchema, Excluded, cancellationToken).ConfigureAwait(false);
         var owned = OwnedObjects(options.RepeatableScripts);
 
-        var deploy = new Generator(source, target, owned).Run();
-        var revert = new Generator(target, source, owned).Run();
+        var deploy = new Generator(source, target, owned, sqlite).Run();
+        var revert = new Generator(target, source, owned, sqlite).Run();
 
         // Either direction rebuilding a table other tables refer to needs foreign keys off, which SQLite only allows
         // outside a transaction: then both scripts manage their own (the linter makes the change !notx).
@@ -83,7 +89,7 @@ public sealed partial class SqliteScripter : ISchemaScripter
     private sealed record Result(IReadOnlyList<string> Steps, IReadOnlyList<string> Summary, IReadOnlyList<string> Warnings, bool DataLoss, bool ForeignKeysOff);
 
     /// <summary>One direction: scripts what turns <c>a</c> into <c>b</c>.</summary>
-    private sealed class Generator(SqliteModel a, SqliteModel b, HashSet<string> owned)
+    private sealed class Generator(SqliteModel a, SqliteModel b, HashSet<string> owned, SqliteOptions options)
     {
         private const string NewPrefix = "bsm_new_";
 
@@ -232,9 +238,10 @@ public sealed partial class SqliteScripter : ISchemaScripter
             return true;
         }
 
+        /// <summary>ALTER TABLE ... DROP COLUMN needs SQLite 3.35; for older engines the table is rebuilt instead.</summary>
         private bool TryDrop(SqliteTable old, SqliteTable now)
         {
-            if (old.Options != now.Options || !old.Constraints.SequenceEqual(now.Constraints) || now.Columns.Count >= old.Columns.Count)
+            if (!options.Supports(SqliteOptions.DropColumn) || old.Options != now.Options || !old.Constraints.SequenceEqual(now.Constraints) || now.Columns.Count >= old.Columns.Count)
             {
                 return false;
             }

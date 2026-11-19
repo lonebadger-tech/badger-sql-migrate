@@ -129,6 +129,33 @@ public sealed class ScripterTests
     }
 
     [Fact]
+    public async Task Columns_are_dropped_in_place_only_when_the_minimum_version_allows_it()
+    {
+        await using var a = new TestDatabase();
+        await using var b = new TestDatabase();
+        await RunAsync(a, "CREATE TABLE t (id INTEGER PRIMARY KEY, a TEXT, b TEXT);\nINSERT INTO t VALUES (1, 'x', 'y');");
+        await RunAsync(b, "CREATE TABLE t (id INTEGER PRIMARY KEY, a TEXT);");
+
+        // The default, 3.26, has no DROP COLUMN: the table is rebuilt, and the script runs on every supported engine.
+        var rebuilt = await ScriptAsync(a, b);
+        Assert.DoesNotContain("DROP COLUMN", rebuilt.Deploy, StringComparison.Ordinal);
+        Assert.Contains("~ table main.t (rebuilt)", rebuilt.Summary);
+        Assert.DoesNotContain(provider.Linter.Lint(rebuilt.Deploy, new LintContext("x", "deploy", ChangeFlags.None)), d => d.Code == "BSM008");
+
+        var newer = new SqliteProvider(new SqliteOptions { MinVersion = SqliteOptions.DropColumn });
+        await using (var from = await SessionAsync(a))
+        await using (var to = await SessionAsync(b))
+        {
+            var inPlace = await newer.Scripter.ScriptAsync(from, to, new SchemaScriptOptions { StateSchema = "bsm" }, CancellationToken.None);
+            Assert.Contains("ALTER TABLE t DROP COLUMN b;", inPlace.Deploy, StringComparison.Ordinal);
+        }
+
+        await RunAsync(a, rebuilt.Deploy, script: rebuilt);
+        Assert.Equal(await DumpAsync(b), await DumpAsync(a));
+        Assert.Equal(["1|x"], await RowsAsync(a, "SELECT id || '|' || a AS r FROM t"));
+    }
+
+    [Fact]
     public async Task Repeatable_objects_and_journal_tables_are_left_out()
     {
         await using var a = new TestDatabase();

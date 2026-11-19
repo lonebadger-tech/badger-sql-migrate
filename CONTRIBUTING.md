@@ -18,7 +18,7 @@ dotnet test
 dotnet run --project src/Badger.SqlMigrate.Cli -- plan check -C samples/demo-db
 ```
 
-- The SQL Server tests start SQL Server 2022 in Docker with Testcontainers (another version with `BSM_TEST_SQLSERVER_IMAGE=mcr.microsoft.com/mssql/server:2019-latest`), or use the server in `BSM_TEST_SQLSERVER=<connection string>`, such as LocalDB: `Server=(localdb)\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true`. The PostgreSQL tests do the same with `BSM_TEST_POSTGRES_IMAGE` and `BSM_TEST_POSTGRES`. Without Docker or a connection string they're skipped. The SQLite tests need nothing.
+- The SQL Server tests start SQL Server 2022 in Docker with Testcontainers (another version with `BSM_TEST_SQLSERVER_IMAGE=mcr.microsoft.com/mssql/server:2019-latest`), or use the server in `BSM_TEST_SQLSERVER=<connection string>`, such as LocalDB: `Server=(localdb)\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true`. The PostgreSQL tests do the same with `BSM_TEST_POSTGRES_IMAGE` and `BSM_TEST_POSTGRES`. Without Docker or a connection string they're skipped. The SQLite tests need nothing; to run them against another SQLite library instead of the built-in engine, set `BSM_SQLITE_LIBRARY` to its path (`libsqlite3.so.0`, `sqlite3.dll`; bsm itself honors it too), and `BSM_TEST_SQLITE_VERSION` to the version it must report. CI runs them on the SQLite of AlmaLinux 8 and 9, Ubuntu 22.04 and 24.04 and Debian 12.
 - Warnings are errors (`TreatWarningsAsErrors`), so the build must be clean.
 - `tests/Badger.SqlMigrate.ArchitectureTests` fails the build if the engine, connectivity or CLI reference a database driver directly. Vendor code belongs in a provider.
 

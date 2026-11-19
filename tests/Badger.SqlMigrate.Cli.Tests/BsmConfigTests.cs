@@ -209,4 +209,28 @@ public sealed class BsmConfigTests : IDisposable
         Assert.Contains("cycle", Assert.Throws<MigrationException>(() => Load("environments: { a: { extends: b }, b: { extends: a } }").ResolveEnvironment("a", null)).Message, StringComparison.Ordinal);
         Assert.Contains("renamed to 'environments'", Assert.Throws<MigrationException>(() => Load("profiles: {}")).Message, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData("", "3.26")]
+    [InlineData("sqlite: { minVersion: \"3.35\" }", "3.35")]
+    [InlineData("sqlite:\n  minVersion: 3.45", "3.45")]
+    [InlineData("sqlite: { minVersion: \"3.30.1\" }", "3.30")]
+    public void The_sqlite_block_sets_the_oldest_engine_scripts_must_run_on(string block, string expected)
+    {
+        var config = Load("provider: sqlite\n" + block + "\nenvironments:\n  dev: { database: app.db }\n");
+        var provider = Assert.IsType<Badger.SqlMigrate.Providers.Sqlite.SqliteProvider>(config.CreateProvider());
+        Assert.Equal(Version.Parse(expected), provider.Options.MinVersion);
+    }
+
+    [Theory]
+    [InlineData("provider: sqlite\nsqlite: { minVersion: 3.3 }", "in quotes")]
+    [InlineData("provider: sqlite\nsqlite: { minVersion: \"3.20\" }", "older than the oldest SQLite bsm supports (3.26)")]
+    [InlineData("provider: sqlite\nsqlite: { minVersion: \"latest\" }", "not a SQLite 3 version")]
+    [InlineData("provider: sqlite\nsqlite: { maxVersion: \"3.40\" }", "unknown setting 'sqlite.maxVersion'")]
+    [InlineData("provider: sqlserver\nsqlite: { minVersion: \"3.35\" }", "apply only to provider: sqlite")]
+    public void Sqlite_settings_mistakes_are_explained(string yaml, string message)
+    {
+        var ex = Assert.Throws<MigrationException>(() => Load(yaml + "\nenvironments:\n  dev: { database: app.db }\n").CreateProvider());
+        Assert.Contains(message, ex.Message, StringComparison.Ordinal);
+    }
 }
