@@ -6,7 +6,7 @@
 
 Free, open-source, cross-platform (Windows, macOS, Linux) database migrations with **real up and down**, **named changes instead of version numbers**, and **SHA-256 hash certification** of everything that reaches a database.
 
-Providers: **SQL Server / Azure SQL** and **PostgreSQL** (`bsm init --provider postgresql`). The engine is vendor-neutral, so MySQL and SQLite can be added as providers without touching the engine or CLI.
+Providers: **SQL Server / Azure SQL**, **PostgreSQL** (`bsm init --provider postgresql`) and **SQLite** (`bsm init --provider sqlite`). The engine is vendor-neutral, so MySQL can be added as a provider without touching the engine or CLI.
 
 - **Documentation:** [lonebadger.tech/badger-sql-migrate](https://lonebadger.tech/badger-sql-migrate/) (also as Markdown for AI assistants: [llms.txt](https://www.lonebadger.tech/llms.txt))
 - **Download:** [standalone binaries](https://lonebadger.tech/badger-sql-migrate/download/) or `dotnet tool install -g Badger.SqlMigrate`

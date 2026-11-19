@@ -39,7 +39,7 @@ def home():
   <img class="icon" src="{BASE}/icon.svg" alt="Badger SQL Migrate icon">
   <div>
     <h1>Badger SQL Migrate</h1>
-    <p class="lede">Database migrations for SQL Server, Azure SQL and PostgreSQL that you can prove. Free, cross-platform, with real up <em>and</em> down.</p>
+    <p class="lede">Database migrations for SQL Server, Azure SQL, PostgreSQL and SQLite that you can prove. Free, cross-platform, with real up <em>and</em> down.</p>
     <div class="actions">
       <a class="button primary" href="{BASE}/download/">Download {VERSION}</a>
       <a class="button" href="{BASE}/docs/quick-start/">Quick start</a>
@@ -83,7 +83,7 @@ bsm revert --to create-customer -e test''')}
 
 <p><a href="{BASE}/docs/">Documentation</a> · <a href="{BASE}/examples/">Example scripts</a> · <a href="{BASE}/download/">Download</a> · <a href="{BASE}/releases/">What's new</a> · <a href="https://github.com/lonebadger-tech/badger-sql-migrate">Source on GitHub</a></p>
 """
-    return Page("", "Badger SQL Migrate: hash-certified SQL Server and PostgreSQL migrations", "Free, cross-platform, hash-certified database migrations for SQL Server, Azure SQL and PostgreSQL with real up and down, named changes, environments, Entra ID and Always Encrypted.", body)
+    return Page("", "Badger SQL Migrate: hash-certified SQL Server, PostgreSQL and SQLite migrations", "Free, cross-platform, hash-certified database migrations for SQL Server, Azure SQL, PostgreSQL and SQLite with real up and down, named changes, environments, Entra ID and Always Encrypted.", body)
 
 
 # ---------------------------------------------------------------- download

@@ -6,6 +6,7 @@ using Badger.SqlMigrate.Core.Plan;
 using Badger.SqlMigrate.Core.Project;
 using Badger.SqlMigrate.Core.Providers;
 using Badger.SqlMigrate.Providers.PostgreSql;
+using Badger.SqlMigrate.Providers.Sqlite;
 
 namespace Badger.SqlMigrate.Cli;
 
@@ -292,11 +293,14 @@ public static partial class Commands
         }
 
         var postgres = provider.Id == PostgreSqlProvider.ProviderId;
+        var sqlite = provider.Id == SqliteProvider.ProviderId;
         var text = ReadResource("AGENTS.md")
             .Replace("{{provider}}", provider.DisplayName, StringComparison.Ordinal)
-            .Replace("{{repeatable}}", postgres ? "`CREATE OR REPLACE`" : "`CREATE OR ALTER`", StringComparison.Ordinal)
+            .Replace("{{repeatable}}", postgres ? "`CREATE OR REPLACE`" : sqlite ? "`DROP VIEW/TRIGGER IF EXISTS` then `CREATE`" : "`CREATE OR ALTER`", StringComparison.Ordinal)
             .Replace("{{dialect}}", postgres
                 ? "PostgreSQL: statements end with `;`, bodies use `$$` quoting, psql's `\\i`, `\\set` and `\\if` work; `\\connect` doesn't."
+                : sqlite
+                ? "SQLite: statements end with `;`; ALTER TABLE only renames, adds or drops simple columns, so other table changes rebuild the table; no sqlite3 dot-commands (`.read`, `.mode`)."
                 : "T-SQL: separate batches with a `GO` line; `CREATE VIEW/PROCEDURE/FUNCTION/TRIGGER` start their own batch; no `USE`.", StringComparison.Ordinal);
         File.WriteAllText(path, text, Utf8NoBom);
         return true;

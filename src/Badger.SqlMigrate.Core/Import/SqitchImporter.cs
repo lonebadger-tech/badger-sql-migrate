@@ -201,6 +201,9 @@ public static partial class SqitchImporter
     /// <summary>Sqitch engines bsm's PostgreSQL provider runs (CockroachDB speaks the protocol but lacks advisory locks and pg_catalog parity).</summary>
     public static bool IsPostgres(string? engine) => engine is "pg" or "postgres" or "postgresql";
 
+    /// <summary>Sqitch's SQLite engine (its registry is a separate file, so there is no journal to baseline from).</summary>
+    public static bool IsSqlite(string? engine) => engine is "sqlite" or "sqlite3";
+
     private static string Read(string path, ImportedProject result) => result.EscapeLiteral(File.ReadAllText(path, Encoding.UTF8), System.IO.Path.GetFileName(path));
 
     private static bool OwnsTransaction(string sql) => OwnTransactionRegex().IsMatch(sql) && CommitRegex().IsMatch(sql);

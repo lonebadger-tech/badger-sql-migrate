@@ -4,6 +4,7 @@ All notable changes to Badger SQL Migrate. The format follows [Keep a Changelog]
 
 ## Unreleased
 
+- SQLite provider (`bsm init --provider sqlite`): database files with the engine built in, nothing to install. Statement splitting as the `sqlite3` shell does it (trigger bodies included), lint for dot-commands and statements that cannot run in a transaction, journal tables prefixed `bsm_`, a file lock held for the whole deploy, a schema fingerprint, and `add --from-diff` / `diff-schema --script` that use `ALTER TABLE` where SQLite can and the documented table rebuild where it cannot (with foreign keys switched off when other tables refer to the rebuilt one). Imports take `--provider sqlite`; Sqitch SQLite projects and Flyway `jdbc:sqlite:` URLs map to it.
 - `bsm convert schema` and `bsm convert data`: move a live database from SQL Server to PostgreSQL or back. The schema becomes a new bsm project for the other provider (types mapped, names lowercased or snake_cased for PostgreSQL, views, functions, procedures and triggers translated, every uncertain spot marked `REVIEW bsm convert` and listed in `CONVERSION.md`); the rows are then copied with bulk copy / `COPY` and row counts compared.
 - Everything the tool names is now `bsm`: the command (`bsm`, was `badger`), project files `bsm.yaml` and `bsm.plan`, the `bsm` journal schema, `-- bsm:` script directives, `{bsm.*}` variables, `BSM_*` environment variables and `~/.bsm`.
 - Open source under the MIT license, with contribution, security and conduct guides.

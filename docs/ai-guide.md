@@ -7,7 +7,7 @@ by editing it later.
 ## The project
 
 ```
-bsm.yaml                 provider (sqlserver or postgresql), environments, variables
+bsm.yaml                 provider (sqlserver, postgresql or sqlite), environments, variables
 bsm.plan                 every change, one per line, in deploy order
 changes/<name>/
   deploy.sql             makes the change
@@ -18,7 +18,7 @@ environments/<env>/      repeatables that run only in that environment (seed dat
 ```
 
 Read `bsm.yaml` first to learn the provider: `provider: sqlserver` means T-SQL, `provider: postgresql` means
-PostgreSQL. Never put connection strings, passwords or secrets in scripts.
+PostgreSQL, `provider: sqlite` means SQLite. Never put connection strings, passwords or secrets in scripts.
 
 ## Adding a change
 
@@ -179,6 +179,38 @@ DROP INDEX public.customer_email_key;
 ALTER TABLE public.customer DROP COLUMN email;
 ```
 
+## SQLite
+
+- Statements end with `;`. Semicolons inside strings, comments and `CREATE TRIGGER ... BEGIN ... END;` bodies
+  don't split statements.
+- There are no schemas: write `customer`, or `main.customer`. bsm's own tables are `bsm_*` in the same file.
+- `ALTER TABLE` can only rename a table or column, add a column (nullable, or `NOT NULL` with a constant
+  default) and drop a simple column. For anything else (type, constraint, primary key, foreign key changes)
+  rebuild the table: create `new_<table>`, copy the rows, drop the old table, rename, and re-create its
+  indexes, triggers and the views that use it. If other tables have foreign keys to it, the change must be
+  `!notx` and wrap the rebuild in `PRAGMA foreign_keys = OFF; BEGIN; ... COMMIT; PRAGMA foreign_keys = ON;`
+  (`PRAGMA foreign_keys` does nothing inside bsm's transaction, BSM001).
+- Repeatables: there is no `CREATE OR REPLACE`; write `DROP VIEW IF EXISTS v;` then `CREATE VIEW v ...`
+  (and the same for triggers).
+- verify.sql: select from what must exist; SQLite raises "no such table/column" when it doesn't:
+  `SELECT email FROM customer LIMIT 0;`
+- sqlite3 dot-commands (`.read`, `.mode`, `.import`) are not SQL and are refused (BSM005). `VACUUM`,
+  `ATTACH` and `PRAGMA journal_mode` need `!notx`.
+
+Example change `add-customer-email`:
+
+```sql
+-- deploy.sql
+ALTER TABLE customer ADD COLUMN email TEXT;
+CREATE UNIQUE INDEX customer_email_key ON customer (email) WHERE email IS NOT NULL;
+```
+
+```sql
+-- revert.sql
+DROP INDEX customer_email_key;
+ALTER TABLE customer DROP COLUMN email;
+```
+
 ## Linter codes
 
 `bsm plan check` reports these. Errors must be fixed; fix warnings unless the user says otherwise.
@@ -186,11 +218,11 @@ ALTER TABLE public.customer DROP COLUMN email;
 | Code | Provider | Meaning and fix |
 |---|---|---|
 | BSM000 | SQL Server | The script didn't parse, so lint was skipped. Check the syntax. |
-| BSM001 | both | A statement can't run in a transaction. Mark the change `!notx` (`update_change` with `notx: true`, or `--notx` on `bsm add`) and make it re-runnable. |
+| BSM001 | all | A statement can't run in a transaction. Mark the change `!notx` (`update_change` with `notx: true`, or `--notx` on `bsm add`) and make it re-runnable. |
 | BSM002 | SQL Server | `USE` switches databases. Remove it. |
-| BSM003 | both | `BEGIN`/`COMMIT`/`ROLLBACK` in a transactional change. Remove it. |
+| BSM003 | all | `BEGIN`/`COMMIT`/`ROLLBACK` in a transactional change. Remove it. |
 | BSM004 | SQL Server | `SYSTEM_VERSIONING = OFF` without turning it back on. Turn it back on in the same script. |
-| BSM005 | PostgreSQL | A psql command bsm can't run, or unbalanced `\if`/`\endif`. Remove it. |
+| BSM005 | PostgreSQL, SQLite | A psql command bsm can't run, or unbalanced `\if`/`\endif`; on SQLite, a sqlite3 dot-command (`.read`, `.mode`). Remove it. |
 | BSM007 | PostgreSQL | An enum value added with `ADD VALUE` is used in the same change. Move that use to a later change. |
 
 ## Generating a change from a database (person-run)
