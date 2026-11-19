@@ -196,6 +196,28 @@ var importSqlProj = new Command("sqlproj", "Import an SSDT / SQL Database Projec
 importSqlProj.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.ImportSqlProj(g, r.GetValue(importSqlProjPath)!, r.GetValue(importDryRun))));
 import.Subcommands.Add(importSqlProj);
 root.Subcommands.Add(import);
+
+// convert
+var convert = new Command("convert", "Convert a live database between SQL Server and PostgreSQL: its schema into a new bsm project for the other provider (convert schema), then its rows (convert data).") { noAgentsFile };
+var convertOut = new Option<string>("--out", "-o") { Description = "Folder for the new project (must not contain one yet).", Required = true };
+var convertTo = new Option<string?>("--to") { Description = "Target provider: sqlserver or postgresql (default: the other one)." };
+var convertFrom = new Option<string?>("--from-provider") { Description = "The source provider when the source is a --connection-string rather than an environment of the project in --project." };
+var convertNames = new Option<string?>("--names") { Description = "Identifiers in the target: lower (default for PostgreSQL), snake (CustomerOrder -> customer_order) or keep (default for SQL Server)." };
+convertNames.AcceptOnlyFromAmong("keep", "lower", "snake");
+var convertCaseSensitive = new Option<bool>("--case-sensitive") { Description = "Do not give PostgreSQL text columns a case-insensitive collation when the SQL Server database compares text case-insensitively." };
+var convertExclude = new Option<string[]>("--exclude") { Description = "schema.name glob of objects to leave out (* and ?). Repeatable." };
+var convertDryRun = new Option<bool>("--dry-run") { Description = "Show what would be written without writing anything." };
+var convertSchema = new Command("schema", "Read the source database's catalog and write a new project for the other provider: changes for schemas, types, sequences, tables, keys and indexes; views, routines and triggers translated as repeatables; CONVERSION.md listing what to review.") { convertOut, convertTo, convertFrom, convertNames, convertCaseSensitive, convertExclude, convertDryRun };
+convertSchema.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.ConvertSchema(g, r.GetValue(convertOut)!, r.GetValue(convertTo), r.GetValue(convertFrom), r.GetValue(convertNames), r.GetValue(convertCaseSensitive), r.GetValue(convertExclude) ?? [], r.GetValue(convertDryRun), ct)));
+convert.Subcommands.Add(convertSchema);
+var convertTarget = new Option<string>("--target") { Description = "The project 'convert schema' wrote (already deployed).", Required = true };
+var convertTargetEnv = new Option<string?>("--target-env") { Description = "Environment of the target project to load into (default: its defaultEnvironment)." };
+var convertTables = new Option<string[]>("--tables") { Description = "schema.name glob of source tables to copy (* and ?). Repeatable; default all." };
+var convertTruncate = new Option<bool>("--truncate") { Description = "Empty the target tables first (otherwise they must be empty)." };
+var convertData = new Command("data", "Copy every table's rows from the source database into the converted, deployed target: parents first, identities and sequences moved past the copied values, row counts compared.") { convertTarget, convertTargetEnv, convertFrom, convertTables, convertTruncate };
+convertData.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.ConvertData(g, r.GetValue(convertTarget)!, r.GetValue(convertTargetEnv), r.GetValue(convertFrom), r.GetValue(convertTables) ?? [], r.GetValue(convertTruncate), ct)));
+convert.Subcommands.Add(convertData);
+root.Subcommands.Add(convert);
 root.Subcommands.Add(baseline);
 
 // vars / render

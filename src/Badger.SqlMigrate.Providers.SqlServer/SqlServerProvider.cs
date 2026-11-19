@@ -39,6 +39,10 @@ public sealed class SqlServerProvider : IDatabaseProvider
 
     public IEnvironmentResources? Resources { get; } = new SqlServerEnvironmentResources();
 
+    public Core.Conversion.ISchemaExporter Exporter { get; } = new Conversion.SqlServerExporter();
+
+    public Core.Conversion.IDataTransfer Data { get; } = new Conversion.SqlServerDataTransfer();
+
     /// <summary>Registers a custom Always Encrypted key store provider for all environments (library use).</summary>
     public static void RegisterKeyStoreProvider(string name, SqlColumnEncryptionKeyStoreProvider provider) => KeyStoreProviders.Register(name, provider);
 

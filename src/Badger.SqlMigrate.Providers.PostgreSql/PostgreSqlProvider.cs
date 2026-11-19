@@ -41,6 +41,10 @@ public sealed class PostgreSqlProvider : IDatabaseProvider
 
     public IScratchDatabases ScratchDatabases => new Scripting.PostgreSqlScratchDatabases(this);
 
+    public Core.Conversion.ISchemaExporter Exporter { get; } = new Conversion.PostgreSqlExporter();
+
+    public Core.Conversion.IDataTransfer Data { get; } = new Conversion.PostgreSqlDataTransfer();
+
     public string DefaultSchema => "public";
 
     public IReadOnlyList<string> ValidateEnvironment(DeploymentEnvironment environment) => PostgreSqlConnectionFactory.Validate(environment);

@@ -145,6 +145,13 @@ IF COL_LENGTH('dbo.Customer', 'Email') IS NULL
     THROW 50000, 'dbo.Customer.Email is missing', 1;
 ```
 
+## Converted projects
+
+A project written by `bsm convert schema` has `CONVERSION.md` at its root and `convert.json` next to `bsm.yaml`. Scripts
+marked `/* REVIEW bsm convert: ... */` were translated from the other database and need a person's judgement: resolve
+the issue the comment describes, then delete the comment (and its line in the file's header). Don't edit
+`convert.json`: `bsm convert data` uses it to map names the way the schema was converted.
+
 ## PostgreSQL
 
 - Statements end with `;`. Function bodies and `DO` blocks use dollar quoting (`$$ ... $$`); semicolons

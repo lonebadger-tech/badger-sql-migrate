@@ -35,6 +35,7 @@ SIDEBAR = [
         ("Schema drift", "docs/drift/"),
         ("Existing databases", "docs/baseline/"),
         ("Moving from other tools", "docs/importing/"),
+        ("Converting between databases", "docs/converting/"),
         ("Journal tables", "docs/journal/"),
         ("Troubleshooting", "docs/troubleshooting/"),
     ]),
@@ -55,7 +56,7 @@ def link(path, label):
 def pages():
     return [overview(), install(), quick_start(), project(), ai(), plan(), changes(), certification(), revert(), fixing_changes(), generating(),
             teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(), postgresql(),
-            commands(), ci_cd(), bundles(), drift(), baseline(), importing(), journal(), troubleshooting(), extending()]
+            commands(), ci_cd(), bundles(), drift(), baseline(), importing(), converting(), journal(), troubleshooting(), extending()]
 
 
 # ---------------------------------------------------------------- get started
@@ -988,6 +989,8 @@ def commands():
         ("import grate &lt;folder&gt;", "[--folder key=name…] [--environment name…] [--ignore-directory-names] [--no-tokens] [--var name=value…] [--dry-run]", "Convert a grate or RoundhousE scripts folder into a new bsm project. No database."),
         ("import sqitch &lt;folder&gt;", "[--engine name] [--provider …] [--dry-run]", "Convert a Sqitch project into a new bsm project. No database."),
         ("import sqlproj &lt;file.sqlproj|folder&gt;", "[--dry-run]", "Convert an SSDT / SQL Database Project into a new SQL Server bsm project: one change or repeatable per object, in dependency order. No database."),
+        ("convert schema --out &lt;folder&gt;", "[--from-provider p] [--to p] [--names lower|snake|keep] [--case-sensitive] [--exclude glob…] [--dry-run]", "Read a SQL Server or PostgreSQL database's catalog and write a new project for the other provider: tables, keys and indexes as changes; views, routines and triggers translated as repeatables; CONVERSION.md listing what to review."),
+        ("convert data --target &lt;folder&gt;", "[--target-env env] [--from-provider p] [--tables glob…] [--truncate]", "Copy every table's rows into the deployed, converted project's database, then compare row counts."),
         ("vars", "", "Every variable for the environment: value, source, description."),
         ("render &lt;name&gt;", "[-k|--kind deploy|revert|verify]", "Print a change or repeatable exactly as it would run."),
         ("ai-guide", "", "Print the guide for AI assistants writing changes (Markdown). No database."),
@@ -1442,6 +1445,64 @@ FROM pg_tables WHERE schemaname = :'schema' \\gexec''', "changes/reference-data/
 </ul>
 """)
 
+
+
+def converting():
+    return doc("docs/converting/", "Converting between databases", "Move a live database from SQL Server to PostgreSQL or back: its schema becomes a new bsm project for the other provider, then its rows are copied and checked.", f"""
+{sh('''bsm convert schema -C db -e prod --out ../db-pg               # read prod's catalog, write a PostgreSQL project
+# read ../db-pg/CONVERSION.md, set the connection in ../db-pg/bsm.yaml
+bsm plan check -C ../db-pg
+bsm deploy -C ../db-pg                                       # create the schema in PostgreSQL
+bsm convert data -C db -e prod --target ../db-pg             # copy every row, compare counts
+bsm verify -C ../db-pg''')}
+<p>The source is an environment of the project in <code>-C</code>, or any database: <code>--from-provider sqlserver --connection-string "..."</code>. The target provider is the other one. Conversion reads the database itself (its catalog), not the project's scripts, so it also works for databases bsm has never managed.</p>
+
+<h2 id="what">What is converted</h2>
+<table>
+<tr><th>Object</th><th>How</th></tr>
+<tr><td>Schemas, sequences, tables, columns, defaults, computed columns, primary keys, unique and check constraints</td><td>Changes <code>convert-schemas</code>, <code>convert-types</code>, <code>convert-sequences</code>, <code>convert-tables</code>, each with a revert. Types are mapped (table below); defaults and checks are translated.</td></tr>
+<tr><td>Foreign keys, indexes (including filtered and included columns)</td><td>Changes <code>convert-foreign-keys</code> and <code>convert-indexes</code>, after the tables. On PostgreSQL, foreign keys are <code>DEFERRABLE</code> so data can be loaded in any order.</td></tr>
+<tr><td>Enums and domains (PostgreSQL), alias types (SQL Server)</td><td>An enum becomes <code>nvarchar</code> with a <code>CHECK (... IN (...))</code>; domains and alias types map to each other, and a domain's checks are added to each column that uses it.</td></tr>
+<tr><td>Views, functions, procedures, triggers</td><td>Translated statement by statement into repeatables (<code>repeatable/views</code>, <code>functions</code>, <code>procedures</code>, <code>triggers</code>) with <code>-- bsm:requires</code> lines so they are created in dependency order. Functions that defaults or checks call are created by a change before the tables.</td></tr>
+<tr><td>Comments (<code>COMMENT ON</code>, <code>MS_Description</code>)</td><td>Carried over.</td></tr>
+</table>
+<p>Partitioning, system versioning, Always Encrypted, masks, table types, synonyms, exclusion constraints, aggregates, and routines in languages other than SQL and PL/pgSQL are listed under "Not converted" in <code>CONVERSION.md</code>.</p>
+
+<h2 id="review">CONVERSION.md and REVIEW markers</h2>
+<p>Tables, keys and indexes convert mechanically. Code is translated as far as it can be done faithfully; everything that needs a person (a construct with no counterpart, a behaviour that differs, a guess) is marked <code>/* REVIEW bsm convert: ... */</code> in the script, listed at the top of the file, and collected in <code>CONVERSION.md</code> with the type mappings and every renamed identifier. Nothing is dropped silently: an object that cannot be translated at all is written with its original text commented out.</p>
+
+<h2 id="names">Names</h2>
+<p>Converting to PostgreSQL lowercases identifiers by default, so existing unquoted queries keep working (PostgreSQL lowercases them too): <code>dbo.CustomerOrder.FirstName</code> becomes <code>public.customerorder.firstname</code>. <code>--names snake</code> gives <code>public.customer_order.first_name</code>; <code>--names keep</code> keeps the exact case (then every reference must be double-quoted). Converting to SQL Server keeps names as they are. <code>dbo</code> and <code>public</code> map to each other. Two names that would collide after mapping stop the conversion.</p>
+
+<h2 id="behaviour">Behaviour differences handled</h2>
+<table>
+<tr><th>Difference</th><th>What the conversion does</th></tr>
+<tr><td>SQL Server compares text case-insensitively (<code>_CI_</code> collations)</td><td>PostgreSQL text columns get the nondeterministic collation <code>bsm_ci</code>, so equality, ordering and unique keys stay case-insensitive; translated <code>LIKE</code> uses <code>ILIKE</code>. <code>--case-sensitive</code> turns this off.</td></tr>
+<tr><td>T-SQL has no boolean values</td><td><code>bit</code> and <code>boolean</code> map to each other; <code>flag = 1</code> becomes <code>flag = true</code>, and a PostgreSQL condition used as a value becomes <code>CASE WHEN ... THEN 1 ELSE 0 END</code>.</td></tr>
+<tr><td>Unique constraints and NULL</td><td>SQL Server allows one NULL in a unique column, PostgreSQL many. To SQL Server, a unique constraint on nullable columns becomes a filtered unique index; to PostgreSQL it is flagged (add <code>NULLS NOT DISTINCT</code> to keep SQL Server's rule).</td></tr>
+<tr><td>SQL Server triggers work on whole statements (<code>inserted</code>, <code>deleted</code>)</td><td>To PostgreSQL: statement-level triggers with transition tables named <code>inserted</code> and <code>deleted</code>. To SQL Server: statement triggers map directly; row triggers loop over <code>inserted</code>/<code>deleted</code>, and a BEFORE trigger's changes to <code>NEW</code> are written back by primary key.</td></tr>
+<tr><td>PostgreSQL functions may change data; SQL Server functions may not</td><td>Such functions become procedures (callers use <code>EXEC</code>; a scalar result becomes an <code>OUTPUT</code> parameter <code>@result</code>).</td></tr>
+<tr><td><code>SCOPE_IDENTITY()</code>, <code>RETURNING</code>, <code>OUTPUT</code></td><td><code>INSERT ...; SET @id = SCOPE_IDENTITY()</code> becomes <code>INSERT ... RETURNING id INTO v_id</code>; <code>RETURNING</code> becomes <code>OUTPUT ... INTO</code> a table variable.</td></tr>
+<tr><td>Dates and intervals</td><td><code>DATEADD</code>/<code>DATEDIFF</code>/<code>DATEPART</code> and PostgreSQL interval arithmetic, <code>date_trunc</code>, <code>extract</code> and common <code>to_char</code>/<code>CONVERT</code> formats are translated.</td></tr>
+</table>
+
+<h2 id="types">Type mapping</h2>
+<table>
+<tr><th>SQL Server</th><th>PostgreSQL</th></tr>
+<tr><td><code>int</code>, <code>bigint</code>, <code>smallint</code>, <code>tinyint</code></td><td><code>integer</code>, <code>bigint</code>, <code>smallint</code>, <code>smallint</code> with a 0–255 check</td></tr>
+<tr><td><code>bit</code></td><td><code>boolean</code></td></tr>
+<tr><td><code>decimal(p,s)</code>, <code>money</code></td><td><code>numeric(p,s)</code>, <code>numeric(19,4)</code> (<code>numeric</code> without precision becomes <code>decimal(38,10)</code>)</td></tr>
+<tr><td><code>nvarchar(n)</code>, <code>nvarchar(max)</code>, <code>nchar(n)</code></td><td><code>varchar(n)</code>, <code>text</code>, <code>char(n)</code></td></tr>
+<tr><td><code>datetime2(p)</code>, <code>datetime</code>, <code>datetimeoffset(p)</code></td><td><code>timestamp(p)</code>, <code>timestamp(3)</code>, <code>timestamptz(p)</code> (at most 6 fractional digits; the original offset is not kept)</td></tr>
+<tr><td><code>uniqueidentifier</code>, <code>varbinary</code>, <code>xml</code></td><td><code>uuid</code>, <code>bytea</code>, <code>xml</code></td></tr>
+<tr><td><code>nvarchar(max)</code> with <code>ISJSON</code></td><td><code>json</code>, <code>jsonb</code>, and arrays (stored as JSON arrays)</td></tr>
+<tr><td><code>IDENTITY(s,i)</code></td><td><code>GENERATED BY DEFAULT AS IDENTITY</code></td></tr>
+</table>
+
+<h2 id="data">Copying the data</h2>
+<p><code>bsm convert data</code> copies every table, parents before children, with the same name mapping <code>convert schema</code> used (it reads <code>convert.json</code> in the converted project). Into SQL Server it uses bulk copy (identity values kept, triggers not fired, constraints checked afterwards); into PostgreSQL, <code>COPY</code> in one transaction with foreign keys deferred and user triggers off, so a failure leaves nothing behind. Identities and sequences are moved past the copied values, and row counts are compared at the end (exit code 1 when they differ).</p>
+<p>The target tables must be empty; <code>--truncate</code> empties them first. <code>--tables "sales.*"</code> copies only some. Run it after deploying the converted project, while the source is not being written to.</p>
+""")
 
 def journal():
     return doc("docs/journal/", "Journal tables", "What bsm stores in each database (schema bsm, configurable).", f"""

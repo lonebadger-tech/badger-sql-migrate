@@ -4,6 +4,7 @@ All notable changes to Badger SQL Migrate. The format follows [Keep a Changelog]
 
 ## Unreleased
 
+- `bsm convert schema` and `bsm convert data`: move a live database from SQL Server to PostgreSQL or back. The schema becomes a new bsm project for the other provider (types mapped, names lowercased or snake_cased for PostgreSQL, views, functions, procedures and triggers translated, every uncertain spot marked `REVIEW bsm convert` and listed in `CONVERSION.md`); the rows are then copied with bulk copy / `COPY` and row counts compared.
 - Everything the tool names is now `bsm`: the command (`bsm`, was `badger`), project files `bsm.yaml` and `bsm.plan`, the `bsm` journal schema, `-- bsm:` script directives, `{bsm.*}` variables, `BSM_*` environment variables and `~/.bsm`.
 - Open source under the MIT license, with contribution, security and conduct guides.
 - The .NET tool is published to nuget.org from GitHub Actions with Trusted Publishing.

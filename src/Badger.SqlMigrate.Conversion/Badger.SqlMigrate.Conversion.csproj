@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 'bsm convert': translates schemas and code between providers. It bridges two dialects, so it references both
+       provider assemblies; drivers stay inside the providers (data moves through IDataTransfer). -->
+  <ItemGroup>
+    <ProjectReference Include="..\Badger.SqlMigrate.Core\Badger.SqlMigrate.Core.csproj" />
+    <ProjectReference Include="..\Badger.SqlMigrate.Providers.PostgreSql\Badger.SqlMigrate.Providers.PostgreSql.csproj" />
+    <ProjectReference Include="..\Badger.SqlMigrate.Providers.SqlServer\Badger.SqlMigrate.Providers.SqlServer.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.140.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Badger.SqlMigrate.Conversion.Tests" />
+  </ItemGroup>
+
+</Project>

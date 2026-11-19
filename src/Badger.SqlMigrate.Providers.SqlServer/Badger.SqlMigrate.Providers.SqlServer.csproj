@@ -16,4 +16,8 @@
   <PropertyGroup>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Badger.SqlMigrate.Conversion" />
+  </ItemGroup>
+
 </Project>

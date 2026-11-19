@@ -21,6 +21,8 @@ public sealed class PostgreSqlSession : IDatabaseSession
 
     public bool InTransaction => transaction is not null;
 
+    internal NpgsqlConnection Connection => connection;
+
     public TimeSpan? CommandTimeout { get; set; }
 
     /// <summary>What the schema fingerprint leaves out for this environment.</summary>
