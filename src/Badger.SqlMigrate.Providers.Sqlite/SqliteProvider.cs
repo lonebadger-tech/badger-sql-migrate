@@ -1,4 +1,5 @@
 using System.Globalization;
+using Badger.SqlMigrate.Core;
 using Badger.SqlMigrate.Core.Configuration;
 using Badger.SqlMigrate.Core.Providers;
 using Microsoft.Data.Sqlite;
@@ -60,7 +61,16 @@ public sealed class SqliteProvider(SqliteOptions options) : IDatabaseProvider
     public async Task<IDatabaseSession> OpenSessionAsync(DeploymentEnvironment environment, SessionContext context, CancellationToken cancellationToken)
     {
         var builder = SqliteConnectionFactory.Build(environment);
-        var connection = new SqliteConnection(builder.ConnectionString);
+        SqliteConnection connection;
+        try
+        {
+            connection = new SqliteConnection(builder.ConnectionString);
+        }
+        catch (TypeInitializationException ex) when (ex.InnerException is not null)
+        {
+            throw new MigrationException("Could not load SQLite: " + (SqliteNativeLibrary.Description ?? ex.GetBaseException().Message), ex);
+        }
+
         try
         {
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -87,6 +97,7 @@ public sealed class SqliteProvider(SqliteOptions options) : IDatabaseProvider
         return
         [
             new("server", "SQLite " + S("version")),
+            new("engine", SqliteNativeLibrary.Description ?? "built in"),
             new("database", session is SqliteSession s ? s.Path : session.Description),
             new("journal mode", S("journal_mode")),
             new("encoding", S("encoding")),

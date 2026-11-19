@@ -1,19 +1,21 @@
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using Microsoft.Data.Sqlite;
 
 namespace Badger.SqlMigrate.Providers.Sqlite.Tests;
 
 /// <summary>
-/// BSM_TEST_SQLITE_LIBRARY runs the tests against that SQLite library (a path to libsqlite3.so.0, sqlite3.dll or
-/// libsqlite3.dylib) instead of the engine bsm ships with; CI uses it to test the oldest supported version (3.26) and the
-/// versions common Linux distributions ship. BSM_TEST_SQLITE_VERSION, when set, is the version the library must report.
+/// BSM_SQLITE_LIBRARY (read by bsm itself) runs the tests against that SQLite library (a path to libsqlite3.so.0,
+/// sqlite3.dll or libsqlite3.dylib) instead of the engine bsm ships with; CI uses it to test the oldest supported version
+/// (3.26) and the versions common Linux distributions ship. BSM_TEST_SQLITE_VERSION, when set, is the version the
+/// engine must report, so a run that quietly used another library fails.
 /// </summary>
 internal static class SystemSqlite
 {
-    public static string? Library => Environment.GetEnvironmentVariable("BSM_TEST_SQLITE_LIBRARY") is { Length: > 0 } path ? path : null;
-
     public static string? ExpectedVersion => Environment.GetEnvironmentVariable("BSM_TEST_SQLITE_VERSION") is { Length: > 0 } version ? version : null;
+
+    /// <summary>bsm picks its SQLite engine when its provider assembly loads; make sure that happens before any test connects.</summary>
+    [ModuleInitializer]
+    internal static void LoadTheProvider() => RuntimeHelpers.RunModuleConstructor(typeof(SqliteProvider).Module.ModuleHandle);
 
     /// <summary>The version of the engine the tests run on.</summary>
     public static Version EngineVersion { get; } = ReadEngineVersion();
@@ -25,20 +27,6 @@ internal static class SystemSqlite
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT sqlite_version();";
         return Version.Parse((string)command.ExecuteScalar()!);
-    }
-
-    [ModuleInitializer]
-    internal static void Use()
-    {
-        if (Library is not { } library)
-        {
-            return;
-        }
-
-        // The built-in engine is the library "e_sqlite3": point that name at the requested library instead. Loading the
-        // built-in one first and swapping providers afterwards would fail where it cannot load at all.
-        NativeLibrary.SetDllImportResolver(typeof(SQLitePCL.SQLite3Provider_e_sqlite3).Assembly, (name, _, _) =>
-            name == "e_sqlite3" ? NativeLibrary.Load(library) : IntPtr.Zero);
     }
 }
 

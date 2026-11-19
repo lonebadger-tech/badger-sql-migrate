@@ -80,7 +80,7 @@ public sealed class SqliteFeatureTests
     {
         await using var a = new TestDatabase();
         await using var b = new TestDatabase();
-        // DROP COLUMN arrived in SQLite 3.35; older engines (BSM_TEST_SQLITE_LIBRARY) check the rest.
+        // DROP COLUMN arrived in SQLite 3.35; older engines (BSM_SQLITE_LIBRARY) check the rest.
         await ExecAsync(a, SystemSqlite.EngineVersion >= SqliteOptions.DropColumn
             ? "CREATE TABLE t (id INTEGER PRIMARY KEY, old TEXT, \"name\" TEXT);\nALTER TABLE t ADD COLUMN email TEXT DEFAULT 'x';\nALTER TABLE t RENAME COLUMN name TO full_name;\nALTER TABLE t DROP COLUMN old;"
             : "CREATE TABLE t (id INTEGER PRIMARY KEY, \"name\" TEXT);\nALTER TABLE t ADD COLUMN email TEXT DEFAULT 'x';\nALTER TABLE t RENAME COLUMN name TO full_name;");

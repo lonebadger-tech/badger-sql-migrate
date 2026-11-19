@@ -1415,6 +1415,7 @@ environments:
 <li>If every program that opens the database has a newer SQLite (it bundles its own, as many drivers do), raise <code>minVersion</code> to match.</li>
 </ul>
 <p>bsm's tests run against the SQLite of each of those distributions, from 3.26 up, as well as the built-in engine on Windows, macOS and Linux.</p>
+<p>On Linux the built-in engine needs glibc 2.33 or later. On older systems (RHEL 8, Ubuntu 20.04, Debian 11) bsm uses the system's <code>libsqlite3</code> instead, when it is 3.26 or later: install <code>sqlite-libs</code> or <code>libsqlite3-0</code> if it is missing. To use a particular library, set <code>BSM_SQLITE_LIBRARY</code> to its path. <code>bsm doctor</code> shows which engine is in use.</p>
 
 <h2>Statements and transactions</h2>
 <p>bsm splits scripts into statements the way the <code>sqlite3</code> shell does: at semicolons, except inside strings, quoted names, comments and <code>CREATE TRIGGER … BEGIN … END;</code> bodies. A change runs in one transaction (<code>BEGIN IMMEDIATE</code>), and SQLite's DDL is transactional, so a failure leaves nothing behind. Errors name the line of the statement that failed.</p>

@@ -112,14 +112,13 @@ jobs:
       # BSM_TEST_SQLITE_VERSION makes the run fail if the tests did not get the distribution's library.
       - run: dotnet test tests/Badger.SqlMigrate.Providers.Sqlite.Tests -c Release
         env:
-          BSM_TEST_SQLITE_LIBRARY: ${{ matrix.library }}
+          BSM_SQLITE_LIBRARY: ${{ matrix.library }}
           BSM_TEST_SQLITE_VERSION: ${{ matrix.version }}
-      # bsm itself runs its built-in engine: it must load on every one of these distributions too.
-      - name: Test the built-in engine on this distribution
+      # Without BSM_SQLITE_LIBRARY bsm picks the engine itself: the built-in one, or the system's where the built-in one
+      # cannot load (it needs glibc 2.33; AlmaLinux 8 has 2.28).
+      - name: Test the engine bsm picks on this distribution
         if: always()
-        run: |
-          ldd "$(find tests -path '*/runtimes/linux-x64/native/libe_sqlite3.so' | head -n 1)"
-          dotnet test tests/Badger.SqlMigrate.Providers.Sqlite.Tests -c Release --no-build
+        run: dotnet test tests/Badger.SqlMigrate.Providers.Sqlite.Tests -c Release --no-build
 
   # Every supported PostgreSQL major version: the provider's conformance and feature tests against each.
   postgresql:
