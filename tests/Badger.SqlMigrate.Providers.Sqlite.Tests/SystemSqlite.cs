@@ -35,12 +35,10 @@ internal static class SystemSqlite
             return;
         }
 
-        NativeLibrary.SetDllImportResolver(typeof(SQLitePCL.SQLite3Provider_sqlite3).Assembly, (name, _, _) =>
-            name == "sqlite3" ? NativeLibrary.Load(library) : IntPtr.Zero);
-
-        // Microsoft.Data.Sqlite installs its bundled engine the first time it is used; replace it before any connection opens.
-        RuntimeHelpers.RunClassConstructor(typeof(SqliteConnection).TypeHandle);
-        SQLitePCL.raw.SetProvider(new SQLitePCL.SQLite3Provider_sqlite3());
+        // The built-in engine is the library "e_sqlite3": point that name at the requested library instead. Loading the
+        // built-in one first and swapping providers afterwards would fail where it cannot load at all.
+        NativeLibrary.SetDllImportResolver(typeof(SQLitePCL.SQLite3Provider_e_sqlite3).Assembly, (name, _, _) =>
+            name == "e_sqlite3" ? NativeLibrary.Load(library) : IntPtr.Zero);
     }
 }
 

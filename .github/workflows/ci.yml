@@ -114,6 +114,12 @@ jobs:
         env:
           BSM_TEST_SQLITE_LIBRARY: ${{ matrix.library }}
           BSM_TEST_SQLITE_VERSION: ${{ matrix.version }}
+      # bsm itself runs its built-in engine: it must load on every one of these distributions too.
+      - name: Test the built-in engine on this distribution
+        if: always()
+        run: |
+          ldd "$(find tests -path '*/runtimes/linux-x64/native/libe_sqlite3.so' | head -n 1)"
+          dotnet test tests/Badger.SqlMigrate.Providers.Sqlite.Tests -c Release --no-build
 
   # Every supported PostgreSQL major version: the provider's conformance and feature tests against each.
   postgresql:
