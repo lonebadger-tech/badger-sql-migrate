@@ -10,6 +10,7 @@ All notable changes to Badger SQL Migrate. The format follows [Keep a Changelog]
 - Fixed: `bsm verify` said the schema "matches last deploy" when no fingerprint had been recorded; it now says none is recorded and drift was not checked.
 - Fixed: `revert -y` printed "would revert" for each change before reverting.
 - Fixed: on Windows, the MCP server's `add_change` and `rework_change` hung: looking up git's `user.name` for the plan's author left git waiting on the server's stdin. The lookup now gives git no input and gives up after 3 seconds.
+- Fixed: on PostgreSQL 14.25, 15.20, 16.16, 17.12, 18.7 and later (the November 2026 releases for CVE-2026-6460), every table showed as drifted and `add --from-diff` scripted `~ column ...: options` changes. These releases store an internal `pg_attver` entry in each column's options, different in every database; bsm now leaves out internal `pg_` options. Fingerprints recorded on earlier releases are unchanged.
 - Fixed: `--connection-string` now connects exactly as the string says. The environment's `tls` settings no longer override its `Encrypt` and `TrustServerCertificate`, joining host, database and sign-in (an environment with `authentication: integrated` no longer turns a SQL login string into Windows sign-in).
 - Fixed: `bsm doctor` failed with "VIEW SERVER STATE permission was denied" for logins without that permission; it now reports the connection's encryption as unknown and the rest as usual.
 - `bsm add --author`; the default author is `BSM_AUTHOR`, then git's `user.name`, then the OS user name.

@@ -444,7 +444,7 @@ internal sealed class PostgreSqlModel
                    CASE WHEN a.attcollation <> t.typcollation THEN (SELECT quote_ident(cn.nspname) || '.' || quote_ident(co.collname) FROM pg_collation co JOIN pg_namespace cn ON cn.oid = co.collnamespace WHERE co.oid = a.attcollation) END AS collation,
                    CASE a.attstorage WHEN 'p' THEN 'PLAIN' WHEN 'e' THEN 'EXTERNAL' WHEN 'm' THEN 'MAIN' ELSE 'EXTENDED' END AS storage,
                    CASE t.typstorage WHEN 'p' THEN 'PLAIN' WHEN 'e' THEN 'EXTERNAL' WHEN 'm' THEN 'MAIN' ELSE 'EXTENDED' END AS default_storage,
-                   array_to_string(a.attoptions, ', ') AS options,
+                   NULLIF(array_to_string(ARRAY(SELECT o FROM unnest(a.attoptions) AS o WHERE left(o, 3) <> 'pg_'), ', '), '') AS options,
                    (SELECT format('START WITH %s INCREMENT BY %s MINVALUE %s MAXVALUE %s CACHE %s%s', s.seqstart, s.seqincrement, s.seqmin, s.seqmax, s.seqcache, CASE WHEN s.seqcycle THEN ' CYCLE' ELSE '' END)
                     FROM pg_depend dp JOIN pg_sequence s ON s.seqrelid = dp.objid WHERE dp.refobjid = a.attrelid AND dp.refobjsubid = a.attnum AND dp.deptype = 'i' AND dp.classid = 'pg_class'::regclass) AS identity_options
             FROM pg_attribute a

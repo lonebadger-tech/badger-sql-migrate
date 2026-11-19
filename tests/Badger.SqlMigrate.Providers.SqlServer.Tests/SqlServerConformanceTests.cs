@@ -8,8 +8,9 @@ using Testcontainers.MsSql;
 namespace Badger.SqlMigrate.Providers.SqlServer.Tests;
 
 /// <summary>
-/// One SQL Server for the whole test run: BSM_TEST_SQLSERVER (a connection string to an existing server)
-/// or a Testcontainers SQL Server 2022 container. When neither is available the conformance tests skip.
+/// One SQL Server for the whole test run: BSM_TEST_SQLSERVER (a connection string to an existing server, such as
+/// LocalDB) or a Testcontainers container of BSM_TEST_SQLSERVER_IMAGE (default SQL Server 2022; CI runs 2017 through
+/// 2025, and 2016 on LocalDB). When neither is available the conformance tests skip.
 /// </summary>
 public sealed class SqlServerFixture : IAsyncLifetime
 {
@@ -37,7 +38,8 @@ public sealed class SqlServerFixture : IAsyncLifetime
 
         try
         {
-            container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest").Build();
+            var image = Environment.GetEnvironmentVariable("BSM_TEST_SQLSERVER_IMAGE") is { Length: > 0 } configuredImage ? configuredImage : "mcr.microsoft.com/mssql/server:2022-latest";
+            container = new MsSqlBuilder(image).Build();
             await container.StartAsync();
             MasterConnectionString = container.GetConnectionString();
             await ReadVersionAsync();
