@@ -24,12 +24,14 @@ public sealed partial class SqlServerDataTransfer : IDataTransfer
 
     public async Task<IReadOnlyList<TransferColumn>> ColumnsAsync(IDatabaseSession session, PortableName table, CancellationToken cancellationToken)
     {
-        var rows = await session.QueryAsync("""
+        // Graph tables (and sys.columns.graph_type) arrived in SQL Server 2017; their internal columns are not copied.
+        var graph = await SqlServerCompatibility.HasGraphTablesAsync(session, cancellationToken).ConfigureAwait(false);
+        var rows = await session.QueryAsync($"""
             SELECT c.name, ts.name AS type_schema, t.name AS type_name, t.is_user_defined, c.max_length, c.precision, c.scale
             FROM sys.columns c
             JOIN sys.types t ON t.user_type_id = c.user_type_id
             JOIN sys.schemas ts ON ts.schema_id = t.schema_id
-            WHERE c.object_id = OBJECT_ID(@name) AND c.is_computed = 0 AND c.graph_type IS NULL
+            WHERE c.object_id = OBJECT_ID(@name) AND c.is_computed = 0{(graph ? " AND c.graph_type IS NULL" : string.Empty)}
             ORDER BY c.column_id;
             """, new Dictionary<string, object?> { ["name"] = Name(table) }, cancellationToken).ConfigureAwait(false);
         return rows.Select(r => new TransferColumn((string)r["name"]!, SqlServerModel.TypeName((string)r["type_schema"]!, (string)r["type_name"]!, r["is_user_defined"] is true,

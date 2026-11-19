@@ -19,12 +19,19 @@ public sealed class SqlServerFixture : IAsyncLifetime
 
     public string? UnavailableReason { get; private set; }
 
+    /// <summary>The server's major version (13 = SQL Server 2016, 14 = 2017, 16 = 2022); 0 when no server is available.</summary>
+    public int MajorVersion { get; private set; }
+
+    /// <summary>HISTORY_RETENTION_PERIOD for temporal tables arrived in SQL Server 2017.</summary>
+    public bool SupportsHistoryRetention => MajorVersion >= 14;
+
     public async Task InitializeAsync()
     {
         var configured = Environment.GetEnvironmentVariable("BSM_TEST_SQLSERVER");
         if (!string.IsNullOrWhiteSpace(configured))
         {
             MasterConnectionString = configured;
+            await ReadVersionAsync();
             return;
         }
 
@@ -33,11 +40,20 @@ public sealed class SqlServerFixture : IAsyncLifetime
             container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest").Build();
             await container.StartAsync();
             MasterConnectionString = container.GetConnectionString();
+            await ReadVersionAsync();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             UnavailableReason = $"SQL Server container could not start ({ex.GetType().Name}: {ex.Message.Split('\n')[0]}). Start Docker or set BSM_TEST_SQLSERVER.";
         }
+    }
+
+    private async Task ReadVersionAsync()
+    {
+        await using var connection = new SqlConnection(MasterConnectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand("SELECT CAST(SERVERPROPERTY('ProductMajorVersion') AS int);", connection);
+        MajorVersion = (int)(await command.ExecuteScalarAsync())!;
     }
 
     public async Task DisposeAsync()

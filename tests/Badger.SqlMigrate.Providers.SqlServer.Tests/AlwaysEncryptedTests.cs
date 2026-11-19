@@ -32,10 +32,31 @@ public sealed class TestKeyStoreProvider : SqlColumnEncryptionKeyStoreProvider
 }
 
 [Collection("sqlserver")]
-public sealed class AlwaysEncryptedTests(SqlServerFixture fixture)
+public sealed class AlwaysEncryptedTests(SqlServerFixture fixture) : IAsyncLifetime
 {
     private const string Ssn = "123-45-6789";
     private readonly SqlServerProvider provider = new();
+    private readonly List<string> databases = [];
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    // Drop the databases the test created, so a long-lived server (LocalDB, BSM_TEST_SQLSERVER) does not collect them.
+    public async Task DisposeAsync()
+    {
+        if (databases.Count == 0)
+        {
+            return;
+        }
+
+        SqlConnection.ClearAllPools();
+        await using var master = new SqlConnection(fixture.MasterConnectionString);
+        await master.OpenAsync();
+        foreach (var name in databases)
+        {
+            await using var drop = new SqlCommand($"ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{name}];", master);
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
 
     [SkippableFact]
     public async Task Keys_are_provisioned_per_environment_rotated_and_data_round_trips()
@@ -116,12 +137,32 @@ public sealed class AlwaysEncryptedTests(SqlServerFixture fixture)
         Assert.Equal(results[0].LiveFingerprint, results[1].LiveFingerprint);
     }
 
-    private DeploymentEnvironment Environment(string name, string database, (string Name, string Path)[] cmks, string cekCmk)
+    [SkippableFact]
+    public async Task Enclave_keys_on_a_server_without_secure_enclaves_are_a_clear_conflict()
+    {
+        // sys.column_master_keys.allow_enclave_computations arrived in SQL Server 2019; querying it on 2016/2017 failed to
+        // compile. On a newer server, force the old path.
+        Skip.If(fixture.MasterConnectionString is null, fixture.UnavailableReason);
+        using var project = new ProjectDir();
+        var env = Environment("test", await CreateDatabaseAsync(), cmks: [("CMK_Enclave", "test/enclave")], cekCmk: "CMK_Enclave", enclave: true);
+        await using var e = await EngineAsync(env, project);
+        ((SqlServerSession)e.Session).HasEnclaveComputations = false;
+
+        var plan = await e.Engine.PlanResourcesAsync();
+        var conflict = Assert.Single(plan, a => a.Kind == ResourceActionKind.Conflict);
+        Assert.Equal("CMK_Enclave", conflict.Name);
+        Assert.Contains("SQL Server 2019", conflict.Description, StringComparison.Ordinal);
+
+        var ex = await Assert.ThrowsAsync<MigrationException>(() => e.Engine.DeployAsync(new DeployOptions()));
+        Assert.Contains("enclaveComputations", ex.Message, StringComparison.Ordinal);
+    }
+
+    private DeploymentEnvironment Environment(string name, string database, (string Name, string Path)[] cmks, string cekCmk, bool enclave = false)
     {
         var masterKeys = new JsonObject();
         foreach (var (cmk, path) in cmks)
         {
-            masterKeys[cmk] = new JsonObject { ["keyStore"] = TestKeyStoreProvider.Name, ["keyPath"] = path };
+            masterKeys[cmk] = new JsonObject { ["keyStore"] = TestKeyStoreProvider.Name, ["keyPath"] = path, ["enclaveComputations"] = enclave };
         }
 
         var builder = new SqlConnectionStringBuilder(fixture.MasterConnectionString) { InitialCatalog = database };
@@ -213,6 +254,7 @@ public sealed class AlwaysEncryptedTests(SqlServerFixture fixture)
         await master.OpenAsync();
         await using var create = new SqlCommand($"CREATE DATABASE [{name}];", master);
         await create.ExecuteNonQueryAsync();
+        databases.Add(name);
         return name;
     }
 

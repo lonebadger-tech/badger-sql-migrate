@@ -5,9 +5,11 @@ All notable changes to Badger SQL Migrate. The format follows [Keep a Changelog]
 ## Unreleased
 
 - Fixed: deploy, verify and `add --from-diff` failed on SQL Server 2016 ("Invalid column name 'history_retention_period'"); temporal tables now fingerprint the same on 2016 and later.
+- Fixed more SQL Server 2016 failures, found running the tests and an end-to-end project on SQL Server 2016 and 2025 LocalDB: scripts from `add --from-diff` that drop an unnamed unique key or foreign key used `STRING_AGG` (SQL Server 2017+); deploying with Always Encrypted keys failed with "Invalid column name 'allow_enclave_computations'"; and `bsm convert data` failed with "Invalid column name 'graph_type'". A column master key with `enclaveComputations` on a server without secure enclaves (before SQL Server 2019) is now a clear resource conflict instead of a syntax error.
 - Fixed: if recording the schema fingerprint fails after a deploy, the deploy now reports a warning (the changes are applied) instead of an unhandled exception, and the next `bsm deploy` records the fingerprint even when nothing is pending. Unexpected database errors print one line instead of a stack trace.
 - Fixed: `bsm verify` said the schema "matches last deploy" when no fingerprint had been recorded; it now says none is recorded and drift was not checked.
 - Fixed: `revert -y` printed "would revert" for each change before reverting.
+- Fixed: on Windows, the MCP server's `add_change` and `rework_change` hung: looking up git's `user.name` for the plan's author left git waiting on the server's stdin. The lookup now gives git no input and gives up after 3 seconds.
 - `bsm add --author`; the default author is `BSM_AUTHOR`, then git's `user.name`, then the OS user name.
 - `env show` and `vars` show unset `${env:...}` references as written instead of failing.
 - A missing SQL Server database now gives "Could not open database 'x': it does not exist ... create it first" instead of the login error, and connection descriptions show a port only when one is configured.

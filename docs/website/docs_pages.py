@@ -84,7 +84,7 @@ def overview():
 </ul>
 
 <h2>Supported databases</h2>
-<p>SQL Server 2016 SP1 and later (on Windows, Linux and containers), Azure SQL Database and Azure SQL Managed Instance. The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}); SQL Server is the only provider today.</p>
+<p>SQL Server 2016 SP1 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance; features that need a newer server, such as history retention for temporal tables (2017) or Always Encrypted with secure enclaves (2019), need it only where you use them. PostgreSQL 12 and later. SQLite, with the engine built in. The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
 """)
 
 
