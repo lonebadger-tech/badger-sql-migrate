@@ -93,7 +93,7 @@ def install():
 <h2>.NET tool</h2>
 {sh('''dotnet tool install --global Badger.SqlMigrate
 bsm --version''')}
-<p>Requires the .NET 10 SDK. Pin a version per repository with a local tool manifest (<code>dotnet new tool-manifest</code>, then <code>dotnet tool install Badger.SqlMigrate</code>) and run it as <code>dotnet bsm</code>.</p>
+<p>Requires the .NET 10 SDK. Pin a version per repository with a local tool manifest (<code>dotnet new tool-manifest</code>, then <code>dotnet tool install Badger.SqlMigrate</code>) and run it as <code>dotnet bsm</code>. (Pass options after the command: <code>dotnet bsm add --help</code>. <code>dotnet tool run bsm add --help</code> shows dotnet's own help instead.)</p>
 
 <h2>Standalone executable</h2>
 <p>{link("download/", "Download")} the archive for your platform and put <code>bsm</code> on your <code>PATH</code>. The executables are self-contained: no .NET runtime needed. Builds exist for Windows (x64, Arm64), macOS (Apple silicon, Intel) and Linux (x64, Arm64, Alpine x64), plus a portable build for any OS with the .NET 10 runtime.</p>
@@ -812,6 +812,14 @@ def connections():
   serverCertificate: certs/sql01.cer # pin the server certificate
   trustServerCertificate: false      # true only for local development''')}
 
+<h2>LocalDB</h2>
+<p>SQL Server Express LocalDB (Windows) works with Windows sign-in:</p>
+{yaml('''local:
+  host: (localdb)\\MSSQLLocalDB
+  database: MyApp
+  authentication: integrated''')}
+<p>bsm works with SQL Server 2016 and later, including LocalDB.</p>
+
 <h2>Any SqlClient setting</h2>
 <p><code>connectionProperties</code> accepts every keyword SqlClient understands and applies them last, over everything else. Invalid keywords or values are reported by <code>bsm doctor</code> and before connecting.</p>
 {yaml('''connectionProperties:
@@ -997,7 +1005,7 @@ def always_encrypted():
 def commands():
     cmds = [
         ("init", "[--provider sqlserver|postgresql|sqlite] [--no-agents-file]", "Create bsm.yaml, bsm.plan, folders, .gitattributes and AGENTS.md (instructions for AI assistants)."),
-        ("add &lt;name&gt;", "[-r|--requires a b] [-n|--note text] [--notx] [--irreversible]", "Scaffold changes/&lt;name&gt;/ and append it to the plan."),
+        ("add &lt;name&gt;", "[-r|--requires a b] [-n|--note text] [--notx] [--irreversible] [--author name]", "Scaffold changes/&lt;name&gt;/ and append it to the plan. The author recorded in the plan is --author, else BSM_AUTHOR, else git's user.name."),
         ("add &lt;name&gt; --from-diff", "[--shadow-env env] [--keep-shadow] [--exclude schema.name…] [--dry-run] [--no-record] [-r …] [-n …]", "Generate deploy.sql and revert.sql from schema edits made in the environment's database, compared with a shadow database built from the plan; records the change as applied there."),
         ("tag &lt;name&gt;", "", "Tag the last change in the plan (use as @name)."),
         ("plan check", "", "Validate plan, folders, lint and variable definitions. No database."),
@@ -1115,6 +1123,28 @@ ADD https://lonebadgerdownloads.blob.core.windows.net/badger-sql-migrate/v{VERSI
 RUN tar -xzf /tmp/bsm.tgz -C /usr/local/bin bsm && rm /tmp/bsm.tgz
 COPY db /db
 ENTRYPOINT ["bsm", "-C", "/db"]''', "", "Dockerfile")}
+
+<h2 id="up-to-date">Is this database up to date?</h2>
+{sh('''bsm status -C db -e prod --exit-code      # exit code 3 when changes are pending or history differs
+bsm status -C db -e prod --json            # upToDate, certified, databaseHead, planHead, changes''')}
+<p>An application can make the same check at start-up without bsm. Record the plan head when you build (<code>planHead</code> in the output of <code>bsm plan check --json</code>, which needs no database), and compare it with the chain id of the last change the database has:</p>
+{sql('''-- SQL Server
+SELECT TOP (1) chain_id FROM bsm.changes ORDER BY sequence DESC;
+-- PostgreSQL
+SELECT chain_id FROM bsm.changes ORDER BY sequence DESC LIMIT 1;
+-- SQLite
+SELECT chain_id FROM bsm_changes ORDER BY sequence DESC LIMIT 1;''')}
+<p>Equal chain ids mean the database has exactly the build's changes, in order. <code>sequence</code> and <code>chain_id</code> are part of the documented {link("docs/journal/", "journal")}: a change to its layout raises <code>state_version</code> in the meta table.</p>
+
+<h2 id="test-databases">Fast test databases</h2>
+<p>Deploying for every test is slower than it needs to be (most of it is starting the process). Deploy once into a template database per test run, then copy the template for each test:</p>
+<table>
+<tr><th>Database</th><th>Copy the template</th></tr>
+<tr><td>SQL Server</td><td><code>BACKUP DATABASE app_template TO DISK = '...'</code> once, then <code>RESTORE DATABASE app_test_1 FROM DISK = '...' WITH MOVE ...</code> per test (about half a second for a small schema)</td></tr>
+<tr><td>PostgreSQL</td><td><code>CREATE DATABASE app_test_1 TEMPLATE app_template</code></td></tr>
+<tr><td>SQLite</td><td>Copy the file</td></tr>
+</table>
+<p>A copy keeps the journal, so <code>bsm status</code> and <code>bsm verify</code> work on it like on the template. Run <code>bsm deploy</code> against the template whenever the plan head changes.</p>
 
 <h2>Applications that migrate themselves</h2>
 <p>The engine is also a .NET library; see {link("docs/extending/", "Library and providers")}.</p>
@@ -1581,6 +1611,18 @@ bsm verify -C ../db-pg''')}
 <tr><td><code>uniqueidentifier</code>, <code>varbinary</code>, <code>xml</code></td><td><code>uuid</code>, <code>bytea</code>, <code>xml</code></td></tr>
 <tr><td><code>nvarchar(max)</code> with <code>ISJSON</code></td><td><code>json</code>, <code>jsonb</code>, and arrays (stored as JSON arrays)</td></tr>
 <tr><td><code>IDENTITY(s,i)</code></td><td><code>GENERATED BY DEFAULT AS IDENTITY</code></td></tr>
+</table>
+
+<h2 id="sqlite">SQLite</h2>
+<p>SQLite is a different shape of database, so converting to or from it changes more than the dialect:</p>
+<table>
+<tr><th>Topic</th><th>What the conversion does</th></tr>
+<tr><td>Schemas</td><td>SQLite has none. Tables in the source's default schema keep their names; others get the schema as a prefix (<code>sales.Customer</code> becomes <code>sales_customer</code>). From SQLite, everything lands in <code>dbo</code> or <code>public</code>.</td></tr>
+<tr><td>Types</td><td>To SQLite, columns keep a descriptive declared type (<code>VARCHAR(50)</code>, <code>DATETIME</code>, <code>BOOLEAN</code>, <code>NUMERIC(12,2)</code>) whose affinity stores the values; dates are ISO 8601 text (UTC for time-zone-aware values), booleans 0/1 with a check, JSON with <code>json_valid</code>. Decimals with fractions become REAL in SQLite: keep money in integer cents if exactness matters. From SQLite, declared types are read with SQLite's affinity rules; a column with no declared type becomes text.</td></tr>
+<tr><td>Keys</td><td><code>INTEGER PRIMARY KEY</code> (the rowid) and identities map to each other (<code>AUTOINCREMENT</code>, so numbers are never reused). Foreign keys are part of <code>CREATE TABLE</code> in SQLite. <code>COLLATE NOCASE</code> maps to the case-insensitive collations on the other side.</td></tr>
+<tr><td>Sequences, functions, procedures</td><td>SQLite has none. Sequences and the defaults that use them are dropped and flagged; routines are kept commented out. A function whose body is a single expression is written in place where views use it.</td></tr>
+<tr><td>Triggers</td><td>SQLite triggers are row-level, one event each, and hold only SQL. To SQLite: PL/pgSQL and T-SQL logic is flattened (IF branches become WHERE guards, RAISE becomes <code>RAISE(ABORT, ...)</code>, a BEFORE trigger's changes to NEW become an UPDATE of the row, statement triggers run per row over that row). From SQLite: each trigger becomes a PL/pgSQL trigger function, or a SQL Server trigger over <code>inserted</code>/<code>deleted</code>.</td></tr>
+<tr><td>Views</td><td>SQLite functions (<code>ifnull</code>, <code>instr</code>, <code>group_concat</code>, <code>strftime</code>, <code>datetime('now', '-30 days')</code>, <code>iif</code> ...) and PostgreSQL and T-SQL ones are mapped to each other. SQL Server and SQLite convert by way of PostgreSQL's syntax, so both directions use the same, tested mappings.</td></tr>
 </table>
 
 <h2 id="data">Copying the data</h2>

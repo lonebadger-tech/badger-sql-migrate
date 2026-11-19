@@ -28,7 +28,7 @@ public sealed record RenderedScript(string Name, string Kind, string Text, bool 
 /// </summary>
 public static partial class Commands
 {
-    public static AddedChange AddChange(string projectDir, string name, string[] requires, string? note, bool noTx, bool irreversible, string? deploy = null, string? revert = null, string? verify = null)
+    public static AddedChange AddChange(string projectDir, string name, string[] requires, string? note, bool noTx, bool irreversible, string? deploy = null, string? revert = null, string? verify = null, string? author = null)
     {
         var dir = Path.GetFullPath(projectDir);
         var config = BsmConfig.Load(dir);
@@ -80,7 +80,7 @@ public static partial class Commands
         }
 
         var flags = (noTx ? ChangeFlags.NoTransaction : ChangeFlags.None) | (irreversible ? ChangeFlags.Irreversible : ChangeFlags.None);
-        var line = PlanFile.FormatChange(new PlanChange(name, requires, flags, DateTimeOffset.UtcNow, Author(), note, 0));
+        var line = PlanFile.FormatChange(new PlanChange(name, requires, flags, DateTimeOffset.UtcNow, Author(dir, author), note, 0));
         AppendLine(planPath, line);
         return new AddedChange(name, files, line);
 
@@ -142,7 +142,7 @@ public static partial class Commands
         }
 
         var old = plan.Changes[index];
-        var line = PlanFile.FormatChange(new PlanChange(newName, [name], old.Flags & ChangeFlags.NoTransaction, DateTimeOffset.UtcNow, Author(), note ?? $"rework of {name}", 0));
+        var line = PlanFile.FormatChange(new PlanChange(newName, [name], old.Flags & ChangeFlags.NoTransaction, DateTimeOffset.UtcNow, Author(projectDir), note ?? $"rework of {name}", 0));
         AppendLine(planPath, line);
         return new ReworkedChange(newName, name, files, line);
     }
@@ -321,5 +321,40 @@ public static partial class Commands
         return text.EndsWith('\n') ? text : text + "\n";
     }
 
-    private static string Author() => Environment.GetEnvironmentVariable("BSM_AUTHOR") ?? Environment.UserName.Replace(' ', '_');
+    /// <summary>
+    /// The author written into bsm.plan (a committed file): --author, else BSM_AUTHOR, else git's user.name for the
+    /// project (already public in its commits), else the OS user name. Spaces become underscores (the plan is
+    /// space-separated).
+    /// </summary>
+    public static string Author(string projectDir, string? explicitAuthor = null)
+    {
+        var author = explicitAuthor ?? Environment.GetEnvironmentVariable("BSM_AUTHOR") ?? GitUserName(projectDir) ?? Environment.UserName;
+        return string.Join('_', author.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static string? GitUserName(string projectDir)
+    {
+        try
+        {
+            var start = new System.Diagnostics.ProcessStartInfo("git", ["config", "user.name"])
+            {
+                WorkingDirectory = Directory.Exists(projectDir) ? Path.GetFullPath(projectDir) : Directory.GetCurrentDirectory(),
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            using var git = System.Diagnostics.Process.Start(start);
+            if (git is null)
+            {
+                return null;
+            }
+
+            var name = git.StandardOutput.ReadToEnd().Trim();
+            return git.WaitForExit(3000) && git.ExitCode == 0 && name.Length > 0 ? name : null;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+        {
+            return null;
+        }
+    }
 }

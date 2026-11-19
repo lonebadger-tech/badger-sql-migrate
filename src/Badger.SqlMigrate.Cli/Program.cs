@@ -53,11 +53,12 @@ var addShadowEnv = new Option<string?>("--shadow-env") { Description = "Create t
 var addKeepShadow = new Option<bool>("--keep-shadow") { Description = "Do not drop the shadow database afterwards." };
 var addExclude = new Option<string[]>("--exclude") { Description = "Objects to leave out, as schema.name globs (e.g. audit.*). Repeatable." };
 var addDryRun = new Option<bool>("--dry-run") { Description = "With --from-diff: print the generated deploy script; write nothing." };
+var addAuthor = new Option<string?>("--author") { Description = "Author written into bsm.plan (default: BSM_AUTHOR, else git's user.name, else the OS user name)." };
 var addNoRecord = new Option<bool>("--no-record") { Description = "With --from-diff: do not record the new change as applied in the database it came from." };
-var add = new Command("add", "Add a change: creates changes/<name>/ scripts and appends it to bsm.plan.") { addName, addRequires, addNote, addNoTx, addIrreversible, addFromDiff, addShadowEnv, addKeepShadow, addExclude, addDryRun, addNoRecord };
+var add = new Command("add", "Add a change: creates changes/<name>/ scripts and appends it to bsm.plan.") { addName, addRequires, addNote, addNoTx, addIrreversible, addFromDiff, addShadowEnv, addKeepShadow, addExclude, addDryRun, addNoRecord, addAuthor };
 add.SetAction((r, ct) => r.GetValue(addFromDiff)
-    ? Commands.Run(Globals(r), g => Commands.AddFromDiff(g, r.GetValue(addName)!, r.GetValue(addRequires) ?? [], r.GetValue(addNote), r.GetValue(addShadowEnv), r.GetValue(addKeepShadow), r.GetValue(addExclude) ?? [], r.GetValue(addDryRun), !r.GetValue(addNoRecord), ct))
-    : Commands.Run(Globals(r), g => Commands.Add(g, r.GetValue(addName)!, r.GetValue(addRequires) ?? [], r.GetValue(addNote), r.GetValue(addNoTx), r.GetValue(addIrreversible))));
+    ? Commands.Run(Globals(r), g => Commands.AddFromDiff(g, r.GetValue(addName)!, r.GetValue(addRequires) ?? [], r.GetValue(addNote), r.GetValue(addShadowEnv), r.GetValue(addKeepShadow), r.GetValue(addExclude) ?? [], r.GetValue(addDryRun), !r.GetValue(addNoRecord), ct, r.GetValue(addAuthor)))
+    : Commands.Run(Globals(r), g => Commands.Add(g, r.GetValue(addName)!, r.GetValue(addRequires) ?? [], r.GetValue(addNote), r.GetValue(addNoTx), r.GetValue(addIrreversible), r.GetValue(addAuthor))));
 root.Subcommands.Add(add);
 
 // tag
@@ -88,7 +89,7 @@ var dryRun = new Option<bool>("--dry-run") { Description = "Show what would run 
 var deployScript = new Option<string?>("--script") { Description = "Write a reviewable SQL script of pending changes to this file instead of deploying." };
 var ordering = new Option<OrderingPolicy?>("--ordering") { Description = "Override the environment's ordering policy (dependency|strict)." };
 var yes = new Option<bool>("--yes", "-y") { Description = "Do not ask for confirmation (required in non-interactive runs against protected environments)." };
-var deploy = new Command("deploy", "Provision environment resources, then deploy pending changes and repeatables.") { deployTo, dryRun, deployScript, ordering, yes };
+var deploy = new Command("deploy", "Provision environment resources (Always Encrypted keys), then deploy pending changes and repeatables. The database must already exist.") { deployTo, dryRun, deployScript, ordering, yes };
 deploy.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Deploy(g, r.GetValue(deployTo), r.GetValue(dryRun), r.GetValue(deployScript), r.GetValue(ordering), r.GetValue(yes), ct)));
 root.Subcommands.Add(deploy);
 

@@ -62,6 +62,12 @@ public static partial class Commands
             g.Out.Error("cancelled.");
             return Failed;
         }
+        catch (System.Data.Common.DbException ex)
+        {
+            // A database error the command did not expect: report it, not a stack trace.
+            g.Out.Error(ex.Message.Split('\n')[0].Trim());
+            return Failed;
+        }
     }
 
     public static Task<int> Run(GlobalOptions g, Func<GlobalOptions, int> action) => Run(g, x => Task.FromResult(action(x)));
@@ -443,10 +449,10 @@ public static partial class Commands
         }
     }
 
-    public static int Add(GlobalOptions g, string name, string[] requires, string? note, bool noTx, bool irreversible)
+    public static int Add(GlobalOptions g, string name, string[] requires, string? note, bool noTx, bool irreversible, string? author = null)
     {
         RequireWorkingCopy(g, "add");
-        var added = AddChange(g.ProjectDir, name, requires, note, noTx, irreversible);
+        var added = AddChange(g.ProjectDir, name, requires, note, noTx, irreversible, author: author);
         if (g.Out.Json)
         {
             g.Out.WriteJson(added);
@@ -470,7 +476,7 @@ public static partial class Commands
     /// (as far as the database has deployed it), compares the two, and writes deploy.sql and revert.sql. The
     /// database already has the change, so it is recorded there as applied.
     /// </summary>
-    public static async Task<int> AddFromDiff(GlobalOptions g, string name, string[] requires, string? note, string? shadowEnvironment, bool keepShadow, string[] exclude, bool dryRun, bool record, CancellationToken ct)
+    public static async Task<int> AddFromDiff(GlobalOptions g, string name, string[] requires, string? note, string? shadowEnvironment, bool keepShadow, string[] exclude, bool dryRun, bool record, CancellationToken ct, string? author = null)
     {
         RequireWorkingCopy(g, "add");
         var dir = Path.GetFullPath(g.ProjectDir);
@@ -586,7 +592,7 @@ public static partial class Commands
         File.WriteAllText(Path.Combine(changeDir, MigrationProject.DeployFile), deploy, Utf8NoBom);
         File.WriteAllText(Path.Combine(changeDir, MigrationProject.RevertFile), revert, Utf8NoBom);
         var notx = new[] { deploy, revert }.Any(sql => ctx.Provider.Linter.Lint(sql, new LintContext(name, "deploy", ChangeFlags.None)).Any(d => d.Code == "BSM001"));
-        var author = Environment.GetEnvironmentVariable("BSM_AUTHOR") ?? Environment.UserName.Replace(' ', '_');
+        author = Author(dir, author);
         AppendLine(planPath, PlanFile.FormatChange(new PlanChange(name, requires, notx ? ChangeFlags.NoTransaction : ChangeFlags.None, DateTimeOffset.UtcNow, author, note ?? $"generated from {ctx.Environment.Name}", 0)));
 
         g.Out.Success($"added {name}: {script.Summary.Count} difference(s){(script.DataLoss ? ", WITH DATA LOSS" : string.Empty)}. Review the scripts before committing.");
@@ -744,7 +750,7 @@ public static partial class Commands
 
     public static int Vars(GlobalOptions g)
     {
-        var (engine, _) = OfflineEngine(g);
+        var (engine, _) = OfflineEngine(g, keepUnresolved: true);
         var list = engine.Preprocessor.Describe().Select(v => new
         {
             v.Name,
@@ -817,12 +823,13 @@ public static partial class Commands
     }
 
     /// <summary>An engine for the selected environment without a database connection (vars, render).</summary>
-    private static (MigrationEngine Engine, MigrationProject Project) OfflineEngine(GlobalOptions g)
+    /// <param name="keepUnresolved">Show unset ${env:...} references as written instead of failing (vars).</param>
+    private static (MigrationEngine Engine, MigrationProject Project) OfflineEngine(GlobalOptions g, bool keepUnresolved = false)
     {
         var ws = Open(g);
         var config = BsmConfig.Load(ws.ConfigDir);
         var provider = Providers.Resolve(config.Provider);
-        var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString, offline: true);
+        var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString, offline: true, keepUnresolved: keepUnresolved);
         var project = MigrationProject.Load(ws.ProjectDir, provider.Id, environment.Name, provider.Includes);
         var engine = new MigrationEngine(project, provider, environment, OfflineSession.Instance, Actor.Current(ToolVersion), g.Out, ParseVariables(g.Variables))
         {
@@ -975,7 +982,7 @@ public static partial class Commands
         var options = new RevertOptions { To = to, Last = last, All = all, Repeatables = repeatables, AllowVariableDrift = allowVariableDrift };
         if (!dryRun)
         {
-            var preview = await ctx.Engine.RevertAsync(options with { DryRun = true }, ct);
+            var preview = await ctx.Engine.RevertAsync(options with { DryRun = true, Quiet = true }, ct);
             var names = preview.Reverted.Concat(preview.Repeatables).ToList();
             if (names.Count == 0)
             {
@@ -1302,7 +1309,9 @@ public static partial class Commands
         {
             g.Out.Line("database head", Short(result.Status.DatabaseHeadChainId));
             g.Out.Line("certified", result.Status.Certified ? "yes" : "no");
-            g.Out.Line("schema", result.LiveFingerprint is null ? "n/a" : $"{Short(result.LiveFingerprint)}{(result.Drifted ? $" (recorded {Short(result.RecordedFingerprint)})" : " (matches last deploy)")}");
+            g.Out.Line("schema", result.LiveFingerprint is null ? "n/a"
+                : result.RecordedFingerprint is null ? $"{Short(result.LiveFingerprint)} (none recorded: drift not checked)"
+                : $"{Short(result.LiveFingerprint)}{(result.Drifted ? $" (recorded {Short(result.RecordedFingerprint)})" : " (matches last deploy)")}");
             foreach (var p in result.Problems)
             {
                 g.Out.Error(p);
@@ -1541,7 +1550,7 @@ public static partial class Commands
     public static int EnvShow(GlobalOptions g)
     {
         var config = BsmConfig.Load(Open(g).ConfigDir);
-        var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
+        var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString, keepUnresolved: true);
         var node = System.Text.Json.JsonSerializer.SerializeToNode(environment, ShowJsonOptions)!;
         Mask(node);
         Console.WriteLine(node.ToJsonString(ShowJsonOptions));

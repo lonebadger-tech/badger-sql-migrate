@@ -74,6 +74,13 @@ public sealed class SqlServerProvider : IDatabaseProvider
         {
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         }
+        catch (SqlException ex) when (ex.Number == 4060)
+        {
+            // Cannot open database "x" requested by the login.
+            var database = connection.Database.Length > 0 ? connection.Database : ResolveDatabaseName(environment);
+            await connection.DisposeAsync().ConfigureAwait(false);
+            throw new MigrationException($"Could not open database '{database}' ({description}): it does not exist, or this login may not open it. bsm deploys into an existing database; create it first (CREATE DATABASE [{database}]).", ex);
+        }
         catch (SqlException ex)
         {
             await connection.DisposeAsync().ConfigureAwait(false);

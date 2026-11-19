@@ -27,6 +27,9 @@ public sealed class SqlServerSession : IDatabaseSession
 
     internal SqlConnection Connection => connection;
 
+    /// <summary>Whether sys.tables has the history retention columns (SQL Server 2017+); null until checked.</summary>
+    internal bool? HasHistoryRetention { get; set; }
+
     /// <summary>Always Encrypted key stores registered on this connection (used to provision keys).</summary>
     internal IReadOnlyDictionary<string, SqlColumnEncryptionKeyStoreProvider>? KeyStores { get; }
 

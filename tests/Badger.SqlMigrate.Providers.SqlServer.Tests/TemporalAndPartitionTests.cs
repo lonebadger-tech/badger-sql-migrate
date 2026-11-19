@@ -97,6 +97,28 @@ public sealed class TemporalAndPartitionTests(SqlServerFixture fixture)
     }
 
     [SkippableFact]
+    public async Task Servers_without_history_retention_columns_fingerprint_temporal_tables_as_infinite_retention()
+    {
+        // SQL Server 2016 has no sys.tables.history_retention_period(_unit_desc): queries naming them fail to compile.
+        // Force that path on this server and check the fingerprint and the scripting model still work.
+        Skip.If(fixture.MasterConnectionString is null, fixture.UnavailableReason);
+        using var project = new ProjectDir();
+        project.Change("sales-and-prices", Deploy, Revert);
+        await using var db = await DatabaseAsync();
+        await using var e = await EngineAsync(db.Environment(), project);
+        await e.Engine.DeployAsync(new DeployOptions());
+        var current = await e.Engine.CaptureSchemaAsync();
+
+        ((SqlServerSession)e.Session).HasHistoryRetention = false;
+        var old = await e.Engine.CaptureSchemaAsync();
+        Assert.Equal(current.Replace("dbo.RateHistory|6|MONTH", "dbo.RateHistory|-1|INFINITE", StringComparison.Ordinal), old);
+        Assert.Contains("temporal|dbo.Price|SYSTEM_VERSIONED_TEMPORAL_TABLE|ValidFrom|ValidTo|dbo.MSSQL_TemporalHistoryFor_<dbo.Price>|-1|INFINITE", old, StringComparison.Ordinal);
+
+        var schema = await provider.Exporter.ExportAsync(e.Session, new Core.Conversion.ExportOptions { StateSchema = "bsm" }, CancellationToken.None);
+        Assert.Contains(schema.Tables, t => t.Name.Name == "Rate");
+    }
+
+    [SkippableFact]
     public async Task Partition_boundaries_are_drift_unless_the_environment_ignores_them()
     {
         Skip.If(fixture.MasterConnectionString is null, fixture.UnavailableReason);
