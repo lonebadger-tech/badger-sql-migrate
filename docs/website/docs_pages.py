@@ -27,6 +27,7 @@ SIDEBAR = [
         ("Variables", "docs/variables/"),
         ("Always Encrypted", "docs/always-encrypted/"),
         ("PostgreSQL", "docs/postgresql/"),
+        ("SQLite", "docs/sqlite/"),
     ]),
     ("Operate", [
         ("Command reference", "docs/commands/"),
@@ -54,7 +55,7 @@ def link(path, label):
 
 def pages():
     return [overview(), install(), quick_start(), project(), ai(), plan(), changes(), certification(), revert(), fixing_changes(), generating(),
-            teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(), postgresql(),
+            teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(), postgresql(), sqlite(),
             commands(), ci_cd(), bundles(), drift(), baseline(), importing(), journal(), troubleshooting(), extending()]
 
 
@@ -62,7 +63,7 @@ def pages():
 
 def overview():
     return doc("docs/", "Documentation", "Everything about Badger SQL Migrate, from the first change to production pipelines.", f"""
-<p>Badger SQL Migrate deploys hand-written SQL changes to SQL Server, Azure SQL and PostgreSQL, in an order you control, and proves afterwards that every database received exactly what you intended. It is a single command-line tool, <code>bsm</code>, for Windows, macOS and Linux.</p>
+<p>Badger SQL Migrate deploys hand-written SQL changes to SQL Server, Azure SQL, PostgreSQL and SQLite, in an order you control, and proves afterwards that every database received exactly what you intended. It is a single command-line tool, <code>bsm</code>, for Windows, macOS and Linux.</p>
 
 <h2>Five ideas</h2>
 <ol>
@@ -483,6 +484,35 @@ ALTER TABLE public.orders ADD CONSTRAINT orders_customer_id_fkey FOREIGN KEY (cu
 
 <p>Constraints SQL Server named itself (<code>DF__Order__Total__3B75D760</code>) have a different name on every server, so the script finds them at deploy time instead of hard-coding a name.</p>
 
+<h2>On SQLite</h2>
+<p>SQLite's <code>ALTER TABLE</code> can rename a column, add one and drop a simple one, and bsm uses it for exactly those. Every other table change (a type, a constraint, a key, a default, column order) is the rebuild SQLite documents: create the new table under a temporary name, copy the rows by column name (a column at the same position with the same definition and a new name is a rename), drop the old table, rename the new one, and re-create its indexes and triggers. Views and triggers that refer to the table, directly or through other views, are dropped first and re-created after, because SQLite re-checks them when a table is renamed. Indexes, views and triggers are compared as written, ignoring layout and identifier quoting.</p>
+<p>When other tables have foreign keys to a rebuilt table, both scripts switch foreign keys off, which SQLite only allows outside a transaction, so the change is <code>!notx</code> and the script runs its own transaction. Before <code>COMMIT</code> it checks every foreign key and stops with <code>CHECK constraint failed: foreign_key_violation</code> if any row no longer matches.</p>
+{sql('''PRAGMA foreign_keys = OFF;
+
+BEGIN;
+
+DROP VIEW v_customer;
+
+CREATE TABLE bsm_new_customer (id INTEGER PRIMARY KEY, full_name TEXT NOT NULL, email TEXT COLLATE NOCASE);
+
+INSERT INTO bsm_new_customer (id, full_name, email)
+SELECT id, name, email FROM customer;
+
+DROP TABLE customer;
+
+ALTER TABLE bsm_new_customer RENAME TO customer;
+
+CREATE VIEW v_customer AS SELECT id, full_name AS name FROM customer;
+
+CREATE TEMP TABLE bsm_foreign_key_check (violation TEXT CONSTRAINT foreign_key_violation CHECK (violation IS NULL));
+INSERT INTO bsm_foreign_key_check SELECT "table" FROM pragma_foreign_key_check;
+DROP TABLE temp.bsm_foreign_key_check;
+
+COMMIT;
+
+PRAGMA foreign_keys = ON;''', "changes/customer-full-name/deploy.sql")}
+<p>Virtual tables (FTS5, R*Tree) are dropped and created again when their definition changes, which loses their rows: the output says so.</p>
+
 <h2>Warnings instead of guesses</h2>
 <p>Some edits cannot be scripted safely from two catalogs. They are listed at the top of <code>deploy.sql</code> and in the output, and left for you to write:</p>
 <ul>
@@ -495,10 +525,10 @@ ALTER TABLE public.orders ADD CONSTRAINT orders_customer_id_fkey FOREIGN KEY (cu
 </ul>
 
 <h2>Repeatables and other tools' tables</h2>
-<p>Views, procedures, functions and triggers (on PostgreSQL: views, materialized views, functions and procedures) that a repeatable script defines are maintained in that script, so they are never put in a change: the output tells you to edit the repeatable. The bsm journal, and other tools' journals (<code>flyway_schema_history</code>, <code>SchemaVersions</code>, grate's and RoundhousE's schemas, <code>__EFMigrationsHistory</code>) are left out; add your own with <code>--exclude audit.*</code>.</p>
+<p>Views, procedures, functions and triggers (on PostgreSQL: views, materialized views, functions and procedures; on SQLite: views and triggers) that a repeatable script defines are maintained in that script, so they are never put in a change: the output tells you to edit the repeatable. The bsm journal, and other tools' journals (<code>flyway_schema_history</code>, <code>SchemaVersions</code>, grate's and RoundhousE's schemas, <code>__EFMigrationsHistory</code>) are left out; add your own with <code>--exclude audit.*</code>.</p>
 
 <h2>The shadow database</h2>
-<p>It is created next to your database with <code>CREATE DATABASE</code> and dropped afterwards, so the login needs that right. On Azure SQL Database a new database takes a minute and is billed while it exists: use <code>--shadow-env</code> to build it on another server, such as a local SQL Server or PostgreSQL container. On PostgreSQL the shadow is created through the server's <code>postgres</code> database, so the role needs <code>CREATEDB</code>. The shadow uses your environment's variables and Always Encrypted keys, so it matches your database except for your edits.</p>
+<p>It is created next to your database with <code>CREATE DATABASE</code> and dropped afterwards, so the login needs that right. On Azure SQL Database a new database takes a minute and is billed while it exists: use <code>--shadow-env</code> to build it on another server, such as a local SQL Server or PostgreSQL container. On PostgreSQL the shadow is created through the server's <code>postgres</code> database, so the role needs <code>CREATEDB</code>. On SQLite it is a file in the temp folder. The shadow uses your environment's variables and Always Encrypted keys, so it matches your database except for your edits.</p>
 
 <h2>Comparing any two databases</h2>
 {sh('''bsm diff-schema -e test --against prod                    # what differs
@@ -965,7 +995,7 @@ def always_encrypted():
 
 def commands():
     cmds = [
-        ("init", "[--provider sqlserver|postgresql] [--no-agents-file]", "Create bsm.yaml, bsm.plan, folders, .gitattributes and AGENTS.md (instructions for AI assistants)."),
+        ("init", "[--provider sqlserver|postgresql|sqlite] [--no-agents-file]", "Create bsm.yaml, bsm.plan, folders, .gitattributes and AGENTS.md (instructions for AI assistants)."),
         ("add &lt;name&gt;", "[-r|--requires a b] [-n|--note text] [--notx] [--irreversible]", "Scaffold changes/&lt;name&gt;/ and append it to the plan."),
         ("add &lt;name&gt; --from-diff", "[--shadow-env env] [--keep-shadow] [--exclude schema.name…] [--dry-run] [--no-record] [-r …] [-n …]", "Generate deploy.sql and revert.sql from schema edits made in the environment's database, compared with a shadow database built from the plan; records the change as applied there."),
         ("tag &lt;name&gt;", "", "Tag the last change in the plan (use as @name)."),
@@ -983,7 +1013,7 @@ def commands():
         ("verify", "", "Hashes versus working copy, rendered-SQL drift, verify scripts (rolled back), schema drift. Exit 1 on problems."),
         ("log", "[-n|--limit 50]", "Deploy, revert, fail, repeatable and resource events, newest first."),
         ("baseline", "--to x | --from flyway|dbup|grate|roundhouse|sqitch|sqlproj [--journal schema.table] [--skip-checksums] [-y]", "Record changes as applied without running them: up to x, or as far as the old tool's journal in the database says (with repeatables it already applied, or whose live definition matches). --from sqlproj: the database was published from the SQL project."),
-        ("import flyway &lt;folder&gt;", "[--config file] [--location dir…] [--provider sqlserver|postgresql] [--dry-run]", "Convert a Flyway project into a new bsm project (written to -C). No database."),
+        ("import flyway &lt;folder&gt;", "[--config file] [--location dir…] [--provider sqlserver|postgresql|sqlite] [--dry-run]", "Convert a Flyway project into a new bsm project (written to -C). No database."),
         ("import dbup &lt;folder&gt;", "[--file-names] [--run-always glob…] [--no-variables] [--var name=value…] [--dry-run]", "Convert DbUp scripts into a new bsm project (written to -C). No database."),
         ("import grate &lt;folder&gt;", "[--folder key=name…] [--environment name…] [--ignore-directory-names] [--no-tokens] [--var name=value…] [--dry-run]", "Convert a grate or RoundhousE scripts folder into a new bsm project. No database."),
         ("import sqitch &lt;folder&gt;", "[--engine name] [--provider …] [--dry-run]", "Convert a Sqitch project into a new bsm project. No database."),
@@ -1186,7 +1216,7 @@ bsm deploy -C db -e prod                             # from now on''')}
 <tr><td>{link("docs/importing/#sqitch", "Sqitch")}</td><td><code>bsm import sqitch</code></td><td>PostgreSQL: <code>bsm baseline --from sqitch</code> (script hashes checked). Other engines: <code>bsm baseline --to &lt;change&gt;</code></td></tr>
 <tr><td>{link("docs/importing/#sqlproj", "SQL projects (SSDT)")}</td><td><code>bsm import sqlproj</code></td><td><code>bsm baseline --from sqlproj</code> (tables and module definitions checked)</td></tr>
 </table>
-<p>Imports target SQL Server unless you pass <code>--provider postgresql</code>; Sqitch projects for PostgreSQL (<code>engine = pg</code>) become PostgreSQL projects on their own, and Flyway's <code>jdbc:postgresql</code> URLs become PostgreSQL environments.</p>
+<p>Imports target SQL Server unless you pass <code>--provider postgresql</code> or <code>--provider sqlite</code>; Sqitch projects for PostgreSQL (<code>engine = pg</code>) or SQLite become projects for that provider on their own, and Flyway's <code>jdbc:postgresql</code> and <code>jdbc:sqlite</code> URLs become environments for it.</p>
 <p>Every import marks changes <code>!notx</code> when their scripts contain statements SQL Server refuses inside a transaction (the other tools often run without one), and lists everything it could not carry over.</p>
 
 <h2 id="flyway">Flyway</h2>
@@ -1316,6 +1346,60 @@ bsm add release-1.6 --from-diff -C db -e dev''')}
   <li>Check the result: deploy the project to an empty database and compare it with one the old tool built, using <code>bsm diff-schema -e new --against old</code>. Only the old tool's journal table should differ.</li>
   <li>Scripts the old tool ran every time (DbUp run-always, grate everytime folders, Flyway callbacks) now run only when they change. If one must run on every deploy, make it idempotent and keep it in a change you add per release, or run it from your pipeline.</li>
 </ul>
+""")
+
+
+def sqlite():
+    return doc("docs/sqlite/", "SQLite", "SQLite database files, with the SQLite engine built in: nothing else to install.", f"""
+{sh('''bsm init --provider sqlite
+bsm add create-product
+bsm deploy''')}
+{yaml('''provider: sqlite
+defaultEnvironment: local
+environments:
+  local:
+    database: shop.db                   # relative to the folder you run bsm in
+  prod:
+    database: /srv/shop/data/shop.db
+    protected: true
+    connectionProperties:               # any Microsoft.Data.Sqlite connection-string keyword
+      Foreign Keys: true
+      Default Timeout: 60''', "bsm.yaml")}
+<p><code>database</code> is the file. A relative path starts at the folder you run bsm in, as with the <code>sqlite3</code> shell, and <code>~/</code> is your home folder. A file that does not exist yet is created. You can give <code>connectionString: Data Source=…</code> instead; <code>database</code> wins when both are set. <code>{{db}}</code> is the file name without its extension.</p>
+<p>Everything else is the same as on the other providers: the plan, hash certification, revert from stored scripts, environments, variables, bundles, <code>diff-schema</code>, generated changes (<code>add --from-diff</code>, <code>diff-schema --script</code>), rework and repair, and imports.</p>
+
+<h2>What does not apply</h2>
+<p>SQLite has no server, so <code>host</code>, <code>port</code>, <code>user</code>, <code>password</code>, <code>authentication</code>, <code>tls</code> and <code>ssh</code> are errors in an SQLite environment. An in-memory database (<code>:memory:</code>, <code>Mode=Memory</code>) is refused too: it disappears when the connection closes, and the journal with it. Encrypted (SQLCipher) databases are not supported.</p>
+
+<h2>Statements and transactions</h2>
+<p>bsm splits scripts into statements the way the <code>sqlite3</code> shell does: at semicolons, except inside strings, quoted names, comments and <code>CREATE TRIGGER … BEGIN … END;</code> bodies. A change runs in one transaction (<code>BEGIN IMMEDIATE</code>), and SQLite's DDL is transactional, so a failure leaves nothing behind. Errors name the line of the statement that failed.</p>
+<p><code>ALTER TABLE</code> only renames tables and columns, adds a column and drops a simple one. For other table changes, rebuild the table (<code>bsm add --from-diff</code> writes the rebuild for you). If other tables have foreign keys to the table you rebuild, switch foreign keys off for it, which only works outside a transaction:</p>
+{sql('''PRAGMA foreign_keys = OFF;
+BEGIN;
+CREATE TABLE new_product (id INTEGER PRIMARY KEY, name TEXT NOT NULL, price NUMERIC NOT NULL CHECK (price >= 0));
+INSERT INTO new_product (id, name, price) SELECT id, name, price FROM product;
+DROP TABLE product;
+ALTER TABLE new_product RENAME TO product;
+CREATE INDEX product_name_idx ON product (name);
+COMMIT;
+PRAGMA foreign_keys = ON;''', "changes/product-price-check/deploy.sql")}
+{code('''product-price-check [create-product] !notx''', "", "bsm.plan")}
+<p>Repeatables: SQLite has no <code>CREATE OR REPLACE</code>, so write <code>DROP VIEW IF EXISTS v;</code> and then <code>CREATE VIEW v …</code> (and the same for triggers). A verify script selects from what must exist, for example <code>SELECT email FROM customer LIMIT 0;</code>: SQLite raises "no such column" when it is missing.</p>
+
+<h2 id="linter">Linter</h2>
+<table>
+<tr><th>Code</th><th>Severity</th><th>Finding</th></tr>
+<tr><td><code>BSM001</code></td><td>Error</td><td><code>VACUUM</code>, <code>ATTACH</code>, <code>DETACH</code>, <code>PRAGMA journal_mode</code> and <code>PRAGMA foreign_keys</code> (which does nothing inside a transaction) in a change that is not <code>!notx</code></td></tr>
+<tr><td><code>BSM003</code></td><td>Error</td><td><code>BEGIN</code>, <code>COMMIT</code>, <code>END</code> or <code>ROLLBACK</code> in a transactional change: it would end bsm's transaction. (<code>SAVEPOINT</code> and <code>ROLLBACK TO</code> are fine, and so is <code>BEGIN … END</code> in a trigger.)</td></tr>
+<tr><td><code>BSM005</code></td><td>Error</td><td><code>sqlite3</code> shell dot-commands such as <code>.read</code>, <code>.mode</code> and <code>.import</code>: they are not SQL</td></tr>
+</table>
+
+<h2>Schema fingerprint</h2>
+<p>The fingerprint covers tables (column by column, with their constraints, <code>WITHOUT ROWID</code> and <code>STRICT</code>), virtual tables, indexes, views and triggers. Definitions are compared as written, ignoring layout, comments and identifier quoting, so a column added with <code>ALTER TABLE</code> fingerprints the same as the same column written in <code>CREATE TABLE</code>. Left out: SQLite's own tables (<code>sqlite_*</code>), the shadow tables of virtual tables, and the bsm journal.</p>
+
+<h2>Journal and lock</h2>
+<p>SQLite has no schemas, so the journal tables are prefixed instead: <code>bsm_changes</code>, <code>bsm_repeatables</code>, <code>bsm_events</code>, <code>bsm_meta</code> and <code>bsm_schema_snapshots</code> (the prefix is <code>stateSchema</code>). SQLite's own locks last one transaction and a deploy is many, so bsm holds an exclusive lock on a file next to the database, <code>shop.db.bsm-lock</code>, for the whole run. The file stays after the run (deleting it could let two deployers lock different files); add <code>*.bsm-lock</code> to <code>.gitignore</code>. The lock works between processes on one machine; it is not reliable on network file shares, where SQLite itself is not either.</p>
+<p><code>bsm doctor</code> shows the SQLite version, the file, the journal mode, the encoding and whether foreign keys are on. The SQLite built into bsm enforces foreign keys unless the connection turns them off (<code>connectionProperties: {{ Foreign Keys: false }}</code>).</p>
 """)
 
 

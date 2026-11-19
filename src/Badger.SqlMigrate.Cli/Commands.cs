@@ -12,6 +12,7 @@ using Badger.SqlMigrate.Core.Preprocessing;
 using Badger.SqlMigrate.Core.Project;
 using Badger.SqlMigrate.Core.Providers;
 using Badger.SqlMigrate.Providers.PostgreSql;
+using Badger.SqlMigrate.Providers.Sqlite;
 using Badger.SqlMigrate.Providers.SqlServer;
 
 namespace Badger.SqlMigrate.Cli;
@@ -38,7 +39,9 @@ public static partial class Commands
     public static readonly ProviderRegistry Providers = new ProviderRegistry()
         .Register(SqlServerProvider.ProviderId, () => new SqlServerProvider())
         .Register(PostgreSqlProvider.ProviderId, () => new PostgreSqlProvider())
-        .Register("postgres", () => new PostgreSqlProvider());
+        .Register("postgres", () => new PostgreSqlProvider())
+        .Register(SqliteProvider.ProviderId, () => new SqliteProvider())
+        .Register("sqlite3", () => new SqliteProvider());
 
     public static string ToolVersion { get; } =
         typeof(Commands).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.0.0";
@@ -73,7 +76,7 @@ public static partial class Commands
         Directory.CreateDirectory(Path.Combine(dir, MigrationProject.RepeatableFolder));
         Directory.CreateDirectory(Path.Combine(dir, MigrationProject.EnvironmentsFolder));
 
-        WriteIfMissing(Path.Combine(dir, BsmConfig.FileName), provider.Id == PostgreSqlProvider.ProviderId ? PostgreSqlConfigTemplate : $$"""
+        WriteIfMissing(Path.Combine(dir, BsmConfig.FileName), provider.Id == PostgreSqlProvider.ProviderId ? PostgreSqlConfigTemplate : provider.Id == SqliteProvider.ProviderId ? SqliteConfigTemplate : $$"""
             # Badger SQL Migrate configuration
             provider: {{provider.Id}}
             defaultEnvironment: local
@@ -192,6 +195,31 @@ public static partial class Commands
 
         """;
 
+    private const string SqliteConfigTemplate = """
+        # Badger SQL Migrate configuration
+        provider: sqlite
+        defaultEnvironment: local
+
+        # Script variables, referenced as {Name} in scripts. Values are not part of change hashes.
+        # Environments can override them under their own 'variables:'.
+        variables: {}
+
+        environments:
+          local:
+            database: local.db                 # the SQLite file; relative paths start at the working directory
+                                               # created if missing; deploys lock local.db.bsm-lock next to it
+
+        #  prod:
+        #    database: /srv/myapp/data/app.db
+        #    protected: true                  # deploy/revert require typing the environment name (or --yes)
+        #    allowRevert: false               # fix forward in production
+        #    ordering: strict                 # exact plan order; prod history is certified
+        #    connectionProperties:            # any Microsoft.Data.Sqlite connection-string keyword
+        #      Foreign Keys: true
+        #      Default Timeout: 60
+
+        """;
+
     private static void WriteGitAttributes(string dir)
     {
         var gitattributes = Path.Combine(dir, ".gitattributes");
@@ -212,7 +240,7 @@ public static partial class Commands
             Path = path,
             ConfigFile = configFile,
             Locations = locations,
-            MapConnection = provider.Id == PostgreSqlProvider.ProviderId ? JdbcPostgreSql.Map : JdbcSqlServer.Map,
+            MapConnection = provider.Id == PostgreSqlProvider.ProviderId ? JdbcPostgreSql.Map : provider.Id == SqliteProvider.ProviderId ? JdbcSqlite.Map : JdbcSqlServer.Map,
         });
         return WriteImport(g, imported, dryRun, provider);
     }
@@ -262,8 +290,10 @@ public static partial class Commands
     {
         RequireWorkingCopy(g, "import");
         var imported = SqitchImporter.Import(new SqitchImportOptions { Path = path, Engine = engine });
-        // Sqitch projects for PostgreSQL ("pg") move to the PostgreSQL provider unless told otherwise.
-        providerId ??= SqitchImporter.IsPostgres(imported.SourceEngine) ? PostgreSqlProvider.ProviderId : SqlServerProvider.ProviderId;
+        // Sqitch projects for PostgreSQL ("pg") or SQLite move to that provider unless told otherwise.
+        providerId ??= SqitchImporter.IsPostgres(imported.SourceEngine) ? PostgreSqlProvider.ProviderId
+            : SqitchImporter.IsSqlite(imported.SourceEngine) ? SqliteProvider.ProviderId
+            : SqlServerProvider.ProviderId;
         return WriteImport(g, imported, dryRun, Providers.Resolve(providerId));
     }
 
@@ -1426,7 +1456,7 @@ public static partial class Commands
         var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
         g.Out.Line("provider", provider.DisplayName);
         g.Out.Line("environment", environment.Name + (environment.Protected ? " (protected)" : string.Empty));
-        g.Out.Line("auth", environment.Authentication?.ToString() ?? "(from connection string)");
+        g.Out.Line("auth", environment.Authentication?.ToString() ?? (provider.Capabilities.SupportedAuthentication.Count == 0 ? "none (local file)" : "(from connection string)"));
 
         var problems = provider.ValidateEnvironment(environment);
         foreach (var p in problems)

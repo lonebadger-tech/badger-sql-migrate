@@ -47,7 +47,13 @@ public static class ImportYaml
         sb.Append("\nenvironments:\n");
         if (imported.Environments.Count == 0)
         {
-            sb.Append((providerId == "postgresql"
+            sb.Append((providerId == "sqlite"
+                ? """
+                  local:                               # where to deploy: edit to match your database file
+                    database: local.db
+
+                """
+                : providerId == "postgresql"
                 ? """
                   local:                               # where to deploy: edit to match your server
                     host: localhost

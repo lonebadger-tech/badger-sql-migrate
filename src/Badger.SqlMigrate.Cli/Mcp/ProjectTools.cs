@@ -21,7 +21,7 @@ public sealed class ProjectTools(string projectDir)
     private GlobalOptions Globals(string? environment = null) => new(root, environment, null, [], false, new ConsoleOutput(json: true, verbose: false, noColor: true));
 
     [McpServerTool(Name = "project_info", ReadOnly = true, Idempotent = true)]
-    [Description("The project's database provider (sqlserver = T-SQL, postgresql = PostgreSQL), environment and variable names, folder layout, and plan size. Call this first.")]
+    [Description("The project's database provider (sqlserver = T-SQL, postgresql = PostgreSQL, sqlite = SQLite), environment and variable names, folder layout, and plan size. Call this first.")]
     public object ProjectInfo() => Run(() =>
     {
         var config = BsmConfig.Load(root);
@@ -165,7 +165,7 @@ public sealed class ProjectTools(string projectDir)
         Run(() => Commands.ReworkChange(root, name, newName, note));
 
     [McpServerTool(Name = "write_repeatable", Destructive = true, Idempotent = true)]
-    [Description("Create or replace a repeatable: a view, procedure, function or trigger that bsm re-applies whenever its text changes. Write it with CREATE OR ALTER (SQL Server) or CREATE OR REPLACE (PostgreSQL). Declare other repeatables it uses on the first line: -- bsm:requires views/a.sql")]
+    [Description("Create or replace a repeatable: a view, procedure, function or trigger that bsm re-applies whenever its text changes. Write it with CREATE OR ALTER (SQL Server), CREATE OR REPLACE (PostgreSQL), or DROP ... IF EXISTS then CREATE (SQLite). Declare other repeatables it uses on the first line: -- bsm:requires views/a.sql")]
     public object WriteRepeatable(
         [Description("Path under repeatable/, e.g. views/active_customer.sql. Prefix with @<environment>/ for a script that runs only in that environment, e.g. @dev/seed.sql.")] string path,
         [Description("The complete script.")] string sql) => Run(() =>
@@ -226,7 +226,7 @@ public sealed class ProjectTools(string projectDir)
         Run(() => Commands.RenderScript(Globals(environment), name, kind));
 
     [McpServerTool(Name = "guide", ReadOnly = true, Idempotent = true)]
-    [Description("The full guide to writing Badger SQL Migrate changes: rules for deploy/revert/verify scripts, transactions, repeatables, variables, SQL Server and PostgreSQL specifics, and lint codes.")]
+    [Description("The full guide to writing Badger SQL Migrate changes: rules for deploy/revert/verify scripts, transactions, repeatables, variables, SQL Server, PostgreSQL and SQLite specifics, and lint codes.")]
     public static string Guide() => Commands.AiGuide;
 
     private string ChangeDir(string name, bool mustExist)
