@@ -44,7 +44,7 @@ public static partial class Commands
         {
             var ws = Open(g);
             var config = BsmConfig.Load(ws.ConfigDir);
-            provider = Providers.Resolve(config.Provider);
+            provider = config.CreateProvider();
             environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
             baseDir = ws.BaseDir;
         }
@@ -151,7 +151,7 @@ public static partial class Commands
         }
 
         var targetConfig = BsmConfig.Load(targetRoot);
-        var targetProvider = Providers.Resolve(targetConfig.Provider);
+        var targetProvider = targetConfig.CreateProvider();
         var targetEnv = targetConfig.ResolveEnvironment(targetEnvironment, null);
         var problems = targetProvider.ValidateEnvironment(targetEnv);
         if (problems.Count > 0)

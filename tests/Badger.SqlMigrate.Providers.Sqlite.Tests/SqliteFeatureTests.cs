@@ -18,7 +18,7 @@ public sealed class SqliteFeatureTests
         await provider.StateStore.EnsureCreatedAsync(session, "bsm", CancellationToken.None);
         Assert.True(await provider.StateStore.ExistsAsync(session, "bsm", CancellationToken.None));
 
-        var tables = (await session.QueryAsync("SELECT name FROM sqlite_schema WHERE type = 'table' AND name LIKE 'bsm\\_%' ESCAPE '\\' ORDER BY name;", null, CancellationToken.None))
+        var tables = (await session.QueryAsync("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'bsm\\_%' ESCAPE '\\' ORDER BY name;", null, CancellationToken.None))
             .Select(r => (string)r["name"]!).ToList();
         Assert.Equal(["bsm_changes", "bsm_events", "bsm_meta", "bsm_repeatables", "bsm_schema_snapshots"], tables);
 
@@ -80,7 +80,10 @@ public sealed class SqliteFeatureTests
     {
         await using var a = new TestDatabase();
         await using var b = new TestDatabase();
-        await ExecAsync(a, "CREATE TABLE t (id INTEGER PRIMARY KEY, old TEXT, \"name\" TEXT);\nALTER TABLE t ADD COLUMN email TEXT DEFAULT 'x';\nALTER TABLE t RENAME COLUMN name TO full_name;\nALTER TABLE t DROP COLUMN old;");
+        // DROP COLUMN arrived in SQLite 3.35; older engines (BSM_TEST_SQLITE_LIBRARY) check the rest.
+        await ExecAsync(a, SystemSqlite.EngineVersion >= SqliteOptions.DropColumn
+            ? "CREATE TABLE t (id INTEGER PRIMARY KEY, old TEXT, \"name\" TEXT);\nALTER TABLE t ADD COLUMN email TEXT DEFAULT 'x';\nALTER TABLE t RENAME COLUMN name TO full_name;\nALTER TABLE t DROP COLUMN old;"
+            : "CREATE TABLE t (id INTEGER PRIMARY KEY, \"name\" TEXT);\nALTER TABLE t ADD COLUMN email TEXT DEFAULT 'x';\nALTER TABLE t RENAME COLUMN name TO full_name;");
         await ExecAsync(b, "CREATE TABLE [t](\n  id   INTEGER PRIMARY KEY,\n  full_name TEXT, -- renamed\n  email TEXT DEFAULT 'x'\n)");
         Assert.Equal(await DumpAsync(b), await DumpAsync(a));
     }

@@ -7,11 +7,17 @@ namespace Badger.SqlMigrate.Providers.Sqlite;
 /// <summary>
 /// Checks statement by statement: statements SQLite refuses inside a transaction need !notx, explicit transaction
 /// control would end bsm's transaction, PRAGMA foreign_keys does nothing inside one (so it needs !notx too), and
-/// sqlite3 dot-commands are reported.
+/// sqlite3 dot-commands are reported. SQL that needs a newer SQLite than the project's sqlite.minVersion is a warning
+/// (BSM008), in transactional and !notx changes alike.
 /// </summary>
-public sealed partial class SqliteLinter : IScriptLinter
+public sealed partial class SqliteLinter(SqliteOptions options) : IScriptLinter
 {
     private readonly SqliteStatementSplitter splitter = new();
+
+    public SqliteLinter()
+        : this(SqliteOptions.Default)
+    {
+    }
 
     public IReadOnlyList<LintDiagnostic> Lint(string script, LintContext context)
     {
@@ -26,6 +32,11 @@ public sealed partial class SqliteLinter : IScriptLinter
         foreach (var batch in scan.Batches)
         {
             var text = SqliteLexer.Normalize(batch.Text);
+            foreach (var (version, feature) in SqliteFeatures.Find(batch.Text).Where(f => !options.Supports(f.Version)))
+            {
+                diagnostics.Add(new(LintSeverity.Warning, $"{feature} needs SQLite {version} or later, but sqlite.minVersion in bsm.yaml is {options.MinVersion}. Rewrite it for older engines, or raise sqlite.minVersion if every program that opens this database has SQLite {version} or later.", batch.StartLine, "BSM008"));
+            }
+
             if (!transactional)
             {
                 continue;

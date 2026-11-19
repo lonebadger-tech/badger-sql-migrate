@@ -6,9 +6,17 @@ using Microsoft.Data.Sqlite;
 namespace Badger.SqlMigrate.Providers.Sqlite;
 
 /// <summary>SQLite 3 database files (bundled engine: nothing to install).</summary>
-public sealed class SqliteProvider : IDatabaseProvider
+public sealed class SqliteProvider(SqliteOptions options) : IDatabaseProvider
 {
     public const string ProviderId = "sqlite";
+
+    public SqliteProvider()
+        : this(SqliteOptions.Default)
+    {
+    }
+
+    /// <summary>The project's 'sqlite:' settings (the oldest SQLite that opens its databases).</summary>
+    public SqliteOptions Options { get; } = options;
 
     public string Id => ProviderId;
 
@@ -23,7 +31,7 @@ public sealed class SqliteProvider : IDatabaseProvider
 
     public IScriptParser Parser { get; } = new SqliteStatementSplitter();
 
-    public IScriptLinter Linter { get; } = new SqliteLinter();
+    public IScriptLinter Linter { get; } = new SqliteLinter(options);
 
     public IStateStore StateStore { get; } = new SqliteStateStore();
 
@@ -33,7 +41,7 @@ public sealed class SqliteProvider : IDatabaseProvider
 
     public IEnvironmentResources? Resources => null;
 
-    public ISchemaScripter Scripter { get; } = new Scripting.SqliteScripter();
+    public ISchemaScripter Scripter { get; } = new Scripting.SqliteScripter(options);
 
     public IScratchDatabases ScratchDatabases { get; } = new Scripting.SqliteScratchDatabases();
 

@@ -84,7 +84,7 @@ def overview():
 </ul>
 
 <h2>Supported databases</h2>
-<p>SQL Server 2016 SP1 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance; features that need a newer server, such as history retention for temporal tables (2017) or Always Encrypted with secure enclaves (2019), need it only where you use them. PostgreSQL 12 and later. SQLite, with the engine built in. The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
+<p>SQL Server 2016 SP1 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance; features that need a newer server, such as history retention for temporal tables (2017) or Always Encrypted with secure enclaves (2019), need it only where you use them. PostgreSQL 12 and later. SQLite 3.26 and later: bsm runs the engine built into it, and the scripts it generates also run on the older SQLite that other programs open your database with ({link("docs/sqlite/#versions", "SQLite versions")}). The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
 """)
 
 
@@ -486,7 +486,7 @@ ALTER TABLE public.orders ADD CONSTRAINT orders_customer_id_fkey FOREIGN KEY (cu
 <p>Constraints SQL Server named itself (<code>DF__Order__Total__3B75D760</code>) have a different name on every server, so the script finds them at deploy time instead of hard-coding a name.</p>
 
 <h2>On SQLite</h2>
-<p>SQLite's <code>ALTER TABLE</code> can rename a column, add one and drop a simple one, and bsm uses it for exactly those. Every other table change (a type, a constraint, a key, a default, column order) is the rebuild SQLite documents: create the new table under a temporary name, copy the rows by column name (a column at the same position with the same definition and a new name is a rename), drop the old table, rename the new one, and re-create its indexes and triggers. Views and triggers that refer to the table, directly or through other views, are dropped first and re-created after, because SQLite re-checks them when a table is renamed. Indexes, views and triggers are compared as written, ignoring layout and identifier quoting.</p>
+<p>SQLite's <code>ALTER TABLE</code> can rename a column, add one and (from SQLite 3.35) drop a simple one, and bsm uses it for exactly those; it drops columns in place only when the project's <code>sqlite.minVersion</code> is 3.35 or later, and otherwise rebuilds the table. Every other table change (a type, a constraint, a key, a default, column order) is the rebuild SQLite documents: create the new table under a temporary name, copy the rows by column name (a column at the same position with the same definition and a new name is a rename), drop the old table, rename the new one, and re-create its indexes and triggers. Views and triggers that refer to the table, directly or through other views, are dropped first and re-created after, because SQLite re-checks them when a table is renamed. Indexes, views and triggers are compared as written, ignoring layout and identifier quoting.</p>
 <p>When other tables have foreign keys to a rebuilt table, both scripts switch foreign keys off, which SQLite only allows outside a transaction, so the change is <code>!notx</code> and the script runs its own transaction. Before <code>COMMIT</code> it checks every foreign key and stops with <code>CHECK constraint failed: foreign_key_violation</code> if any row no longer matches.</p>
 {sql('''PRAGMA foreign_keys = OFF;
 
@@ -1388,6 +1388,8 @@ def sqlite():
 bsm add create-product
 bsm deploy''')}
 {yaml('''provider: sqlite
+sqlite:
+  minVersion: "3.26"                    # the oldest SQLite that opens these databases (default 3.26)
 defaultEnvironment: local
 environments:
   local:
@@ -1404,9 +1406,19 @@ environments:
 <h2>What does not apply</h2>
 <p>SQLite has no server, so <code>host</code>, <code>port</code>, <code>user</code>, <code>password</code>, <code>authentication</code>, <code>tls</code> and <code>ssh</code> are errors in an SQLite environment. An in-memory database (<code>:memory:</code>, <code>Mode=Memory</code>) is refused too: it disappears when the connection closes, and the journal with it. Encrypted (SQLCipher) databases are not supported.</p>
 
+<h2 id="versions">SQLite versions</h2>
+<p>bsm always runs the SQLite built into it, the same recent version on every machine. But your application opens the same file with the SQLite it was built with, and that is often years older: programs that use the system library get what the operating system ships, such as 3.26 on RHEL 8, 3.34 on RHEL 9, 3.37 on Ubuntu 22.04, 3.40 on Debian 12 and 3.45 on Ubuntu 24.04. Every SQLite 3 reads every SQLite 3 file, but an older engine rejects SQL it does not know, and a table that uses a newer feature (a <code>STRICT</code> table or a generated column) cannot be opened by an engine without it.</p>
+<p><code>sqlite.minVersion</code> in <code>bsm.yaml</code> is the oldest SQLite that opens your databases; the default is 3.26, the oldest bsm supports. Write it in quotes (<code>"3.30"</code>): unquoted, YAML reads 3.30 as 3.3.</p>
+<ul>
+<li>Changes bsm writes (<code>add --from-diff</code>, <code>diff-schema --script</code>) use only SQL that version understands. Below 3.35 a dropped column is a table rebuild rather than <code>ALTER TABLE … DROP COLUMN</code>.</li>
+<li>Lint warns (<code>BSM008</code>) when a script uses SQL newer than <code>minVersion</code>: <code>NULLS FIRST/LAST</code> and <code>FILTER</code> (3.30), generated columns (3.31), <code>iif()</code> (3.32), <code>UPDATE … FROM</code> (3.33), <code>DROP COLUMN</code>, <code>RETURNING</code> and <code>MATERIALIZED</code> CTEs (3.35), <code>STRICT</code> tables (3.37), <code>-&gt;</code>/<code>-&gt;&gt;</code>, <code>unixepoch()</code> and <code>format()</code> (3.38), <code>RIGHT</code>/<code>FULL JOIN</code> and <code>IS DISTINCT FROM</code> (3.39), <code>unhex()</code> (3.41), <code>timediff()</code> and <code>octet_length()</code> (3.43), <code>concat()</code> and <code>string_agg()</code> (3.44), and JSONB functions (3.45).</li>
+<li>If every program that opens the database has a newer SQLite (it bundles its own, as many drivers do), raise <code>minVersion</code> to match.</li>
+</ul>
+<p>bsm's tests run against the SQLite of each of those distributions, from 3.26 up, as well as the built-in engine on Windows, macOS and Linux.</p>
+
 <h2>Statements and transactions</h2>
 <p>bsm splits scripts into statements the way the <code>sqlite3</code> shell does: at semicolons, except inside strings, quoted names, comments and <code>CREATE TRIGGER … BEGIN … END;</code> bodies. A change runs in one transaction (<code>BEGIN IMMEDIATE</code>), and SQLite's DDL is transactional, so a failure leaves nothing behind. Errors name the line of the statement that failed.</p>
-<p><code>ALTER TABLE</code> only renames tables and columns, adds a column and drops a simple one. For other table changes, rebuild the table (<code>bsm add --from-diff</code> writes the rebuild for you). If other tables have foreign keys to the table you rebuild, switch foreign keys off for it, which only works outside a transaction:</p>
+<p><code>ALTER TABLE</code> only renames tables and columns, adds a column and (from SQLite 3.35) drops a simple one. For other table changes, rebuild the table (<code>bsm add --from-diff</code> writes the rebuild for you). If other tables have foreign keys to the table you rebuild, switch foreign keys off for it, which only works outside a transaction:</p>
 {sql('''PRAGMA foreign_keys = OFF;
 BEGIN;
 CREATE TABLE new_product (id INTEGER PRIMARY KEY, name TEXT NOT NULL, price NUMERIC NOT NULL CHECK (price >= 0));
@@ -1425,6 +1437,7 @@ PRAGMA foreign_keys = ON;''', "changes/product-price-check/deploy.sql")}
 <tr><td><code>BSM001</code></td><td>Error</td><td><code>VACUUM</code>, <code>ATTACH</code>, <code>DETACH</code>, <code>PRAGMA journal_mode</code> and <code>PRAGMA foreign_keys</code> (which does nothing inside a transaction) in a change that is not <code>!notx</code></td></tr>
 <tr><td><code>BSM003</code></td><td>Error</td><td><code>BEGIN</code>, <code>COMMIT</code>, <code>END</code> or <code>ROLLBACK</code> in a transactional change: it would end bsm's transaction. (<code>SAVEPOINT</code> and <code>ROLLBACK TO</code> are fine, and so is <code>BEGIN … END</code> in a trigger.)</td></tr>
 <tr><td><code>BSM005</code></td><td>Error</td><td><code>sqlite3</code> shell dot-commands such as <code>.read</code>, <code>.mode</code> and <code>.import</code>: they are not SQL</td></tr>
+<tr><td><code>BSM008</code></td><td>Warning</td><td>SQL that needs a newer SQLite than <code>sqlite.minVersion</code> (<a href="#versions">SQLite versions</a>)</td></tr>
 </table>
 
 <h2>Schema fingerprint</h2>

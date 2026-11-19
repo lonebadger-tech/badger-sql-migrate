@@ -185,7 +185,9 @@ ALTER TABLE public.customer DROP COLUMN email;
   don't split statements.
 - There are no schemas: write `customer`, or `main.customer`. bsm's own tables are `bsm_*` in the same file.
 - `ALTER TABLE` can only rename a table or column, add a column (nullable, or `NOT NULL` with a constant
-  default) and drop a simple column. For anything else (type, constraint, primary key, foreign key changes)
+  default) and, from SQLite 3.35, drop a simple column. `sqlite.minVersion` in bsm.yaml (default "3.26") is the
+  oldest SQLite that opens the database: use only SQL it understands (lint warns, BSM008), so below 3.35 drop a
+  column by rebuilding the table. For anything else (type, constraint, primary key, foreign key changes)
   rebuild the table: create `new_<table>`, copy the rows, drop the old table, rename, and re-create its
   indexes, triggers and the views that use it. If other tables have foreign keys to it, the change must be
   `!notx` and wrap the rebuild in `PRAGMA foreign_keys = OFF; BEGIN; ... COMMIT; PRAGMA foreign_keys = ON;`
@@ -224,6 +226,7 @@ ALTER TABLE customer DROP COLUMN email;
 | BSM004 | SQL Server | `SYSTEM_VERSIONING = OFF` without turning it back on. Turn it back on in the same script. |
 | BSM005 | PostgreSQL, SQLite | A psql command bsm can't run, or unbalanced `\if`/`\endif`; on SQLite, a sqlite3 dot-command (`.read`, `.mode`). Remove it. |
 | BSM007 | PostgreSQL | An enum value added with `ADD VALUE` is used in the same change. Move that use to a later change. |
+| BSM008 | SQLite | SQL newer than `sqlite.minVersion` in bsm.yaml (`RETURNING`, `DROP COLUMN`, `STRICT`, `->>` ...). Rewrite it for the older engine; raise `minVersion` only if the user says every program that opens the database has that SQLite. |
 
 ## Generating a change from a database (person-run)
 

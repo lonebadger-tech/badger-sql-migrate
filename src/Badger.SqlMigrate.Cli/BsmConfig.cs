@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Badger.SqlMigrate.Connectivity;
 using Badger.SqlMigrate.Core;
 using Badger.SqlMigrate.Core.Configuration;
+using Badger.SqlMigrate.Core.Providers;
 using Badger.SqlMigrate.Core.Preprocessing;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
@@ -51,8 +52,9 @@ public sealed class BsmConfig
 
     private static readonly HashSet<string> RootKeys = new(StringComparer.OrdinalIgnoreCase) { "provider", "defaultEnvironment", "variables", "environments", "preprocessor" };
 
-    private BsmConfig(string provider, string? defaultEnvironment, Dictionary<string, string> variables, Dictionary<string, JsonObject> environments, PreprocessorOptions preprocessor)
+    private BsmConfig(string provider, string? defaultEnvironment, Dictionary<string, string> variables, Dictionary<string, JsonObject> environments, PreprocessorOptions preprocessor, JsonObject? providerSettings)
     {
+        ProviderSettings = providerSettings;
         Preprocessor = preprocessor;
         Provider = provider;
         DefaultEnvironment = defaultEnvironment;
@@ -61,6 +63,12 @@ public sealed class BsmConfig
     }
 
     public string Provider { get; }
+
+    /// <summary>The provider's project-level block (e.g. 'sqlite:'), when it takes one and the file has it.</summary>
+    public JsonObject? ProviderSettings { get; }
+
+    /// <summary>The project's provider, with its project-level settings.</summary>
+    public IDatabaseProvider CreateProvider() => Commands.Providers.Resolve(Provider, ProviderSettings);
 
     public PreprocessorOptions Preprocessor { get; }
 
@@ -98,9 +106,23 @@ public sealed class BsmConfig
             throw new MigrationException($"{FileName}: 'profiles' was renamed to 'environments' (and 'defaultProfile' to 'defaultEnvironment').");
         }
 
-        foreach (var key in root.Select(kv => kv.Key).Where(k => !RootKeys.Contains(k)))
+        var providerSections = Commands.Providers.SettingsSections.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var key in root.Select(kv => kv.Key).Where(k => !RootKeys.Contains(k) && !providerSections.Contains(k)))
         {
-            throw new MigrationException($"{FileName}: unknown top-level key '{key}'. Known: {string.Join(", ", RootKeys)}.");
+            throw new MigrationException($"{FileName}: unknown top-level key '{key}'. Known: {string.Join(", ", RootKeys.Concat(providerSections))}.");
+        }
+
+        var provider = Scalar(root["provider"]) is { Length: > 0 } p ? p : "sqlserver";
+        var section = Commands.Providers.SettingsSection(provider);
+        foreach (var other in providerSections.Where(k => root.ContainsKey(k) && !string.Equals(k, section, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new MigrationException($"{FileName}: '{other}' settings apply only to provider: {other}, and this project's provider is {provider}.");
+        }
+
+        JsonObject? providerSettings = null;
+        if (section is not null && root[section] is { } sectionNode)
+        {
+            providerSettings = sectionNode as JsonObject ?? throw new MigrationException($"{FileName}: '{section}' must be a mapping.");
         }
 
         var environments = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
@@ -127,7 +149,7 @@ public sealed class BsmConfig
             }
         }
 
-        return new BsmConfig(Scalar(root["provider"]) is { Length: > 0 } p ? p : "sqlserver", root["defaultEnvironment"]?.ToString(), variables, environments, preprocessor);
+        return new BsmConfig(provider, root["defaultEnvironment"]?.ToString(), variables, environments, preprocessor, providerSettings);
     }
 
     /// <summary>Picks --env, then BSM_ENV, then defaultEnvironment, then the only deployable environment.</summary>

@@ -40,8 +40,8 @@ public static partial class Commands
         .Register(SqlServerProvider.ProviderId, () => new SqlServerProvider())
         .Register(PostgreSqlProvider.ProviderId, () => new PostgreSqlProvider())
         .Register("postgres", () => new PostgreSqlProvider())
-        .Register(SqliteProvider.ProviderId, () => new SqliteProvider())
-        .Register("sqlite3", () => new SqliteProvider());
+        .Register(SqliteProvider.ProviderId, SqliteOptions.SectionName, settings => new SqliteProvider(SqliteOptions.Parse(settings)))
+        .Register("sqlite3", SqliteOptions.SectionName, settings => new SqliteProvider(SqliteOptions.Parse(settings)));
 
     public static string ToolVersion { get; } =
         typeof(Commands).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.0.0";
@@ -828,7 +828,7 @@ public static partial class Commands
     {
         var ws = Open(g);
         var config = BsmConfig.Load(ws.ConfigDir);
-        var provider = Providers.Resolve(config.Provider);
+        var provider = config.CreateProvider();
         var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString, offline: true, keepUnresolved: keepUnresolved);
         var project = MigrationProject.Load(ws.ProjectDir, provider.Id, environment.Name, provider.Includes);
         var engine = new MigrationEngine(project, provider, environment, OfflineSession.Instance, Actor.Current(ToolVersion), g.Out, ParseVariables(g.Variables))
@@ -1121,7 +1121,7 @@ public static partial class Commands
         RequireWorkingCopy(g, "bundle create");
         var dir = Path.GetFullPath(g.ProjectDir);
         var config = BsmConfig.Load(dir);
-        var provider = Providers.Resolve(config.Provider);
+        var provider = config.CreateProvider();
         var head = MigrationProject.Load(dir, provider.Id, includes: provider.Includes).HeadChainId;
         output ??= $"bsm-bundle-{(head is null ? "empty" : head[..12])}.zip";
         var manifest = ProjectBundle.Create(dir, provider.Id, output, includeConfig: !noConfig, ToolVersion, provider.Includes);
@@ -1461,7 +1461,7 @@ public static partial class Commands
     public static async Task<int> Doctor(GlobalOptions g, CancellationToken ct)
     {
         var config = BsmConfig.Load(Open(g).ConfigDir);
-        var provider = Providers.Resolve(config.Provider);
+        var provider = config.CreateProvider();
         var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
         g.Out.Line("provider", provider.DisplayName);
         g.Out.Line("environment", environment.Name + (environment.Protected ? " (protected)" : string.Empty));
@@ -1554,7 +1554,7 @@ public static partial class Commands
         var node = System.Text.Json.JsonSerializer.SerializeToNode(environment, ShowJsonOptions)!;
         Mask(node);
         Console.WriteLine(node.ToJsonString(ShowJsonOptions));
-        var provider = Providers.Resolve(config.Provider);
+        var provider = config.CreateProvider();
         foreach (var problem in provider.ValidateEnvironment(environment))
         {
             g.Out.Error(problem);
@@ -1666,7 +1666,7 @@ public static partial class Commands
     {
         var ws = Open(g);
         var config = BsmConfig.Load(ws.ConfigDir);
-        var provider = Providers.Resolve(config.Provider);
+        var provider = config.CreateProvider();
         return (MigrationProject.Load(ws.ProjectDir, provider.Id, includes: provider.Includes), provider);
     }
 
@@ -1728,7 +1728,7 @@ public static partial class Commands
         var ws = Open(g);
         var dir = ws.ProjectDir;
         var config = BsmConfig.Load(ws.ConfigDir);
-        var provider = Providers.Resolve(config.Provider);
+        var provider = config.CreateProvider();
         var environment = config.ResolveEnvironment(g.Environment, g.ConnectionString);
         var problems = provider.ValidateEnvironment(environment);
         if (problems.Count > 0)

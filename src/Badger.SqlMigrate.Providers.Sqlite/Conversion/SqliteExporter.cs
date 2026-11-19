@@ -109,7 +109,7 @@ public sealed class SqliteExporter : ISchemaExporter
 
         var uniques = new List<PortableKey>();
         var indexes = new List<PortableIndex>();
-        var sqlByIndex = (await session.QueryAsync("SELECT name, sql FROM main.sqlite_schema WHERE type = 'index' AND tbl_name = @t AND sql IS NOT NULL;", p, ct).ConfigureAwait(false))
+        var sqlByIndex = (await session.QueryAsync("SELECT name, sql FROM main.sqlite_master WHERE type = 'index' AND tbl_name = @t AND sql IS NOT NULL;", p, ct).ConfigureAwait(false))
             .ToDictionary(r => (string)r["name"]!, r => (string)r["sql"]!, StringComparer.OrdinalIgnoreCase);
         foreach (var ix in await session.QueryAsync("SELECT name, \"unique\" AS uq, origin, partial FROM pragma_index_list(@t);", p, ct).ConfigureAwait(false))
         {

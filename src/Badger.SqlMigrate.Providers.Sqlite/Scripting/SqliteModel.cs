@@ -43,7 +43,7 @@ internal sealed record SqliteTable(
 internal sealed record SqliteObject(string Type, string Name, string Table, string Sql, string Normalized, long Order, IReadOnlySet<string> Words);
 
 /// <summary>
-/// The user schema of a SQLite database, read from sqlite_schema and the table pragmas. SQLite keeps each object's
+/// The user schema of a SQLite database, read from sqlite_master and the table pragmas. SQLite keeps each object's
 /// CREATE statement as written, so definitions are compared normalized (layout and identifier quoting ignored), and
 /// tables element by element so a column added with ALTER TABLE equals the same column written in CREATE TABLE.
 /// </summary>
@@ -62,13 +62,11 @@ internal sealed class SqliteModel
         var stateTables = SqliteStateStore.Tables.Select(t => prefix + t).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var model = new SqliteModel();
 
-        var kinds = (await session.QueryAsync("SELECT name, type FROM pragma_table_list WHERE schema = 'main';", null, cancellationToken).ConfigureAwait(false))
-            .ToDictionary(r => (string)r["name"]!, r => (string)r["type"]!, StringComparer.OrdinalIgnoreCase);
-        var rows = await session.QueryAsync("SELECT type, name, tbl_name, sql, rowid AS ord FROM main.sqlite_schema WHERE sql IS NOT NULL ORDER BY rowid;", null, cancellationToken).ConfigureAwait(false);
+        var rows = await session.QueryAsync("SELECT type, name, tbl_name, sql, rowid AS ord FROM main.sqlite_master WHERE sql IS NOT NULL ORDER BY rowid;", null, cancellationToken).ConfigureAwait(false);
+        var shadows = ShadowTables(rows);
 
         bool Skip(string name) =>
-            name.StartsWith("sqlite_", StringComparison.OrdinalIgnoreCase) || stateTables.Contains(name) || excluded("main." + name)
-            || (kinds.TryGetValue(name, out var kind) && kind == "shadow");
+            name.StartsWith("sqlite_", StringComparison.OrdinalIgnoreCase) || stateTables.Contains(name) || excluded("main." + name) || shadows.Contains(name);
 
         foreach (var r in rows)
         {
@@ -96,6 +94,36 @@ internal sealed class SqliteModel
         }
 
         return model;
+    }
+
+    /// <summary>
+    /// The tables FTS3/4, FTS5 and R*Tree virtual tables keep their data in. pragma_table_list says so directly, but only
+    /// from SQLite 3.37; the modules' own suffixes work on every version.
+    /// </summary>
+    private static HashSet<string> ShadowTables(IEnumerable<IReadOnlyDictionary<string, object?>> rows)
+    {
+        var shadows = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var r in rows.Where(r => (string)r["type"]! == "table"))
+        {
+            var sql = (string)r["sql"]!;
+            var tokens = SqliteLexer.Tokenize(sql).Where(t => !t.IsTrivia).ToList();
+            var usingAt = tokens.FindIndex(t => SqliteLexer.IsWord(sql, t, "USING"));
+            if (tokens.Count < 2 || !SqliteLexer.IsWord(sql, tokens[1], "VIRTUAL") || usingAt < 0 || usingAt + 1 >= tokens.Count)
+            {
+                continue;
+            }
+
+            string[] suffixes = SqliteLexer.Identifier(sql, tokens[usingAt + 1]).ToLowerInvariant() switch
+            {
+                "fts3" or "fts4" => ["content", "segments", "segdir", "docsize", "stat"],
+                "fts5" => ["data", "idx", "content", "docsize", "config"],
+                "rtree" or "rtree_i32" or "geopoly" => ["node", "rowid", "parent"],
+                _ => [],
+            };
+            shadows.UnionWith(suffixes.Select(suffix => (string)r["name"]! + "_" + suffix));
+        }
+
+        return shadows;
     }
 
     private static async Task<SqliteTable> ReadTableAsync(IDatabaseSession session, string name, string sql, long order, CancellationToken cancellationToken)
