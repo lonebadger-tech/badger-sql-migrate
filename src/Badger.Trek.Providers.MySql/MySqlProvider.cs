@@ -40,6 +40,10 @@ public sealed partial class MySqlProvider : IDatabaseProvider
 
     public IEnvironmentResources? Resources => null;
 
+    public ISchemaScripter Scripter { get; } = new Scripting.MySqlScripter();
+
+    public IScratchDatabases ScratchDatabases => new Scripting.MySqlScratchDatabases(this);
+
     /// <summary>In MySQL a schema is a database; trek works inside the environment's database.</summary>
     public string DefaultSchema => string.Empty;
 
