@@ -13,11 +13,12 @@ namespace Badger.Trek.Providers.MySql;
 /// </summary>
 public sealed partial class MySqlSchemaInspector : ISchemaInspector
 {
-    private static readonly HashSet<string> Kinds = new(StringComparer.Ordinal) { "table", "column", "index", "foreign key", "check", "view", "routine", "trigger", "event" };
+    private static readonly HashSet<string> Kinds = new(StringComparer.Ordinal) { "table", "column", "index", "foreign key", "check", "view", "routine", "trigger", "event", "sequence" };
 
     public async Task<string> CaptureAsync(IDatabaseSession session, string stateSchema, CancellationToken cancellationToken)
     {
         var database = (string)(await session.QueryAsync("SELECT DATABASE() AS db;", null, cancellationToken).ConfigureAwait(false))[0]["db"]!;
+        var mariaDb = session is MySqlSession { IsMariaDb: true };
         var prefix = MySqlStateStore.Prefix(stateSchema);
         var stateTables = StateTables.Names.Select(n => prefix + n).ToHashSet(StringComparer.OrdinalIgnoreCase);
         bool Mine(object? table) => table is string t && !stateTables.Contains(t);
@@ -49,9 +50,10 @@ public sealed partial class MySqlSchemaInspector : ISchemaInspector
             lines.Add($"column|{S(r["t"])}|{Convert.ToInt64(r["pos"], CultureInfo.InvariantCulture):D4}|{S(r["col"])}|{S(r["type"])}|null={S(r["nullable"])}|default={(r["def"] is null ? "(none)" : S(r["def"]))}|extra={extra}|collation={S(r["coll"])}|generated={Local(r["gen"])}|comment={S(r["cmt"])}");
         }
 
-        var indexes = (await Q("""
+        // MariaDB has no functional indexes, and calls invisible indexes ignored.
+        var indexes = (await Q($"""
             SELECT table_name AS t, index_name AS name, non_unique, seq_in_index AS seq, column_name AS col, sub_part, collation AS dir,
-                   index_type AS type, expression, is_visible AS visible
+                   index_type AS type, {(mariaDb ? "NULL AS expression, IF(ignored = 'YES', 'NO', 'YES') AS visible" : "expression, is_visible AS visible")}
               FROM information_schema.statistics
              WHERE table_schema = DATABASE()
             """)).Where(r => Mine(r["t"]));
@@ -83,10 +85,11 @@ public sealed partial class MySqlSchemaInspector : ISchemaInspector
             lines.Add($"foreign key|{S(r["t"])}|{S(r["name"])}|({string.Join(", ", cols.Select(c => S(c["col"])))}) -> {target} ({string.Join(", ", cols.Select(c => S(c["ref_col"])))})|on update {S(r["update_rule"])}|on delete {S(r["delete_rule"])}");
         }
 
-        foreach (var r in (await Q("""
-            SELECT tc.table_name AS t, tc.constraint_name AS name, cc.check_clause AS clause, tc.enforced
+        // MariaDB has no NOT ENFORCED checks, and names checks per table.
+        foreach (var r in (await Q($"""
+            SELECT tc.table_name AS t, tc.constraint_name AS name, cc.check_clause AS clause, {(mariaDb ? "'YES' AS enforced" : "tc.enforced")}
               FROM information_schema.table_constraints tc
-              JOIN information_schema.check_constraints cc ON cc.constraint_schema = tc.constraint_schema AND cc.constraint_name = tc.constraint_name
+              JOIN information_schema.check_constraints cc ON cc.constraint_schema = tc.constraint_schema AND cc.constraint_name = tc.constraint_name{(mariaDb ? " AND cc.table_name = tc.table_name" : string.Empty)}
              WHERE tc.table_schema = DATABASE() AND tc.constraint_type = 'CHECK'
             """)).Where(r => Mine(r["t"])))
         {
@@ -139,6 +142,16 @@ public sealed partial class MySqlSchemaInspector : ISchemaInspector
             """))
         {
             lines.Add($"event|{S(r["name"])}|{S(r["type"])} {S(r["every"])} {S(r["unit"])}|{S(r["status"])}\n{Local(r["body"])}");
+        }
+
+        if (mariaDb)
+        {
+            // MariaDB sequences are tables of type SEQUENCE; SHOW CREATE SEQUENCE gives their options.
+            foreach (var r in await Q("SELECT table_name AS name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'SEQUENCE'"))
+            {
+                var create = await Q($"SHOW CREATE SEQUENCE `{S(r["name"]).Replace("`", "``", StringComparison.Ordinal)}`");
+                lines.Add($"sequence|{S(r["name"])}|{S(create[0]["Create Table"])}");
+            }
         }
 
         lines.Sort(StringComparer.Ordinal);

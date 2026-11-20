@@ -16,11 +16,20 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
 {
     private readonly bool toSqlite = ctx.Target == Dialect.Sqlite;
 
-    /// <summary>Writing MySQL (from PostgreSQL).</summary>
+    /// <summary>Writing MySQL or MariaDB (from PostgreSQL).</summary>
     private readonly bool toMySql = ctx.Target == Dialect.MySql;
 
-    /// <summary>Writing PostgreSQL from MySQL.</summary>
+    /// <summary>Writing MariaDB: MySQL syntax without the parts MariaDB lacks (->>, REGEXP_LIKE, VALUES ROW, LATERAL).</summary>
+    private readonly bool toMariaDb = ctx.Target == Dialect.MySql && ctx.TargetMariaDb;
+
+    /// <summary>Writing PostgreSQL from MySQL or MariaDB.</summary>
     private readonly bool fromMySql = ctx.Source == Dialect.MySql && ctx.Target == Dialect.PostgreSql;
+
+    /// <summary>"MySQL" or "MariaDB", for messages about the target.</summary>
+    private string My => ctx.TargetDisplay;
+
+    /// <summary>"MySQL" or "MariaDB", for messages about the source.</summary>
+    private string MySrc => ctx.SourceDisplay;
 
     /// <summary>Writing PostgreSQL (from SQLite or MySQL).</summary>
     private readonly bool toPg = ctx.Target == Dialect.PostgreSql;
@@ -234,7 +243,7 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
 
                 if (toMySql)
                 {
-                    return Expr(c.Operand) + Note($"COLLATE {c.Collation} was dropped (PostgreSQL collations have no MySQL counterpart)");
+                    return Expr(c.Operand) + Note($"COLLATE {c.Collation} was dropped (PostgreSQL collations have no {My} counterpart)");
                 }
 
                 if (toPg && c.Collation.Trim('"').Equals("NOCASE", StringComparison.OrdinalIgnoreCase))
@@ -270,7 +279,7 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
             }
         }
 
-        return Unsupported($"ANY/ALL comparison has no {(toMySql ? "MySQL" : "SQLite")} counterpart", Show(q.Left) + $" {q.Op} {q.Quantifier}(...)", "true");
+        return Unsupported($"ANY/ALL comparison has no {(toMySql ? My : "SQLite")} counterpart", Show(q.Left) + $" {q.Op} {q.Quantifier}(...)", "true");
     }
 
     private string Like(PgLike l)
@@ -700,10 +709,11 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
                 filter = string.Empty;
             }
 
-            if (order.Length > 0)
+            // MariaDB (10.5+) orders JSON_ARRAYAGG; MySQL orders no aggregate but GROUP_CONCAT.
+            if (order.Length > 0 && !(toMariaDb && name == "JSON_ARRAYAGG"))
             {
                 order = string.Empty;
-                note = Note($"MySQL has no ORDER BY inside {name}(); it was left out: the values are in no particular order");
+                note = Note($"{My} has no ORDER BY inside {name}(); it was left out: the values are in no particular order");
             }
         }
         else if (toSqlite)
@@ -1024,9 +1034,9 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
         _ => Unsupported("query not translated", body.GetType().Name, "SELECT NULL"),
     };
 
-    /// <summary>The rows of a VALUES list: MySQL writes each as ROW(...).</summary>
+    /// <summary>The rows of a VALUES list: MySQL writes each as ROW(...); MariaDB, like PostgreSQL, as (...).</summary>
     private string ValuesRows(IReadOnlyList<IReadOnlyList<PgExpr>> rows) =>
-        string.Join(", ", rows.Select(r => (toMySql ? "ROW(" : "(") + string.Join(", ", r.Select(Expr)) + ")"));
+        string.Join(", ", rows.Select(r => (toMySql && !toMariaDb ? "ROW(" : "(") + string.Join(", ", r.Select(Expr)) + ")"));
 
     private string Select(PgSelectCore s)
     {
@@ -1067,6 +1077,13 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
         return sb.ToString();
     }
 
+    /// <summary>
+    /// A derived table with column names in MariaDB, whose older releases (10.11 among them) take no t(a, b) after a derived table: the
+    /// names go on a CTE inside it, (WITH t(a, b) AS (query) SELECT * FROM t) AS t.
+    /// </summary>
+    private string MariaDbColumnAliases(string alias, IReadOnlyList<string> columns, string query) =>
+        $"(WITH {ctx.Ident(alias)}({string.Join(", ", columns.Select(ctx.Ident))}) AS ({query}) SELECT * FROM {ctx.Ident(alias)}) AS {ctx.Ident(alias)}";
+
     private string Alias(string? alias, IReadOnlyList<string> columns) =>
         (alias is null ? string.Empty : " AS " + ctx.Ident(alias)) + (columns.Count == 0 ? string.Empty : "(" + string.Join(", ", columns.Select(ctx.Ident)) + ")");
 
@@ -1077,20 +1094,30 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
             case PgTableRef t:
                 if (t.ColumnAliases.Count > 0 && !toPg)
                 {
-                    issues.Add($"column aliases on table {string.Join('.', t.Name.Parts)} are not supported in {(toMySql ? "MySQL" : "SQLite")}; they were dropped");
+                    issues.Add($"column aliases on table {string.Join('.', t.Name.Parts)} are not supported in {(toMySql ? My : "SQLite")}; they were dropped");
                 }
 
                 var table = Table(t.Name);
                 var alias = t.Alias ?? (t.Name.Parts.Count == 1 && TableReplacements.ContainsKey(t.Name.Last) ? t.Name.Last : null);
                 return table + (alias is null ? string.Empty : " AS " + ctx.Ident(alias)) + (toPg ? Alias(null, t.ColumnAliases) : string.Empty);
             case PgSubqueryRef s:
-                if (s.Lateral && toSqlite)
+                if (s.Lateral && (toSqlite || toMariaDb))
                 {
-                    issues.Add("LATERAL is not supported in SQLite; rewrite as a correlated subquery");
+                    issues.Add($"LATERAL is not supported in {(toSqlite ? "SQLite" : "MariaDB")}; rewrite as a correlated subquery");
                 }
 
-                return $"{(s.Lateral && !toSqlite ? "LATERAL " : string.Empty)}({Query(s.Query)}){Alias(s.Alias, toSqlite ? [] : s.ColumnAliases)}";
+                if (toMariaDb && s.Alias is not null && s.ColumnAliases.Count > 0)
+                {
+                    return MariaDbColumnAliases(s.Alias, s.ColumnAliases, Query(s.Query));
+                }
+
+                return $"{(s.Lateral && !toSqlite && !toMariaDb ? "LATERAL " : string.Empty)}({Query(s.Query)}){Alias(s.Alias, toSqlite ? [] : s.ColumnAliases)}";
             case PgValuesRef v:
+                if (toMariaDb && v.Alias is not null && v.ColumnAliases.Count > 0)
+                {
+                    return MariaDbColumnAliases(v.Alias, v.ColumnAliases, $"VALUES {ValuesRows(v.Rows)}");
+                }
+
                 return $"(VALUES {ValuesRows(v.Rows)}){Alias(v.Alias, toSqlite ? [] : v.ColumnAliases)}";
             case PgFunctionRef fn:
                 if ((toSqlite || toMySql) && fn.Call.Function.Last.Equals("generate_series", StringComparison.OrdinalIgnoreCase))
@@ -1099,7 +1126,9 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
                     var args = fn.Call.Args.Select(Expr).ToList();
                     if (toMySql)
                     {
-                        issues.Add("generate_series() became a recursive CTE: MySQL stops it after cte_max_recursion_depth (1000) rows unless that is raised");
+                        issues.Add(toMariaDb
+                            ? "generate_series() became a recursive CTE: MariaDB stops it after max_recursive_iterations rows"
+                            : "generate_series() became a recursive CTE: MySQL stops it after cte_max_recursion_depth (1000) rows unless that is raised");
                     }
 
                     return $"(WITH RECURSIVE trek_series(value) AS (SELECT {args[0]} UNION ALL SELECT value + {(args.Count > 2 ? args[2] : "1")} FROM trek_series WHERE value + {(args.Count > 2 ? args[2] : "1")} <= {args[1]}) SELECT value AS {ctx.Ident(column)} FROM trek_series){Alias(fn.Alias ?? "generate_series", [])}";
@@ -1107,7 +1136,7 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
 
                 if (toMySql)
                 {
-                    return Unsupported("set-returning function in FROM has no MySQL counterpart", Show(fn.Call), string.Empty);
+                    return Unsupported($"set-returning function in FROM has no {My} counterpart", Show(fn.Call), string.Empty);
                 }
 
                 return $"{(fn.Lateral && !toSqlite ? "LATERAL " : string.Empty)}{Call(fn.Call)}{(fn.Ordinality && !toSqlite ? " WITH ORDINALITY" : string.Empty)}{Alias(fn.Alias, toSqlite ? [] : fn.ColumnAliases)}";
@@ -1137,7 +1166,7 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
 
                 if (toMySql && j.Kind == "full")
                 {
-                    tail += Note("MySQL has no FULL JOIN: rewrite it as a LEFT JOIN plus the unmatched rows of the other side (UNION ALL)");
+                    tail += Note($"{My} has no FULL JOIN: rewrite it as a LEFT JOIN plus the unmatched rows of the other side (UNION ALL)");
                 }
 
                 return $"{From(j.Left)} {(j.Natural ? "NATURAL " : string.Empty)}{kind} {From(j.Right)}{tail}";

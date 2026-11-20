@@ -28,6 +28,7 @@ SIDEBAR = [
         ("Always Encrypted", "docs/always-encrypted/"),
         ("PostgreSQL", "docs/postgresql/"),
         ("MySQL", "docs/mysql/"),
+        ("MariaDB", "docs/mariadb/"),
         ("SQLite", "docs/sqlite/"),
     ]),
     ("Operate", [
@@ -58,7 +59,7 @@ def link(path, label):
 
 def pages():
     return [overview(), install(), quick_start(), project(), ai(), plan(), changes(), certification(), revert(), fixing_changes(), generating(),
-            teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(), postgresql(), mysql(), sqlite(),
+            teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(), postgresql(), mysql(), mariadb(), sqlite(),
             commands(), ci_cd(), bundles(), drift(), baseline(), importing(), upgrading(), converting(), journal(), troubleshooting(), extending()]
 
 
@@ -66,7 +67,7 @@ def pages():
 
 def overview():
     return doc("docs/", "Documentation", "Everything about Badger Trek, from the first change to production pipelines.", f"""
-<p>Badger Trek deploys hand-written SQL changes to SQL Server, Azure SQL, PostgreSQL, MySQL and SQLite, in an order you control, and proves afterwards that every database received exactly what you intended. It is a single command-line tool, <code>trek</code>, for Windows, macOS and Linux.</p>
+<p>Badger Trek deploys hand-written SQL changes to SQL Server, Azure SQL, PostgreSQL, MySQL, MariaDB and SQLite, in an order you control, and proves afterwards that every database received exactly what you intended. It is a single command-line tool, <code>trek</code>, for Windows, macOS and Linux.</p>
 
 <h2>Five ideas</h2>
 <ol>
@@ -86,7 +87,7 @@ def overview():
 </ul>
 
 <h2>Supported databases</h2>
-<p>SQL Server 2019 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance. PostgreSQL 15 and later. MySQL 8.4 and 9.7 (the LTS releases; see {link("docs/mysql/", "MySQL")}). SQLite 3.26 and later: trek runs the engine built into it, and the scripts it generates also run on the older SQLite that other programs open your database with ({link("docs/sqlite/#versions", "SQLite versions")}). The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
+<p>SQL Server 2019 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance. PostgreSQL 15 and later. MySQL 8.4 and 9.7 and MariaDB 10.11, 11.4, 11.8 and 12.3 (the LTS releases; see {link("docs/mysql/", "MySQL")} and {link("docs/mariadb/", "MariaDB")}). SQLite 3.26 and later: trek runs the engine built into it, and the scripts it generates also run on the older SQLite that other programs open your database with ({link("docs/sqlite/#versions", "SQLite versions")}). The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
 """)
 
 
@@ -1030,7 +1031,7 @@ def commands():
         ("import grate &lt;folder&gt;", "[--folder key=name…] [--environment name…] [--ignore-directory-names] [--no-tokens] [--var name=value…] [--dry-run]", "Convert a grate or RoundhousE scripts folder into a new trek project. No database."),
         ("import sqitch &lt;folder&gt;", "[--engine name] [--provider …] [--dry-run]", "Convert a Sqitch project into a new trek project. No database."),
         ("import sqlproj &lt;file.sqlproj|folder&gt;", "[--dry-run]", "Convert an SSDT / SQL Database Project into a new SQL Server trek project: one change or repeatable per object, in dependency order. No database."),
-        ("convert schema --out &lt;folder&gt;", "--to p [--from-provider p] [--names lower|snake|keep] [--case-sensitive] [--exclude glob…] [--dry-run]", "Read a SQL Server, PostgreSQL, MySQL or SQLite database's catalog and write a new project for the provider named by --to: tables, keys and indexes as changes; views, routines and triggers translated as repeatables; CONVERSION.md listing what to review."),
+        ("convert schema --out &lt;folder&gt;", "--to p [--from-provider p] [--names lower|snake|keep] [--case-sensitive] [--exclude glob…] [--dry-run]", "Read a SQL Server, PostgreSQL, MySQL, MariaDB or SQLite database's catalog and write a new project for the provider named by --to: tables, keys and indexes as changes; views, routines and triggers translated as repeatables; CONVERSION.md listing what to review."),
         ("convert data --target &lt;folder&gt;", "[--target-env env] [--from-provider p] [--tables glob…] [--truncate]", "Copy every table's rows into the deployed, converted project's database, then compare row counts."),
         ("vars", "", "Every variable for the environment: value, source, description."),
         ("render &lt;name&gt;", "[-k|--kind deploy|revert|verify]", "Print a change or repeatable exactly as it would run."),
@@ -1520,7 +1521,41 @@ DELIMITER ;''')}
 <p>In MySQL a schema is a database, and trek works in the environment's database: its journal is the tables <code>trek_meta</code>, <code>trek_changes</code>, <code>trek_repeatables</code>, <code>trek_events</code> and <code>trek_schema_snapshots</code> there (the prefix is <code>stateSchema</code>), so trek needs no right to create databases. The deploy lock is a MySQL named lock (<code>GET_LOCK</code>) per database. The schema fingerprint covers tables, columns, indexes, foreign keys, checks, views, routines, triggers and events, and leaves out the database's own name, which MySQL writes into stored definitions, so the same schema has the same fingerprint in every environment.</p>
 
 <h2>Versions and services</h2>
-<p>Every build runs the provider's tests against MySQL 8.4 and 9.7 (the official Docker images), the long-term-support releases that are still supported; <code>trek doctor</code> flags older releases, Innovation releases and MariaDB. Azure Database for MySQL, Amazon RDS and Aurora MySQL and Google Cloud SQL run standard MySQL and are expected to work, but have not been tested. trek connects with MySqlConnector: <code>connectionProperties</code> takes any of its connection-string keywords, and <code>tls.mode</code> maps to its <code>SslMode</code>.</p>
+<p>Every build runs the provider's tests against MySQL 8.4 and 9.7 (the official Docker images), the long-term-support releases that are still supported; <code>trek doctor</code> flags older releases and Innovation releases. Azure Database for MySQL, Amazon RDS and Aurora MySQL and Google Cloud SQL run standard MySQL and are expected to work, but have not been tested. trek connects with MySqlConnector: <code>connectionProperties</code> takes any of its connection-string keywords, and <code>tls.mode</code> maps to its <code>SslMode</code>. MariaDB is a provider of its own ({link("docs/mariadb/", "MariaDB")}): trek stops with a hint when a <code>mysql</code> environment turns out to be MariaDB, or the other way round.</p>
+""")
+
+
+def mariadb():
+    return doc("docs/mariadb/", "MariaDB", "MariaDB 10.11, 11.4, 11.8 and 12.3, the LTS releases, each tested on every build.", f"""
+{sh('''trek init --provider mariadb
+trek add create-product
+trek deploy''')}
+{yaml('''provider: mariadb
+defaultEnvironment: local
+environments:
+  local:
+    host: localhost
+    port: 3306
+    database: shop                      # trek deploys here and keeps its journal here (trek_* tables)
+    authentication: password
+    user: root
+    password: ${env:TREK_LOCAL_PASSWORD}
+    tls:
+      mode: optional''', "trek.yaml")}
+<p>MariaDB began as a fork of MySQL and still shares its protocol, its <code>mysql</code>-client script conventions and most of its SQL, so trek's MariaDB provider is the MySQL provider in MariaDB mode: everything on the {link("docs/mysql/", "MySQL")} page applies, with the differences below. The plan, hash certification, revert from stored scripts, environments, variables, repeatables, bundles, <code>verify</code>, <code>diff-schema</code>, generated changes and <code>trek convert</code> work as on the other databases. Imports from other tools are not available for MariaDB yet.</p>
+
+<h2 id="differences">Differences from MySQL</h2>
+<table>
+<tr><th>Topic</th><th>MariaDB</th></tr>
+<tr><td>Transactions</td><td>As in MySQL, DDL commits as it runs: changes run without a transaction, and a change that fails part-way keeps what already ran. Keep changes small and give each a verify script.</td></tr>
+<tr><td>Scripts</td><td>Split like the <code>mariadb</code> client (the same as <code>mysql</code>): statements end at <code>;</code>, stored program bodies go between <code>DELIMITER</code> lines. MariaDB's own syntax (<code>CREATE OR REPLACE</code> for procedures, functions and triggers, sequences, <code>RETURNING</code>, system-versioned tables) runs as written.</td></tr>
+<tr><td>Fingerprint</td><td>Covers what it covers on MySQL, plus sequences. MariaDB has no functional indexes; ignored indexes count as invisible ones do on MySQL.</td></tr>
+<tr><td>Sign-in</td><td>Passwords. Azure Database for MariaDB has been retired, so there is no Entra sign-in.</td></tr>
+<tr><td>Converting</td><td>MariaDB converts to and from every other provider, MySQL included; see {link("docs/converting/#mariadb", "Converting: MariaDB")}.</td></tr>
+</table>
+
+<h2>Versions and services</h2>
+<p>Every build runs the provider's tests against MariaDB 10.11, 11.4, 11.8 and 12.3 (the official Docker images), the long-term-support releases that are still supported; <code>trek doctor</code> flags older and short-term releases. Amazon RDS for MariaDB runs standard MariaDB and is expected to work, but has not been tested. trek connects with MySqlConnector: <code>connectionProperties</code> takes any of its connection-string keywords, and <code>tls.mode</code> maps to its <code>SslMode</code>.</p>
 """)
 
 
@@ -1650,7 +1685,7 @@ FROM pg_tables WHERE schemaname = :'schema' \\gexec''', "changes/reference-data/
 
 
 def converting():
-    return doc("docs/converting/", "Converting between databases", "Move a live database between SQL Server, PostgreSQL, MySQL and SQLite, in any direction: its schema becomes a new trek project for the provider you choose, then its rows are copied and checked.", f"""
+    return doc("docs/converting/", "Converting between databases", "Move a live database between SQL Server, PostgreSQL, MySQL, MariaDB and SQLite, in any direction: its schema becomes a new trek project for the provider you choose, then its rows are copied and checked.", f"""
 {sh('''trek convert schema -C db -e prod --to postgresql --out ../db-pg   # read prod's catalog, write a PostgreSQL project
 # read ../db-pg/CONVERSION.md, set the connection in ../db-pg/trek.yaml
 trek plan check -C ../db-pg
@@ -1725,8 +1760,20 @@ trek verify -C ../db-pg''')}
 <tr><td>Functions, procedures, triggers</td><td>Not translated yet, in either direction: they are written commented out with a REVIEW marker, and a view that calls one of them is commented out too, until it is rewritten.</td></tr>
 </table>
 
+<h2 id="mariadb">MariaDB</h2>
+<p>MariaDB 10.11, 11.4, 11.8 and 12.3 convert to and from every other provider, MySQL included. Everything in the MySQL section above applies, with these differences:</p>
+<table>
+<tr><th>Topic</th><th>What the conversion does</th></tr>
+<tr><td>Types</td><td>To MariaDB: <code>uuid</code> and <code>uniqueidentifier</code> become <code>UUID</code>, PostgreSQL <code>inet</code> <code>INET6</code>, JSON stays <code>JSON</code> (which MariaDB stores as checked <code>LONGTEXT</code>). From MariaDB: <code>UUID</code> becomes <code>uuid</code> or <code>uniqueidentifier</code>, <code>INET4</code>/<code>INET6</code> <code>inet</code> or text, and a JSON column is recognized by its <code>json_valid</code> check.</td></tr>
+<tr><td>Sequences</td><td>MariaDB has them: sequences convert both ways, and <code>nextval</code>/<code>NEXT VALUE FOR</code> defaults become <code>NEXTVAL(seq)</code>. To MySQL, which has none, they are flagged.</td></tr>
+<tr><td>Collations</td><td>Tables use <code>utf8mb4_uca1400_as_ci</code> or <code>utf8mb4_uca1400_as_cs</code>, MariaDB's own Unicode collations.</td></tr>
+<tr><td>Indexes</td><td>MariaDB has no expression indexes: each expression becomes a <code>VIRTUAL</code> generated column, indexed, and flagged (check the column's guessed type).</td></tr>
+<tr><td>Views</td><td>MariaDB has no <code>-&gt;</code>/<code>-&gt;&gt;</code> operators or <code>REGEXP_LIKE</code>: JSON paths use <code>JSON_EXTRACT</code>/<code>JSON_VALUE</code>, and <code>~</code>/<code>~*</code> become <code>REGEXP</code> with an inline <code>(?-i)</code>/<code>(?i)</code> flag, so case sensitivity does not depend on the collation.</td></tr>
+<tr><td>MySQL and MariaDB</td><td>Converting between them keeps column types as they are (<code>ENUM</code>, <code>SET</code>, unsigned integers) and translates views and defaults by way of PostgreSQL's syntax, like every other pair.</td></tr>
+</table>
+
 <h2 id="data">Copying the data</h2>
-<p><code>trek convert data</code> copies every table, parents before children, with the same name mapping <code>convert schema</code> used (it reads <code>convert.json</code> in the converted project). Into SQL Server it uses bulk copy (identity values kept, triggers not fired, constraints checked afterwards); into PostgreSQL, <code>COPY</code> in one transaction with foreign keys deferred and user triggers off; into SQLite, prepared inserts in one transaction with foreign keys deferred and the tables' triggers set aside until the commit; into MySQL, multi-row inserts in one transaction with foreign key checks off, and every foreign key checked by query before the commit (MySQL cannot turn triggers off, so the target's triggers fire for each row). PostgreSQL, SQLite and MySQL loads leave nothing behind when they fail. Identities and sequences are moved past the copied values, and row counts are compared at the end (exit code 1 when they differ).</p>
+<p><code>trek convert data</code> copies every table, parents before children, with the same name mapping <code>convert schema</code> used (it reads <code>convert.json</code> in the converted project). Into SQL Server it uses bulk copy (identity values kept, triggers not fired, constraints checked afterwards); into PostgreSQL, <code>COPY</code> in one transaction with foreign keys deferred and user triggers off; into SQLite, prepared inserts in one transaction with foreign keys deferred and the tables' triggers set aside until the commit; into MySQL and MariaDB, multi-row inserts in one transaction with foreign key checks off, and every foreign key checked by query before the commit (neither can turn triggers off, so the target's triggers fire for each row). PostgreSQL, SQLite, MySQL and MariaDB loads leave nothing behind when they fail. Identities and sequences are moved past the copied values, and row counts are compared at the end (exit code 1 when they differ).</p>
 <p>The target tables must be empty; <code>--truncate</code> empties them first. <code>--tables "sales.*"</code> copies only some. Run it after deploying the converted project, while the source is not being written to.</p>
 <p>A SQLite target with a relative <code>database:</code> could be two files: one relative to the folder you run <code>convert data</code> in, one relative to the converted project (where it is if you deployed from that folder). trek uses the one that exists, and stops if both or neither do rather than load or create the wrong file.</p>
 """)
@@ -1867,7 +1914,7 @@ Badger.Trek.Connectivity ─────┘   Entra ID tokens, SSH tunnels, secr
 <p>The core holds the plan, hashing, the preprocessor and the engine, and references no database driver; a test fails the build if the engine, connectivity or CLI reference a vendor driver directly.</p>
 
 <h2>Adding a database</h2>
-<p>A provider implements <code>IDatabaseProvider</code>: sessions, batch splitting, linting, journal tables, a deploy lock, a schema fingerprint, and optionally environment resources. It must pass the shared conformance test suite. The engine, plan, certification, variables, Entra ID tokens and SSH tunnels work unchanged; the PostgreSQL provider was added this way without touching any of them. <a href="https://github.com/lonebadger-tech/badger-trek/blob/dev/docs/writing-a-provider.md">Writing a provider</a> walks through it, and <a href="https://github.com/lonebadger-tech/badger-trek/blob/dev/CONTRIBUTING.md">CONTRIBUTING.md</a> covers sending it upstream. MySQL and SQLite are natural next providers.</p>
+<p>A provider implements <code>IDatabaseProvider</code>: sessions, batch splitting, linting, journal tables, a deploy lock, a schema fingerprint, and optionally environment resources. It must pass the shared conformance test suite. The engine, plan, certification, variables, Entra ID tokens and SSH tunnels work unchanged; the PostgreSQL provider was added this way without touching any of them. <a href="https://github.com/lonebadger-tech/badger-trek/blob/dev/docs/writing-a-provider.md">Writing a provider</a> walks through it, and <a href="https://github.com/lonebadger-tech/badger-trek/blob/dev/CONTRIBUTING.md">CONTRIBUTING.md</a> covers sending it upstream. Oracle is a natural next provider.</p>
 
 <h2>Source</h2>
 <p><a href="https://github.com/lonebadger-tech/badger-trek">github.com/lonebadger-tech/badger-trek</a> · <a href="{BASE}/license/">MIT license</a>. Contributions welcome.</p>

@@ -53,7 +53,7 @@ public static class ImportYaml
                     database: local.db
 
                 """
-                : providerId == "mysql"
+                : providerId is "mysql" or "mariadb"
                 ? """
                   local:                               # where to deploy: edit to match your server
                     host: localhost

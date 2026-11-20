@@ -105,8 +105,13 @@ public static partial class TypeMapper
             case "timestamp" when ctx.Source == Dialect.SqlServer:
             case "rowversion":
                 return new("BINARY(8)", null, "rowversion becomes BINARY(8): MySQL does not stamp rows on update");
+            case "uuid" or "uniqueidentifier" or "guid" when ctx.TargetMariaDb:
+                // MariaDB 10.7+ has a native UUID type.
+                return new("UUID");
             case "uuid" or "uniqueidentifier" or "guid":
                 return new("CHAR(36)", null, null, IsText: true);
+            case "inet" when ctx.TargetMariaDb:
+                return new("INET6", null, "inet became INET6: it holds IPv4 addresses as ::ffff:a.b.c.d and has no netmask (an address written with /24 does not fit)");
             case "date":
                 return new("DATE");
             case "time" or "timetz":
@@ -240,9 +245,54 @@ public static partial class TypeMapper
                 return new(pg ? $"varchar({length})" : ss ? $"nvarchar({length})" : "TEXT", check, name == "set" ? $"{t}: a SET becomes comma-separated text" : null, true);
             case "geometry" or "point" or "linestring" or "polygon" or "multipoint" or "multilinestring" or "multipolygon" or "geometrycollection":
                 return Pick("text", "nvarchar(max)", "TEXT", $"{t} is stored as text (WKT); spatial types are not converted", true);
+
+            // MariaDB's own types.
+            case "uuid":
+                return pg ? new("uuid") : ss ? new("uniqueidentifier") : new("TEXT", null, null, true);
+            case "inet4" or "inet6":
+                return pg ? new("inet") : ss ? new($"varchar({(name == "inet4" ? 15 : 45)})", null, null, true) : new("TEXT", null, null, true);
         }
 
         return Pick("text", "nvarchar(max)", "TEXT", $"type {t} has no counterpart; stored as text", true);
+    }
+
+    // ------------------------------------------------------------------ MySQL ⇄ MariaDB
+
+    /// <summary>
+    /// A MySQL column type in MariaDB or back. Both read the other's COLUMN_TYPE, so types are kept (ENUM, SET,
+    /// unsigned and all), without the integer display widths MySQL 8 deprecates; only the types one side lacks change:
+    /// MariaDB's UUID, INET4 and INET6 become text in MySQL, and MySQL's VECTOR becomes a blob.
+    /// </summary>
+    public static TypeMapping BetweenMySqlAndMariaDb(string columnType, ConversionContext ctx)
+    {
+        var t = columnType.Trim();
+        var m = MySqlTypeRegex().Match(t);
+        var name = m.Groups["name"].Value.Trim().ToLowerInvariant();
+        var args = m.Groups["args"].Success ? m.Groups["args"].Value : string.Empty;
+        var suffix = m.Groups["suffix"].Value.Trim().ToLowerInvariant();
+        var unsigned = suffix.Contains("unsigned", StringComparison.Ordinal) ? " UNSIGNED" : string.Empty;
+        var text = name is "char" or "varchar" or "tinytext" or "text" or "mediumtext" or "longtext" or "enum" or "set";
+        switch (name)
+        {
+            case "tinyint" when args.Trim() == "1":
+                return new("TINYINT(1)");
+            case "tinyint" or "smallint" or "mediumint" or "int" or "integer" or "bigint":
+                // int(11): a display width, not a size.
+                return new((name == "integer" ? "INT" : name.ToUpperInvariant()) + unsigned + (suffix.Contains("zerofill", StringComparison.Ordinal) ? " ZEROFILL" : string.Empty));
+            case "uuid" when !ctx.TargetMariaDb:
+                return new("CHAR(36)", null, "MariaDB's UUID became CHAR(36)", true);
+            case "inet4" when !ctx.TargetMariaDb:
+                return new("VARCHAR(15)", null, "MariaDB's INET4 became VARCHAR(15)", true);
+            case "inet6" when !ctx.TargetMariaDb:
+                return new("VARCHAR(45)", null, "MariaDB's INET6 became VARCHAR(45); IPv4 addresses keep their ::ffff: form", true);
+            case "vector" when ctx.TargetMariaDb:
+                return new("LONGBLOB", null, $"MySQL's {t} became LONGBLOB; MariaDB 11.7+ has VECTOR(n) with its own functions");
+            case "json":
+                // MariaDB's JSON is LONGTEXT with a json_valid() check, which MariaDB adds itself.
+                return new("JSON");
+        }
+
+        return new(t, null, null, text);
     }
 
     /// <summary>The labels of "'a','b','it''s'" as MySQL prints ENUM and SET values.</summary>
@@ -257,7 +307,7 @@ public static partial class TypeMapper
         return labels;
     }
 
-    [GeneratedRegex(@"^(?<name>[A-Za-z_ \x22]+?)\s*(?:\((?<args>.*)\))?(?<suffix>(?:\s+(?:unsigned|zerofill|with(?:out)?\s+time\s+zone))*)\s*$", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    [GeneratedRegex(@"^(?<name>[A-Za-z_\x22][A-Za-z0-9_ \x22]*?)\s*(?:\((?<args>.*)\))?(?<suffix>(?:\s+(?:unsigned|zerofill|with(?:out)?\s+time\s+zone))*)\s*$", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex MySqlTypeRegex();
 
     [GeneratedRegex(@"'((?:[^'\\]|''|\\.)*)'")]

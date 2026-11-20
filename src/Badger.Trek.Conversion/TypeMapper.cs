@@ -14,6 +14,7 @@ public static partial class TypeMapper
 {
     public static TypeMapping Map(string sourceType, ConversionContext ctx) => (ctx.Source, ctx.Target) switch
     {
+        (Dialect.MySql, Dialect.MySql) => BetweenMySqlAndMariaDb(sourceType, ctx),
         (Dialect.MySql, _) => FromMySql(sourceType, ctx),
         (_, Dialect.MySql) => ToMySql(sourceType, ctx),
         (_, Dialect.Sqlite) => ToSqlite(sourceType, ctx),

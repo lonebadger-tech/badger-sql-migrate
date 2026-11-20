@@ -155,7 +155,7 @@ public sealed partial class MySqlScripter : ISchemaScripter
             // Checks and indexes that change or go away are dropped before the columns change.
             foreach (var check in old.Constraints.Where(c => !c.ForeignKey && !now.Constraints.Any(n => n.Name == c.Name && n.Definition == c.Definition)))
             {
-                alterTables.Add($"ALTER TABLE {t} DROP CHECK {Q(check.Name)};");
+                alterTables.Add($"ALTER TABLE {t} DROP CONSTRAINT {Q(check.Name)};");
                 if (!now.Constraints.Any(n => n.Name == check.Name))
                 {
                     summary.Add($"- check {now.Name}.{check.Name}");

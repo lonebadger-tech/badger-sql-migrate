@@ -66,7 +66,7 @@ public sealed class ConversionExportTests(MySqlFixture fixture)
         CREATE EVENT ev_cleanup ON SCHEDULE EVERY 1 DAY DO DELETE FROM orders WHERE total = 0;
         """;
 
-    private readonly MySqlProvider provider = new();
+    private readonly MySqlProvider provider = new(MySqlFixture.Flavor);
 
     private async Task<TestDatabase> RequireDatabaseAsync()
     {
@@ -85,6 +85,7 @@ public sealed class ConversionExportTests(MySqlFixture fixture)
     [SkippableFact]
     public async Task The_exporter_reads_every_feature_of_the_database()
     {
+        Skip.If(MySqlFixture.Flavor == MySqlFlavor.MariaDb, "MySQL features (functional indexes, expression defaults on CHAR); MariaDB has its own test.");
         await using var db = await RequireDatabaseAsync();
         await using var session = await provider.OpenSessionAsync(db.Profile, SessionContext.Empty, CancellationToken.None);
         await RunAsync(session, Schema);
@@ -201,6 +202,63 @@ public sealed class ConversionExportTests(MySqlFixture fixture)
         Assert.DoesNotContain(schema.Tables, t => t.Name.Name.StartsWith("trek_", StringComparison.Ordinal));
     }
 
+    [SkippableFact]
+    public async Task The_exporter_reads_mariadb_json_uuid_sequences_and_defaults()
+    {
+        Skip.If(MySqlFixture.Flavor != MySqlFlavor.MariaDb, "MariaDB only.");
+        await using var db = await RequireDatabaseAsync();
+        await using var session = await provider.OpenSessionAsync(db.Profile, SessionContext.Empty, CancellationToken.None);
+        await RunAsync(session, """
+            CREATE SEQUENCE invoice_no START WITH 5000 INCREMENT BY 10;
+            CREATE TABLE item (
+              id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+              ref UUID NOT NULL DEFAULT uuid(),
+              addr INET6 NULL,
+              doc JSON NULL,
+              label VARCHAR(20) NOT NULL DEFAULT 'it''s',
+              qty INT NOT NULL DEFAULT 0,
+              note TEXT NULL,
+              made DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+              invoice BIGINT NOT NULL DEFAULT NEXTVAL(invoice_no),
+              doubled INT AS (qty * 2) PERSISTENT,
+              CONSTRAINT ck_item_qty CHECK (qty >= 0)
+            );
+            CREATE TABLE other (id INT PRIMARY KEY, qty INT, CONSTRAINT ck_item_qty CHECK (qty < 10));
+            """);
+
+        var schema = await provider.Exporter.ExportAsync(session, new ExportOptions { StateSchema = "trek", Excluded = _ => false }, CancellationToken.None);
+        Assert.Equal("mariadb", schema.SourceProvider);
+        var item = schema.Tables.Single(t => t.Name.Name == "item");
+        PortableColumn C(string name) => item.Columns.Single(c => c.Name == name);
+
+        Assert.Equal("uuid", C("ref").Type);
+        Assert.Equal("uuid()", C("ref").Default);
+        Assert.Equal("inet6", C("addr").Type);
+        Assert.Equal("json", C("doc").Type);
+        Assert.Null(C("doc").Default);
+        Assert.Equal("'it''s'", C("label").Default);
+        Assert.Equal("0", C("qty").Default);
+        Assert.Null(C("note").Default);
+        Assert.Null(C("id").Default);
+        Assert.Equal("current_timestamp(3)", C("made").Default);
+        Assert.Contains("nextval(", C("invoice").Default!, StringComparison.OrdinalIgnoreCase);
+        Assert.True(C("doubled").ComputedStored);
+        Assert.Contains("`qty` * 2", C("doubled").Computed!, StringComparison.Ordinal);
+
+        // JSON's json_valid check is not a check of its own; checks with the same name on two tables stay apart.
+        var check = Assert.Single(item.Checks);
+        Assert.Equal("ck_item_qty", check.Name);
+        Assert.Contains(">= 0", check.Expression, StringComparison.Ordinal);
+        Assert.Contains("< 10", Assert.Single(schema.Tables.Single(t => t.Name.Name == "other").Checks).Expression, StringComparison.Ordinal);
+
+        var sequence = Assert.Single(schema.Sequences);
+        Assert.Equal("invoice_no", sequence.Name.Name);
+        Assert.Equal(5000, sequence.Start);
+        Assert.Equal(10, sequence.Increment);
+        Assert.False(sequence.Cycle);
+        Assert.DoesNotContain(schema.Tables, t => t.Name.Name == "invoice_no");
+    }
+
     private static async IAsyncEnumerable<object?[]> Rows(IEnumerable<object?[]> rows)
     {
         foreach (var row in rows)
@@ -259,7 +317,7 @@ public sealed class ConversionExportTests(MySqlFixture fixture)
         var columns = await data.ColumnsAsync(session, sample, CancellationToken.None);
         Assert.Equal(["id", "parent_id", "s", "t", "n", "f", "b", "big", "u", "d", "dt", "ts", "tm", "g", "gb", "bin", "j", "e", "bit1"], columns.Select(c => c.Name));
         Assert.Equal("tinyint(1)", columns.Single(c => c.Name == "b").Type);
-        Assert.Equal("int unsigned", columns.Single(c => c.Name == "u").Type);
+        Assert.Equal(MySqlFixture.Flavor == MySqlFlavor.MariaDb ? "int(10) unsigned" : "int unsigned", columns.Single(c => c.Name == "u").Type);
 
         var guid = Guid.Parse("6f9619ff-8b86-d011-b42d-00c04fc964ff");
         var at = new DateTimeOffset(2026, 11, 20, 8, 30, 15, TimeSpan.FromHours(-6)).AddTicks(1234560);

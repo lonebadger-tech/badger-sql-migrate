@@ -119,7 +119,7 @@ public sealed partial class MySqlStateStore : IStateStore
 
     public Task SetMetaAsync(IDatabaseSession session, string schema, string key, string value, CancellationToken cancellationToken) =>
         session.ExecuteAsync(
-            $"INSERT INTO `{Prefix(schema)}meta` (`key`, `value`) VALUES (@key, @value) AS new ON DUPLICATE KEY UPDATE `value` = new.`value`;",
+            $"INSERT INTO `{Prefix(schema)}meta` (`key`, `value`) VALUES (@key, @value) ON DUPLICATE KEY UPDATE `value` = @value;",
             new Dictionary<string, object?> { ["key"] = key, ["value"] = value },
             cancellationToken);
 
@@ -187,9 +187,9 @@ public sealed partial class MySqlStateStore : IStateStore
     public Task UpsertRepeatableAsync(IDatabaseSession session, string schema, AppliedRepeatable repeatable, CancellationToken cancellationToken) =>
         session.ExecuteAsync($"""
             INSERT INTO `{Prefix(schema)}repeatables` (name, hash, script, previous_hash, previous_script, applied_at, applied_by)
-            VALUES (@name, @hash, @script, @previous_hash, @previous_script, @applied_at, @applied_by) AS new
-            ON DUPLICATE KEY UPDATE hash = new.hash, script = new.script, previous_hash = new.previous_hash,
-                previous_script = new.previous_script, applied_at = new.applied_at, applied_by = new.applied_by;
+            VALUES (@name, @hash, @script, @previous_hash, @previous_script, @applied_at, @applied_by)
+            ON DUPLICATE KEY UPDATE hash = @hash, script = @script, previous_hash = @previous_hash,
+                previous_script = @previous_script, applied_at = @applied_at, applied_by = @applied_by;
             """,
             new Dictionary<string, object?>
             {

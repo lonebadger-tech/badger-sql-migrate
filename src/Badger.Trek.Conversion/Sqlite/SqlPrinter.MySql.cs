@@ -102,17 +102,31 @@ internal sealed partial class SqlPrinter
         {
             case "like":
                 return $"{Expr(l.Operand)} {not}LIKE {Expr(l.Pattern)}{escape}"
-                    + (ctx.Schema.CaseInsensitive ? string.Empty : Note("MySQL's LIKE ignores case under its default collations"));
+                    + (ctx.Schema.CaseInsensitive ? string.Empty : Note($"{My}'s LIKE ignores case under its default collations"));
             case "ilike":
                 return $"{Expr(l.Operand)} {not}LIKE {Expr(l.Pattern)}{escape}";
+            case "~" or "~*" when toMariaDb:
+                // MariaDB has no REGEXP_LIKE, and its REGEXP (PCRE) follows the collation: a (?-i) or (?i) at the start
+                // of the pattern says which PostgreSQL meant.
+                return $"{Expr(l.Operand)} {not}REGEXP {PcrePattern(l.Pattern, l.Op == "~*")}";
             case "~" or "~*":
                 // REGEXP alone would follow the collation; the match type says which PostgreSQL meant.
                 return $"{not}REGEXP_LIKE({Expr(l.Operand)}, {Expr(l.Pattern)}, '{(l.Op == "~" ? "c" : "i")}')";
             case "regexp":
                 return $"{Expr(l.Operand)} {not}REGEXP {Expr(l.Pattern)}";
             default:
-                return Unsupported($"{l.Op.ToUpperInvariant()} has no MySQL counterpart", $"{Show(l.Operand)} {l.Op} {Show(l.Pattern)}", "TRUE");
+                return Unsupported($"{l.Op.ToUpperInvariant()} has no {My} counterpart", $"{Show(l.Operand)} {l.Op} {Show(l.Pattern)}", "TRUE");
         }
+    }
+
+    /// <summary>
+    /// A MariaDB REGEXP pattern with PCRE's case flag in front: (?i) ignores case, (?-i) does not, whatever the
+    /// collation of the operands says.
+    /// </summary>
+    private string PcrePattern(PgExpr pattern, bool insensitive)
+    {
+        var flag = insensitive ? "(?i)" : "(?-i)";
+        return StringArg(pattern) is { } literal ? Lit(flag + literal) : $"CONCAT('{flag}', {Expr(pattern)})";
     }
 
     private string BinaryToMySql(PgBinary b)
@@ -139,7 +153,7 @@ internal sealed partial class SqlPrinter
 
         if (b.Op == "-" && IsTimestamp(b.Left) && IsTimestamp(b.Right))
         {
-            return Unsupported("subtracting timestamps gives an interval in PostgreSQL; in MySQL use TIMESTAMPDIFF()", Show(b));
+            return Unsupported($"subtracting timestamps gives an interval in PostgreSQL; in {My} use TIMESTAMPDIFF()", Show(b));
         }
 
         if (b.Op is "->" or "->>" or "#>" or "#>>")
@@ -161,7 +175,7 @@ internal sealed partial class SqlPrinter
             "/" when IsInteger(b.Left) && IsInteger(b.Right) => $"{Expr(b.Left)} DIV {Expr(b.Right)}",
             "^" => $"POW({Expr(b.Left)}, {Expr(b.Right)})",
             "#" => $"{Expr(b.Left)} ^ {Expr(b.Right)}",
-            "@>" or "<@" or "?" or "?|" or "?&" or "&&" or "@@" or "-|-" => Unsupported($"operator {b.Op} has no MySQL counterpart", Show(b)),
+            "@>" or "<@" or "?" or "?|" or "?&" or "&&" or "@@" or "-|-" => Unsupported($"operator {b.Op} has no {My} counterpart", Show(b)),
             _ => $"{Expr(b.Left)} {b.Op} {Expr(b.Right)}",
         };
     }
@@ -200,8 +214,8 @@ internal sealed partial class SqlPrinter
 
         var jsonPath = Lit("$" + string.Concat(path));
 
-        // MySQL's -> and ->> take a column on the left; anything else goes through JSON_EXTRACT.
-        return Unparen(root) is PgName
+        // MySQL's -> and ->> take a column on the left; anything else goes through JSON_EXTRACT. MariaDB has neither operator.
+        return Unparen(root) is PgName && !toMariaDb
             ? $"{Expr(root)} {(text ? "->>" : "->")} {jsonPath}"
             : text ? $"JSON_UNQUOTE(JSON_EXTRACT({Expr(root)}, {jsonPath}))" : $"JSON_EXTRACT({Expr(root)}, {jsonPath})";
     }
@@ -305,7 +319,7 @@ internal sealed partial class SqlPrinter
             return "UTC_TIMESTAMP(6)";
         }
 
-        return Unsupported("AT TIME ZONE not translated: use CONVERT_TZ() (it needs MySQL's time zone tables loaded)", Show(z.Operand) + " AT TIME ZONE " + Show(z.Zone));
+        return Unsupported($"AT TIME ZONE not translated: use CONVERT_TZ() (it needs {My}'s time zone tables loaded)", Show(z.Operand) + " AT TIME ZONE " + Show(z.Zone));
     }
 
     private string MySqlExtract(string field, string source) => field switch
@@ -395,7 +409,7 @@ internal sealed partial class SqlPrinter
 
         if (type == "interval")
         {
-            return Unsupported("an interval value has no MySQL counterpart (only date arithmetic is translated)", Show(c));
+            return Unsupported($"an interval value has no {My} counterpart (only date arithmetic is translated)", Show(c));
         }
 
         if (type is "boolean" or "bool")
@@ -415,6 +429,12 @@ internal sealed partial class SqlPrinter
             return Lit(literal);
         }
 
+        if (toMariaDb && target == "JSON")
+        {
+            // MariaDB's JSON is text: there is no CAST AS JSON, and none is needed.
+            return Expr(c.Operand);
+        }
+
         if (target is "SIGNED" or "FLOAT" or "DOUBLE" || target?.StartsWith("DECIMAL", StringComparison.Ordinal) == true)
         {
             if (Unparen(c.Operand) is PgLiteral { Kind: LiteralKind.Number } number)
@@ -424,7 +444,7 @@ internal sealed partial class SqlPrinter
         }
 
         return target is null
-            ? Unsupported($"a cast to {c.Type} has no MySQL counterpart", Show(c))
+            ? Unsupported($"a cast to {c.Type} has no {My} counterpart", Show(c))
             : $"CAST({Expr(c.Operand)} AS {target})";
     }
 
@@ -433,7 +453,7 @@ internal sealed partial class SqlPrinter
         var type = t.Type.ToLowerInvariant();
         if (type == "interval")
         {
-            return Unsupported("an interval value has no MySQL counterpart (only date arithmetic is translated)", $"interval '{t.Value}'");
+            return Unsupported($"an interval value has no {My} counterpart (only date arithmetic is translated)", $"interval '{t.Value}'");
         }
 
         if (type == "date")
@@ -494,7 +514,7 @@ internal sealed partial class SqlPrinter
                 or "nth_value" or "percent_rank" or "cume_dist":
                 return $"{name.ToUpperInvariant()}({All()})";
             case "greatest" or "least":
-                return $"{name.ToUpperInvariant()}({All()})" + Note($"MySQL's {name.ToUpperInvariant()}() is NULL when any argument is NULL; PostgreSQL's {name}() skips NULLs");
+                return $"{name.ToUpperInvariant()}({All()})" + Note($"{My}'s {name.ToUpperInvariant()}() is NULL when any argument is NULL; PostgreSQL's {name}() skips NULLs");
             case "lpad" or "rpad":
                 return $"{name.ToUpperInvariant()}({All()}{(args.Count == 2 ? ", ' '" : string.Empty)})";
             case "ceil" or "ceiling":
@@ -524,6 +544,8 @@ internal sealed partial class SqlPrinter
                 return $"CONCAT_WS({All()})";
             case "chr":
                 return $"CHAR({A(0)} USING utf8mb4)";
+            case "regexp_replace" when toMariaDb:
+                return RegexpReplaceToMariaDb(args, c);
             case "regexp_replace" when RegexpReplaceToMySql(args) is { } replaced:
                 return replaced;
             case "gen_random_uuid" or "uuid_generate_v4":
@@ -540,10 +562,12 @@ internal sealed partial class SqlPrinter
                 return $"FROM_UNIXTIME({A(0)})";
             case "make_date":
                 return $"STR_TO_DATE(CONCAT_WS('-', {All()}), '%Y-%c-%e')";
+            case "nextval" or "currval" or "setval" when toMariaDb && args.Count > 0 && StringArg(args[0]) is { } sequence:
+                return SequenceCallToMariaDb(name, sequence, args, c);
             case "nextval" or "currval" or "setval":
-                return Unsupported($"MySQL has no sequences: {name}() must become AUTO_INCREMENT or application logic", Show(c));
+                return Unsupported($"{My} has no sequences: {name}() must become AUTO_INCREMENT or application logic", Show(c));
             case "current_user" or "session_user" or "user" or "current_role":
-                return "CURRENT_USER()" + Note("MySQL's CURRENT_USER() is 'user@host', not a role name");
+                return "CURRENT_USER()" + Note($"{My}'s CURRENT_USER() is 'user@host', not a role name");
             case "current_database" or "current_catalog" or "current_schema":
                 return "DATABASE()";
             case "json_build_object" or "jsonb_build_object":
@@ -551,8 +575,64 @@ internal sealed partial class SqlPrinter
             case "json_build_array" or "jsonb_build_array":
                 return $"JSON_ARRAY({All()})";
             default:
-                return $"{c.Function.Last}({All()})" + Note($"{c.Function.Last}() was kept as written; check that MySQL has it");
+                return $"{c.Function.Last}({All()})" + Note($"{c.Function.Last}() was kept as written; check that {My} has it");
         }
+    }
+
+    /// <summary>
+    /// nextval / currval / setval on a MariaDB sequence: NEXTVAL(s), LASTVAL(s) (NULL rather than an error before the
+    /// session's first NEXTVAL) and SETVAL(s, n[, is_used]). The sequence is named the way the conversion names tables.
+    /// </summary>
+    private string SequenceCallToMariaDb(string name, string sequence, List<PgExpr> args, PgCall c)
+    {
+        var parts = Regex.Matches(sequence, @"""((?:[^""]|"""")*)""|([^.""]+)").Select(m => m.Groups[1].Success ? m.Groups[1].Value.Replace("\"\"", "\"", StringComparison.Ordinal) : m.Groups[2].Value.Trim().ToLowerInvariant()).ToList();
+        if (parts.Count is 0 or > 2)
+        {
+            return Unsupported($"sequence name {sequence} not understood", Show(c));
+        }
+
+        // The source's own sequence, whatever case the PostgreSQL text (or the chain's first step) gave its name.
+        var named = new PortableName(parts.Count == 2 ? parts[0] : ctx.Schema.DefaultSchema, parts[^1]);
+        named = ctx.Schema.Sequences.Select(s => s.Name).FirstOrDefault(s =>
+            string.Equals(s.Schema, named.Schema, StringComparison.OrdinalIgnoreCase) && string.Equals(s.Name, named.Name, StringComparison.OrdinalIgnoreCase)) ?? named;
+        var target = ctx.Qualified(named);
+        switch (name)
+        {
+            case "nextval":
+                return $"NEXTVAL({target})";
+            case "currval":
+                return $"LASTVAL({target})";
+            default:
+                if (args.Count == 3 && Unparen(args[2]) is not PgLiteral { Kind: LiteralKind.True or LiteralKind.False })
+                {
+                    return Unsupported("setval() with a computed is_called flag not translated", Show(c));
+                }
+
+                // PostgreSQL's is_called is MariaDB's is_used: both default to true.
+                var used = args.Count == 3 && Unparen(args[2]) is PgLiteral { Kind: LiteralKind.False } ? ", 0" : string.Empty;
+                return $"SETVAL({target}, {Expr(args[1])}{used})";
+        }
+    }
+
+    /// <summary>
+    /// regexp_replace in MariaDB, whose REGEXP_REPLACE(subject, pattern, replacement) replaces every match and
+    /// follows the collation: only PostgreSQL's 'g' forms translate, with PCRE's case flag in the pattern.
+    /// </summary>
+    private string RegexpReplaceToMariaDb(List<PgExpr> args, PgCall c)
+    {
+        var flags = args.Count == 4 ? StringArg(args[3]) : args.Count == 3 ? string.Empty : null;
+        if (args.Count < 3 || StringArg(args[2]) is not { } replacement || replacement.Contains('\\', StringComparison.Ordinal) || flags is null)
+        {
+            return Unsupported("regexp_replace() with a computed or back-referencing replacement not translated", Show(c));
+        }
+
+        return flags switch
+        {
+            "g" => $"REGEXP_REPLACE({Expr(args[0])}, {PcrePattern(args[1], false)}, {Expr(args[2])})",
+            "gi" or "ig" => $"REGEXP_REPLACE({Expr(args[0])}, {PcrePattern(args[1], true)}, {Expr(args[2])})",
+            "" or "i" => Unsupported("MariaDB's REGEXP_REPLACE replaces every match; PostgreSQL's without 'g' only the first", Show(c)),
+            _ => Unsupported($"regexp_replace() flags '{flags}' not translated", Show(c)),
+        };
     }
 
     /// <summary>string_agg as GROUP_CONCAT, whose separator must be a literal.</summary>
@@ -560,7 +640,7 @@ internal sealed partial class SqlPrinter
     {
         if (args.Count < 2 || StringArg(args[1]) is not { } separator)
         {
-            return Unsupported("string_agg() with a computed separator: MySQL's GROUP_CONCAT needs a literal one", Show(c));
+            return Unsupported($"string_agg() with a computed separator: {My}'s GROUP_CONCAT needs a literal one", Show(c));
         }
 
         var value = Expr(args[0]);
@@ -571,7 +651,7 @@ internal sealed partial class SqlPrinter
 
         var order = c.OrderBy.Count > 0 ? " " + OrderBy(c.OrderBy) : string.Empty;
         return $"GROUP_CONCAT({(c.Distinct ? "DISTINCT " : string.Empty)}{value}{order} SEPARATOR {Lit(separator)})"
-            + Note("GROUP_CONCAT() is cut off at group_concat_max_len (1024 bytes unless raised)");
+            + Note($"GROUP_CONCAT() is cut off at group_concat_max_len ({(toMariaDb ? "1 MB" : "1024 bytes")} unless raised)");
     }
 
     /// <summary>
@@ -591,7 +671,7 @@ internal sealed partial class SqlPrinter
             return $"TRIM({side} {Lit(ch)} FROM {Expr(args[0])})";
         }
 
-        return Unsupported("trimming a set of characters has no MySQL counterpart (MySQL's TRIM removes a whole string)", Show(c));
+        return Unsupported($"trimming a set of characters has no {My} counterpart ({My}'s TRIM removes a whole string)", Show(c));
     }
 
     /// <summary>regexp_replace: PostgreSQL replaces the first match unless flagged 'g'; MySQL replaces all unless told the occurrence.</summary>
@@ -756,7 +836,7 @@ internal sealed partial class SqlPrinter
             "year" or "month" or "day" or "hour" or "minute" or "quarter" => $"EXTRACT({field} FROM {s})",
             "second" => $"floor(EXTRACT(second FROM {s}))",
             "microsecond" => $"(CAST(EXTRACT(microseconds FROM {s}) AS bigint) % 1000000)",
-            "week" => $"EXTRACT(week FROM {s})" + Note("MySQL's EXTRACT(WEEK) counts weeks from Sunday (mode 0); PostgreSQL's are ISO weeks"),
+            "week" => $"EXTRACT(week FROM {s})" + Note($"{MySrc}'s EXTRACT(WEEK) counts weeks from Sunday (mode 0); PostgreSQL's are ISO weeks"),
             _ => Unsupported($"EXTRACT({field.ToUpperInvariant()}) not translated", $"EXTRACT({field} FROM {Show(source)})"),
         };
     }
@@ -869,7 +949,7 @@ internal sealed partial class SqlPrinter
                 return $"char_length({A(0)})";
             case "substring" or "substr" or "mid":
                 return args.Count > 1 && Unparen(args[1]) is PgLiteral { Kind: LiteralKind.Number } start && start.Value.StartsWith('-')
-                    ? Unsupported("SUBSTRING with a negative start counts from the end in MySQL; PostgreSQL has no such form", Show(c))
+                    ? Unsupported($"SUBSTRING with a negative start counts from the end in {MySrc}; PostgreSQL has no such form", Show(c))
                     : $"substr({All()})";
             case "locate" when args.Count == 2:
                 return $"strpos({A(1)}, {A(0)})";
@@ -903,7 +983,7 @@ internal sealed partial class SqlPrinter
             case "rand" when args.Count == 0:
                 return "random()";
             case "greatest" or "least":
-                return $"{name}({All()})" + Note($"PostgreSQL's {name}() skips NULLs; MySQL's is NULL when any argument is NULL");
+                return $"{name}({All()})" + Note($"PostgreSQL's {name}() skips NULLs; {MySrc}'s is NULL when any argument is NULL");
             case "count" when args.Count == 1 && !c.Distinct && Unparen(args[0]) is PgLiteral { Kind: not LiteralKind.Null }:
                 // SHOW CREATE VIEW writes count(*) as count(0).
                 return Aggregate("count", c with { StarArg = true }, []);
@@ -927,6 +1007,16 @@ internal sealed partial class SqlPrinter
                 return JsonPathToPg(doc, path, true, Show(c));
             case "json_unquote":
                 return $"({A(0)} #>> '{{}}')";
+            case "json_value" when args.Count == 2 && StringArg(args[1]) is { } path:
+                // MariaDB: the scalar at the path, as text.
+                return JsonPathToPg(args[0], path, true, Show(c));
+            case "nextval" or "lastval" when args.Count == 1 && Unparen(args[0]) is PgName sequence:
+                // MariaDB sequences: NEXTVAL(s), and LASTVAL(s), the value this session last drew.
+                return $"{(name == "nextval" ? "nextval" : "currval")}({Lit(ctx.Qualified(new PortableName(sequence.Parts.Count > 1 ? sequence.Parts[^2] : ctx.Schema.DefaultSchema, sequence.Last)))})";
+            case "setval" when args.Count is >= 2 and <= 4 && Unparen(args[0]) is PgName sequence:
+                return args.Count == 2
+                    ? $"setval({Lit(ctx.Qualified(new PortableName(sequence.Parts.Count > 1 ? sequence.Parts[^2] : ctx.Schema.DefaultSchema, sequence.Last)))}, {A(1)})"
+                    : Unsupported("SETVAL() with is_used or round arguments not translated", Show(c));
             case "date":
                 return $"CAST({A(0)} AS date)";
             case "time":
@@ -973,7 +1063,7 @@ internal sealed partial class SqlPrinter
             case "database" or "schema":
                 return "current_schema()";
             case "user" or "current_user" or "session_user" or "system_user":
-                return "current_user" + Note("MySQL's user functions return 'user@host'; PostgreSQL's current_user is a role name");
+                return "current_user" + Note($"{MySrc}'s user functions return 'user@host'; PostgreSQL's current_user is a role name");
             case "regexp_like" when args.Count is 2 or 3:
             {
                 var flags = args.Count == 3 ? StringArg(args[2]) : null;

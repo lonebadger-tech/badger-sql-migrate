@@ -4,6 +4,7 @@ using Microsoft.Data.SqlClient;
 using MySqlConnector;
 using Npgsql;
 using Testcontainers.MsSql;
+using Testcontainers.MariaDb;
 using Testcontainers.MySql;
 using Testcontainers.PostgreSql;
 
@@ -77,6 +78,57 @@ public sealed class Servers : IAsyncLifetime
         {
             MySqlUnavailableReason = $"MySQL could not start ({ex.GetType().Name}: {ex.Message.Split('\n')[0]}). Start Docker or set TREK_TEST_MYSQL.";
         }
+
+        // MariaDB: TREK_TEST_MARIADB, or a container from TREK_TEST_MARIADB_IMAGE (default mariadb:11.4). Its tests
+        // also convert to and from MySQL, so they skip when MySQL is unavailable too.
+        MariaDbUnavailableReason = MySqlUnavailableReason;
+        if (MySqlUnavailableReason is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            MariaDb = Environment.GetEnvironmentVariable("TREK_TEST_MARIADB");
+            if (string.IsNullOrWhiteSpace(MariaDb))
+            {
+                mariaDb = new MariaDbBuilder(Environment.GetEnvironmentVariable("TREK_TEST_MARIADB_IMAGE") is { Length: > 0 } image ? image : "mariadb:11.4")
+                    .WithUsername("root").WithPassword("trek-test").Build();
+                await mariaDb.StartAsync();
+                MariaDb = mariaDb.GetConnectionString();
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            MariaDbUnavailableReason = $"MariaDB could not start ({ex.GetType().Name}: {ex.Message.Split('\n')[0]}). Start Docker or set TREK_TEST_MARIADB.";
+        }
+    }
+
+    public string? MariaDb { get; private set; }
+
+    /// <summary>Why the MariaDB tests skip: no PostgreSQL, SQL Server or MySQL (the other sides), or no MariaDB.</summary>
+    public string? MariaDbUnavailableReason { get; private set; }
+
+    private MariaDbContainer? mariaDb;
+
+    public async Task<string> CreateMariaDbAsync(string? script = null)
+    {
+        var name = "trek_conv_" + Guid.NewGuid().ToString("N")[..10];
+        await using (var admin = new MySqlConnection(MariaDb))
+        {
+            await admin.OpenAsync();
+            await new MySqlCommand($"CREATE DATABASE `{name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;", admin).ExecuteNonQueryAsync();
+        }
+
+        var cs = new MySqlConnectionStringBuilder(MariaDb!) { Database = name, Pooling = false }.ConnectionString;
+        if (script is not null)
+        {
+            await using var connection = new MySqlConnection(cs);
+            await connection.OpenAsync();
+            await new MySqlCommand(script, connection).ExecuteNonQueryAsync();
+        }
+
+        return cs;
     }
 
     public async Task DisposeAsync()
@@ -94,6 +146,11 @@ public sealed class Servers : IAsyncLifetime
         if (mySql is not null)
         {
             await mySql.DisposeAsync();
+        }
+
+        if (mariaDb is not null)
+        {
+            await mariaDb.DisposeAsync();
         }
     }
 

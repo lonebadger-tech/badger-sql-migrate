@@ -109,10 +109,10 @@ internal sealed class MySqlToPgTranslator(ConversionContext ctx) : IIntermediate
             PortableCodeKind.Trigger => "triggers",
             _ => "functions",
         };
-        return new TranslatedCode(code, folder, $"{target.Schema}.{target.Name}.sql", SqliteToPgTranslator.Header("MySQL", code, issues) + script.TrimEnd() + "\n", issues);
+        return new TranslatedCode(code, folder, $"{target.Schema}.{target.Name}.sql", SqliteToPgTranslator.Header(ctx.SourceDisplay, code, issues) + script.TrimEnd() + "\n", issues);
     }
 
-    private static string NotTranslated(PortableCode code) => $"MySQL {code.Kind.ToString().ToLowerInvariant()} not translated; rewrite it for PostgreSQL";
+    private string NotTranslated(PortableCode code) => $"{ctx.SourceDisplay} {code.Kind.ToString().ToLowerInvariant()} not translated; rewrite it for PostgreSQL";
 
     /// <summary>The view's PostgreSQL name, column list and query, or null (with an issue) when it cannot be parsed.</summary>
     private (string Name, string Columns, string Body, string? CheckOption)? View(PortableCode code, List<string> issues)

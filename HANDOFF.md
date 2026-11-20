@@ -8,15 +8,18 @@ Delete this file when the items below are done (it is not documentation).
 
 ## Still pending (ask the user)
 
-- MySQL support (user's request, 2026-11-20), four PRs: (1) provider core: done in the mysql-provider PR;
-  (2) add --from-diff / diff-schema --script for MySQL: done in the mysql-from-diff PR; (3) trek convert to and
-  from MySQL in every direction: tables, keys, indexes, views and data done in the mysql-convert PR (MySQL and SQL
-  Server or SQLite go through PostgreSQL's syntax); still to do in follow-up PRs: translating functions, procedures
-  and triggers PL/pgSQL <-> MySQL (now written commented out). MySQL cannot turn triggers off during
-  `convert data`, so once triggers are translated the load must suppress them (for example a session variable the
-  generated triggers check); (4) imports and baseline --from for MySQL (Flyway jdbc:mysql, DbUp, Sqitch engine mysql,
-  EF Core with the Pomelo/Oracle providers). MySqlProvider.DefaultSchema is empty (a MySQL schema is a database):
-  ForeignJournal.SplitTable needs to handle that in (4). Ship all four as 0.6.0.
+- MySQL (8.4, 9.7) and MariaDB (10.11, 11.4, 11.8, 12.3; provider 'mariadb' = MySqlProvider(MySqlFlavor.MariaDb))
+  shipped in 0.6.0: provider, --from-diff, and trek convert in every direction for tables, keys, indexes, views
+  and data. Still to do, in follow-up PRs:
+  - Imports and baseline --from for MySQL and MariaDB (Flyway jdbc:mysql/jdbc:mariadb, DbUp, Sqitch engine
+    mysql, EF Core with the Pomelo/Oracle providers). MySqlProvider.DefaultSchema is empty (a schema is a
+    database): ForeignJournal.SplitTable must handle that.
+  - Translating functions, procedures and triggers PL/pgSQL <-> MySQL/MariaDB (now written commented out).
+    MySQL and MariaDB cannot turn triggers off during `convert data`, so once triggers are translated the load
+    must suppress them (for example a session variable the generated triggers check).
+- Oracle support: the user's next request (2026-11-20), after 0.6.0. Plan it like MySQL (versions with vendor
+  support, CI images, then provider, --from-diff, convert, imports) and ask the user about 19c vs 23ai/26ai and
+  CI images (only Oracle Database Free has a public image).
 
 - Dogfooding suggestions not done: `baseline --check-schema`, excluding objects from the schema fingerprint (e.g. an
   old EF/Flyway history table), DNS check before an Entra token in `doctor`, a `trek clone`.

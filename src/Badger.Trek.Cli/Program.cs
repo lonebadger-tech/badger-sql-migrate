@@ -37,7 +37,7 @@ root.Options.Add(noColor);
 root.Options.Add(bundleFile);
 
 // init
-var initProvider = new Option<string>("--provider") { Description = "Database provider: sqlserver, postgresql, mysql or sqlite.", DefaultValueFactory = _ => "sqlserver" };
+var initProvider = new Option<string>("--provider") { Description = "Database provider: sqlserver, postgresql, mysql, mariadb or sqlite.", DefaultValueFactory = _ => "sqlserver" };
 var init = new Command("init", "Create trek.yaml, trek.plan, folders and AGENTS.md in the project directory.") { initProvider, noAgentsFile };
 init.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Init(g, r.GetValue(initProvider)!)));
 root.Subcommands.Add(init);
@@ -169,7 +169,7 @@ baseline.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Baseline(g,
 var import = new Command("import", "Convert another tool's migrations (Flyway, DbUp, Entity Framework Core, grate, Sqitch, SQL projects) into a new trek project (written to --project).") { noAgentsFile };
 var importPath = new Argument<string>("path") { Description = "The folder to import from." };
 var importDryRun = new Option<bool>("--dry-run") { Description = "Show what would be written without writing anything." };
-var importProvider = new Option<string?>("--provider") { Description = "The database the project targets: sqlserver (default), postgresql, mysql or sqlite. Sqitch projects for pg or sqlite default to that provider." };
+var importProvider = new Option<string?>("--provider") { Description = "The database the project targets: sqlserver (default), postgresql, mysql, mariadb or sqlite. Sqitch projects for pg or sqlite default to that provider." };
 var flywayConfig = new Option<string?>("--config") { Description = "flyway.conf or flyway.toml (default: found in the folder or its conf/ folder)." };
 var flywayLocation = new Option<string[]>("--location") { Description = "Migration folder; overrides flyway.locations. Repeatable." };
 var importFlyway = new Command("flyway", "Import a Flyway project: V/U/R scripts, placeholders, script config and environments.") { importPath, flywayConfig, flywayLocation, importProvider, importDryRun };
@@ -206,9 +206,9 @@ import.Subcommands.Add(importSqlProj);
 root.Subcommands.Add(import);
 
 // convert
-var convert = new Command("convert", "Convert a live database between SQL Server, PostgreSQL, MySQL and SQLite: its schema into a new trek project for the provider you choose (convert schema --to), then its rows (convert data).") { noAgentsFile };
+var convert = new Command("convert", "Convert a live database between SQL Server, PostgreSQL, MySQL, MariaDB and SQLite: its schema into a new trek project for the provider you choose (convert schema --to), then its rows (convert data).") { noAgentsFile };
 var convertOut = new Option<string>("--out", "-o") { Description = "Folder for the new project (must not contain one yet).", Required = true };
-var convertTo = new Option<string>("--to") { Description = "Target provider: sqlserver, postgresql, mysql or sqlite.", Required = true };
+var convertTo = new Option<string>("--to") { Description = "Target provider: sqlserver, postgresql, mysql, mariadb or sqlite.", Required = true };
 var convertFrom = new Option<string?>("--from-provider") { Description = "The source provider when the source is a --connection-string rather than an environment of the project in --project." };
 var convertNames = new Option<string?>("--names") { Description = "Identifiers in the target: lower (default for PostgreSQL), snake (CustomerOrder -> customer_order) or keep (default for SQL Server and SQLite)." };
 convertNames.AcceptOnlyFromAmong("keep", "lower", "snake");

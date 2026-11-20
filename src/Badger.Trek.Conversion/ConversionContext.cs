@@ -12,7 +12,7 @@ public enum Dialect
 
 public sealed record ConversionOptions
 {
-    /// <summary>The provider id of the target ("postgresql" or "sqlserver").</summary>
+    /// <summary>The provider id of the target ("postgresql", "sqlserver", "sqlite", "mysql" or "mariadb").</summary>
     public required string TargetProvider { get; init; }
 
     /// <summary>Null = Lower when converting to PostgreSQL, Keep when converting to SQL Server.</summary>
@@ -36,9 +36,15 @@ public sealed class ConversionContext
         Schema = schema;
         Source = DialectOf(schema.SourceProvider);
         Target = DialectOf(options.TargetProvider);
-        if (Source == Target)
+        SourceProvider = ProviderIdOf(schema.SourceProvider);
+        TargetProvider = ProviderIdOf(options.TargetProvider);
+        SourceMariaDb = SourceProvider == MariaDbProvider;
+        TargetMariaDb = TargetProvider == MariaDbProvider;
+
+        // MySQL and MariaDB share a dialect but are different providers: either converts to the other.
+        if (SourceProvider == TargetProvider)
         {
-            throw new Core.MigrationException($"The database is already {options.TargetProvider}; pass --to with a different provider.");
+            throw new Core.MigrationException($"The database is already {DisplayOf(Target, TargetMariaDb)}; pass --to with a different provider.");
         }
 
         var style = options.Names ?? (Target == Dialect.PostgreSql ? NameStyle.Lower : NameStyle.Keep);
@@ -114,6 +120,34 @@ public sealed class ConversionContext
     public Dialect Source { get; }
 
     public Dialect Target { get; }
+
+    /// <summary>The source's provider id, normalized: "postgresql", "sqlserver", "sqlite", "mysql" or "mariadb".</summary>
+    public string SourceProvider { get; }
+
+    /// <summary>The target's provider id, normalized: "postgresql", "sqlserver", "sqlite", "mysql" or "mariadb".</summary>
+    public string TargetProvider { get; }
+
+    /// <summary>The source is MariaDB; <see cref="Source"/> is then <see cref="Dialect.MySql"/>.</summary>
+    public bool SourceMariaDb { get; }
+
+    /// <summary>The target is MariaDB; <see cref="Target"/> is then <see cref="Dialect.MySql"/>.</summary>
+    public bool TargetMariaDb { get; }
+
+    /// <summary>The source's name for people: "SQL Server", "PostgreSQL", "SQLite", "MySQL" or "MariaDB".</summary>
+    public string SourceDisplay => DisplayOf(Source, SourceMariaDb);
+
+    /// <summary>The target's name for people: "SQL Server", "PostgreSQL", "SQLite", "MySQL" or "MariaDB".</summary>
+    public string TargetDisplay => DisplayOf(Target, TargetMariaDb);
+
+    /// <summary>The provider id of MariaDB, a flavor of the MySQL dialect.</summary>
+    public const string MariaDbProvider = "mariadb";
+
+    /// <summary>
+    /// The target's utf8mb4 collation that is accent-sensitive and case-insensitive or case-sensitive: MariaDB (10.10+)
+    /// has the UCA 14.0.0 ones (utf8mb4_uca1400_as_ci), MySQL the UCA 9.0.0 ones (utf8mb4_0900_as_ci).
+    /// </summary>
+    public string MySqlCollation(bool caseInsensitive) =>
+        (TargetMariaDb ? "utf8mb4_uca1400_as_" : "utf8mb4_0900_as_") + (caseInsensitive ? "ci" : "cs");
 
     public NameMapper Names { get; }
 
@@ -225,16 +259,30 @@ public sealed class ConversionContext
         "postgresql" or "postgres" => Dialect.PostgreSql,
         "sqlserver" => Dialect.SqlServer,
         "sqlite" or "sqlite3" => Dialect.Sqlite,
-        "mysql" => Dialect.MySql,
-        _ => throw new Core.MigrationException($"trek convert works between sqlserver, postgresql, mysql and sqlite, not '{provider}'."),
+        "mysql" or MariaDbProvider => Dialect.MySql,
+        _ => throw new Core.MigrationException($"trek convert works between sqlserver, postgresql, mysql, mariadb and sqlite, not '{provider}'."),
     };
 
-    public static string ProviderOf(Dialect dialect) => dialect switch
+    /// <summary>A provider id or alias as its canonical id ("postgres" is "postgresql"); MariaDB's stays "mariadb".</summary>
+    public static string ProviderIdOf(string provider) =>
+        provider.Equals(MariaDbProvider, StringComparison.OrdinalIgnoreCase) ? MariaDbProvider : ProviderOf(DialectOf(provider));
+
+    /// <summary>The provider id of a dialect; <paramref name="mariaDb"/> picks MariaDB's for <see cref="Dialect.MySql"/>.</summary>
+    public static string ProviderOf(Dialect dialect, bool mariaDb = false) => dialect switch
     {
         Dialect.PostgreSql => "postgresql",
         Dialect.Sqlite => "sqlite",
-        Dialect.MySql => "mysql",
+        Dialect.MySql => mariaDb ? MariaDbProvider : "mysql",
         _ => "sqlserver",
+    };
+
+    /// <summary>A dialect's name for people; <paramref name="mariaDb"/> picks "MariaDB" for <see cref="Dialect.MySql"/>.</summary>
+    public static string DisplayOf(Dialect dialect, bool mariaDb = false) => dialect switch
+    {
+        Dialect.SqlServer => "SQL Server",
+        Dialect.Sqlite => "SQLite",
+        Dialect.MySql => mariaDb ? "MariaDB" : "MySQL",
+        _ => "PostgreSQL",
     };
 
     private static readonly HashSet<string> TSqlReserved = new(StringComparer.OrdinalIgnoreCase)

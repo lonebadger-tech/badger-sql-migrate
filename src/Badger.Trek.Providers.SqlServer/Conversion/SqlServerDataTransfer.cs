@@ -174,10 +174,34 @@ public sealed partial class SqlServerDataTransfer : IDataTransfer
             }
 
             var max = await session.QueryAsync($"SELECT MAX({Sql.Quote((string)d["column_name"]!)}) AS m FROM {Name(table)};", null, cancellationToken).ConfigureAwait(false);
-            if (max[0]["m"] is { } value)
+            if (max[0]["m"] is not { } value)
             {
-                var next = System.Convert.ToInt64(value, CultureInfo.InvariantCulture) + 1;
-                await session.ExecuteAsync($"ALTER SEQUENCE {m.Groups["seq"].Value} RESTART WITH {next.ToString(CultureInfo.InvariantCulture)};", null, cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
+            // Take values with sp_sequence_get_range until the next one is past the loaded maximum. ALTER SEQUENCE
+            // RESTART WITH would also do it, but it rewrites the sequence's start value, which is part of its definition
+            // and of the schema fingerprint, so trek verify would report drift.
+            var sequence = m.Groups["seq"].Value;
+            var state = (await session.QueryAsync(
+                "SELECT CAST(start_value AS bigint) AS start_value, CAST(increment AS bigint) AS increment, CAST(last_used_value AS bigint) AS last_used FROM sys.sequences WHERE object_id = OBJECT_ID(@name);",
+                new Dictionary<string, object?> { ["name"] = sequence }, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+            if (state is null || System.Convert.ToInt64(state["increment"], CultureInfo.InvariantCulture) <= 0)
+            {
+                continue;
+            }
+
+            var increment = System.Convert.ToInt64(state["increment"], CultureInfo.InvariantCulture);
+            var nextValue = state["last_used"] is { } used
+                ? System.Convert.ToInt64(used, CultureInfo.InvariantCulture) + increment
+                : System.Convert.ToInt64(state["start_value"], CultureInfo.InvariantCulture);
+            var loaded = System.Convert.ToInt64(value, CultureInfo.InvariantCulture);
+            if (nextValue <= loaded)
+            {
+                var count = ((loaded - nextValue) / increment) + 1;
+                await session.ExecuteAsync(
+                    "DECLARE @first sql_variant; EXEC sys.sp_sequence_get_range @sequence_name = @name, @range_size = @count, @range_first_value = @first OUTPUT;",
+                    new Dictionary<string, object?> { ["name"] = sequence, ["count"] = count }, cancellationToken).ConfigureAwait(false);
             }
         }
     }

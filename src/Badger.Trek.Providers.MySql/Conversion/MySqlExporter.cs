@@ -29,9 +29,10 @@ public sealed partial class MySqlExporter : ISchemaExporter
         var info = (await Q("SELECT DATABASE() AS db, (SELECT default_collation_name FROM information_schema.schemata WHERE schema_name = DATABASE()) AS coll;"))[0];
         var database = S(info["db"]) ?? throw new MigrationException("No database is selected; set 'database' for the environment.");
         var collation = S(info["coll"]);
+        var mariaDb = session is MySqlSession { IsMariaDb: true };
         var schema = new PortableSchema
         {
-            SourceProvider = MySqlProvider.ProviderId,
+            SourceProvider = mariaDb ? MySqlProvider.MariaDbProviderId : MySqlProvider.ProviderId,
             DefaultSchema = database,
             CaseInsensitive = collation?.EndsWith("_ci", StringComparison.OrdinalIgnoreCase) == true,
             Collation = collation,
@@ -84,19 +85,19 @@ public sealed partial class MySqlExporter : ISchemaExporter
 
             table.Columns.Add(new PortableColumn(name, S(r["type"])!, S(r["nullable"]) == "YES")
             {
-                Default = generated is null ? Default(S(r["def"]), S(r["dt"]) ?? string.Empty, extra, database) : null,
+                Default = generated is null ? (mariaDb ? MariaDbDefault(S(r["def"]), database) : Default(S(r["def"]), S(r["dt"]) ?? string.Empty, extra, database)) : null,
                 Identity = extra.Contains("auto_increment", StringComparison.OrdinalIgnoreCase) ? new PortableIdentity(1, 1, false) : null,
                 Computed = generated,
-                ComputedStored = generated is not null && extra.Contains("STORED GENERATED", StringComparison.OrdinalIgnoreCase),
+                ComputedStored = generated is not null && (extra.Contains("STORED GENERATED", StringComparison.OrdinalIgnoreCase) || extra.Contains("PERSISTENT", StringComparison.OrdinalIgnoreCase)),
                 Collation = columnCollation is not null && !string.Equals(columnCollation, table.Collation, StringComparison.OrdinalIgnoreCase) ? columnCollation : null,
                 Comment = S(r["cmt"]) is { Length: > 0 } comment ? comment : null,
             });
         }
 
         // Keys and indexes: one row per part.
-        var indexRows = (await Q("""
+        var indexRows = (await Q($"""
             SELECT table_name AS t, index_name AS name, non_unique AS nu, seq_in_index AS seq, column_name AS col, sub_part AS sub,
-                   collation AS dir, index_type AS type, expression AS expr
+                   collation AS dir, index_type AS type, {(mariaDb ? "NULL" : "expression")} AS expr
               FROM information_schema.statistics
              WHERE table_schema = DATABASE()
              ORDER BY table_name, index_name, seq_in_index;
@@ -153,18 +154,47 @@ public sealed partial class MySqlExporter : ISchemaExporter
                 S(first["upd"]) ?? "NO ACTION"));
         }
 
-        // Check constraints (MySQL prints the clause with backquotes and extra parentheses).
-        foreach (var r in await Q("""
+        // Check constraints (MySQL prints the clause with backquotes and extra parentheses). MariaDB names checks per
+        // table, and stores a JSON column as LONGTEXT with a json_valid check named after the column: that column is
+        // reported as json, without the check.
+        foreach (var r in await Q($"""
             SELECT tc.table_name AS t, tc.constraint_name AS name, cc.check_clause AS clause
               FROM information_schema.table_constraints tc
-              JOIN information_schema.check_constraints cc ON cc.constraint_schema = tc.constraint_schema AND cc.constraint_name = tc.constraint_name
+              JOIN information_schema.check_constraints cc ON cc.constraint_schema = tc.constraint_schema AND cc.constraint_name = tc.constraint_name{(mariaDb ? " AND cc.table_name = tc.table_name" : string.Empty)}
              WHERE tc.table_schema = DATABASE() AND tc.constraint_type = 'CHECK'
              ORDER BY tc.table_name, tc.constraint_name;
             """))
         {
-            if (tables.TryGetValue(S(r["t"])!, out var table))
+            if (!tables.TryGetValue(S(r["t"])!, out var table))
             {
-                table.Checks.Add(new PortableCheck(S(r["name"]), MySqlSchemaInspector.Unqualify(S(r["clause"]) ?? string.Empty, database)));
+                continue;
+            }
+
+            var clause = MySqlSchemaInspector.Unqualify(S(r["clause"]) ?? string.Empty, database);
+            if (mariaDb && JsonValidRegex().Match(clause) is { Success: true } json
+                && table.Columns.FindIndex(c => c.Name == json.Groups[1].Value.Replace("``", "`", StringComparison.Ordinal) && c.Type == "longtext") is var index and >= 0)
+            {
+                table.Columns[index] = table.Columns[index] with { Type = "json" };
+                continue;
+            }
+
+            table.Checks.Add(new PortableCheck(S(r["name"]), clause));
+        }
+
+        if (mariaDb)
+        {
+            // Sequences are tables of type SEQUENCE in MariaDB, with one row holding their options.
+            foreach (var r in await Q("SELECT table_name AS name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'SEQUENCE' ORDER BY table_name;"))
+            {
+                var name = S(r["name"])!;
+                if (Skip(name))
+                {
+                    continue;
+                }
+
+                var o = (await Q($"SELECT start_value AS s, increment AS i, minimum_value AS lo, maximum_value AS hi, cycle_option AS c FROM {MySqlModel.Q(name)};"))[0];
+                long L(string key) => Convert.ToInt64(o[key], CultureInfo.InvariantCulture);
+                schema.Sequences.Add(new PortableSequence(N(name), "bigint", L("s"), L("i"), L("lo"), L("hi"), L("c") != 0));
             }
         }
 
@@ -298,6 +328,16 @@ public sealed partial class MySqlExporter : ISchemaExporter
             ? "'" + value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("'", "''", StringComparison.Ordinal) + "'"
             : value;
     }
+
+    /// <summary>
+    /// The column default on MariaDB, whose information_schema shows defaults as SQL: literals quoted, expressions as
+    /// written (current_timestamp()), and no default as the text NULL.
+    /// </summary>
+    private static string? MariaDbDefault(string? value, string database) =>
+        value is null || value.Equals("NULL", StringComparison.OrdinalIgnoreCase) ? null : MySqlSchemaInspector.Unqualify(value, database);
+
+    [GeneratedRegex(@"\Ajson_valid\(`((?:[^`]|``)+)`\)\z", RegexOptions.IgnoreCase)]
+    private static partial Regex JsonValidRegex();
 
     private static string? S(object? value) => value switch
     {

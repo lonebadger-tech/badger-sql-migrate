@@ -11,7 +11,7 @@ namespace Badger.Trek.Providers.MySql.Tests;
 [Collection("mysql")]
 public sealed class ScripterTests(MySqlFixture fixture, ITestOutputHelper output)
 {
-    private readonly MySqlProvider provider = new();
+    private readonly MySqlProvider provider = new(MySqlFixture.Flavor);
 
     private const string Base = """
         CREATE TABLE customer (

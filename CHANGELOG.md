@@ -2,13 +2,14 @@
 
 All notable changes to Badger Trek. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/). The website's [version history](https://lonebadger.tech/badger-trek/releases/) has the full release notes.
 
-## Unreleased
+## 0.6.0 (November 2026)
 
 ### Added
 
 - **MySQL**: `trek init --provider mysql`, for MySQL 8.4 and 9.7, the LTS releases that are still supported (each tested on every build). Deploy, revert, verify, repeatables, bundles, the schema fingerprint and `diff-schema` work as on the other databases. MySQL commits DDL as it runs, so changes run without a transaction: a change that fails part-way keeps what already ran, and is recorded only when all of it has run. Scripts are split as the `mysql` client does, with `DELIMITER` around stored program bodies. The journal is `trek_*` tables in the environment's database, and the deploy lock is a named lock. `trek doctor` flags older MySQL releases, Innovation releases and MariaDB. Lint: `USE` (TREK009), mysql client commands and a stored program body without a delimiter (TREK005). Imports from other tools come later.
 - MySQL: `trek add --from-diff` and `diff-schema --script` write MySQL changes. Tables change with `ALTER TABLE` (columns added in position, dropped, modified, moved and renamed; indexes, checks, options; a new character set with `CONVERT TO`), foreign keys are added after every table exists, and views, routines, triggers and events are created again without `DEFINER` and with a `DELIMITER` where needed. The shadow database is created on the same server.
 - MySQL: `trek convert schema` and `trek convert data` move a MySQL database to SQL Server, PostgreSQL or SQLite, and any of them to MySQL. Types are mapped (`TINYINT(1)` and booleans, `ENUM` and `SET`, unsigned integers, `JSON`, `AUTO_INCREMENT` and identities), tables are InnoDB with `utf8mb4` and a case-sensitive or case-insensitive collation to match the source, and views are translated (MySQL and SQL Server or SQLite go by way of PostgreSQL's syntax). Functions, procedures and triggers are written commented out for now, with a REVIEW marker. Rows load into MySQL with multi-row inserts in one transaction, foreign keys checked before the commit.
+- **MariaDB**: `trek init --provider mariadb`, for MariaDB 10.11, 11.4, 11.8 and 12.3, the LTS releases that are still supported (each tested on every build). It is the MySQL provider in MariaDB mode, so deploy, revert, verify, repeatables, bundles, the fingerprint (which also covers sequences), `diff-schema`, `add --from-diff` and the `DELIMITER` handling work as on MySQL. `trek convert` moves MariaDB to and from SQL Server, PostgreSQL, MySQL and SQLite: MariaDB's `UUID`, `INET6`, JSON (stored as `LONGTEXT` with a `json_valid` check) and sequences are mapped, and tables use the `utf8mb4_uca1400` collations. A `mysql` environment that turns out to be MariaDB (or the other way round) stops with the provider to use. `trek doctor` flags MariaDB releases that are short-term or past their end of life.
 
 ### Changed
 
@@ -18,6 +19,7 @@ All notable changes to Badger Trek. The format follows [Keep a Changelog](https:
 
 - `trek convert schema` no longer creates the target's default schema (`dbo`, `public`) when a source schema maps to it, and no longer drops it on revert.
 - A converted view that calls a routine which could not be translated is commented out with it, so the project deploys; before, creating the view failed.
+- `trek convert data` into SQL Server moves sequences past the copied values with `sp_sequence_get_range` instead of `ALTER SEQUENCE ... RESTART WITH`, which rewrote the sequence's start value, so `trek verify` reported drift right after a conversion with sequences.
 
 ## 0.5.0 (November 2026)
 

@@ -69,14 +69,14 @@ internal sealed class PgToMySqlTranslator(ConversionContext ctx) : ITranslator
             catch (PgParseException ex)
             {
                 issues.Add($"could not parse: {ex.Message}");
-                script = Review.CommentedOut(code.Definition, Review.Comment("not translated; rewrite it for MySQL"));
+                script = Review.CommentedOut(code.Definition, Review.Comment($"not translated; rewrite it for {ctx.TargetDisplay}"));
             }
         }
         else
         {
             // PL/pgSQL to MySQL's procedural SQL is not translated yet.
-            issues.Add($"{code.Kind.ToString().ToLowerInvariant()} not translated; rewrite it for MySQL");
-            script = Review.CommentedOut(code.Definition, Review.Comment("not translated; rewrite it for MySQL"));
+            issues.Add($"{code.Kind.ToString().ToLowerInvariant()} not translated; rewrite it for {ctx.TargetDisplay}");
+            script = Review.CommentedOut(code.Definition, Review.Comment($"not translated; rewrite it for {ctx.TargetDisplay}"));
         }
 
         issues = issues.Distinct().ToList();
@@ -94,7 +94,7 @@ internal sealed class PgToMySqlTranslator(ConversionContext ctx) : ITranslator
         var query = new PgParser(m.Success ? code.Definition[(m.Index + m.Length)..] : code.Definition).QueryOnly();
         if (m.Success && m.Groups["mat"].Success)
         {
-            issues.Add("materialized view became a plain view (MySQL has no materialized views)");
+            issues.Add($"materialized view became a plain view ({ctx.TargetDisplay} has no materialized views)");
         }
 
         var name = ctx.Qualified(code.Name);

@@ -5,7 +5,8 @@ using Badger.Trek.Core.Conversion;
 namespace Badger.Trek.Conversion;
 
 /// <summary>
-/// Translates through PostgreSQL: SQL Server → PostgreSQL → SQLite, SQLite → PostgreSQL → SQL Server, and to or from MySQL. The first step
+/// Translates through PostgreSQL: SQL Server → PostgreSQL → SQLite, SQLite → PostgreSQL → SQL Server, to or from MySQL and
+/// MariaDB, and between MySQL and MariaDB (MySQL → PostgreSQL → MariaDB and back), reusing each side's mappings. The first step
 /// maps every name the way the whole conversion does; the second keeps names and only changes dialect, working from a
 /// PostgreSQL view of the schema (tables with mapped names and PostgreSQL types) and PostgreSQL definitions of the code.
 /// </summary>
@@ -38,7 +39,7 @@ internal sealed class ChainTranslator : ITranslator
         };
         second = new ConversionContext(IntermediateSchema(first), new ConversionOptions
         {
-            TargetProvider = ConversionContext.ProviderOf(outer.Target),
+            TargetProvider = outer.TargetProvider,
             Names = NameStyle.Keep,
             CaseSensitive = !outer.CaseInsensitiveCollation,
         });
@@ -76,6 +77,9 @@ internal sealed class ChainTranslator : ITranslator
         }
 
         schema.Domains.AddRange(first.Schema.Domains.Select(d => d with { Name = first.TargetName(d.Name), BaseType = TypeMapper.Map(d.BaseType, first).Type }));
+
+        // Sequences, so the second step finds a sequence by its real name whatever case the PostgreSQL text gives it.
+        schema.Sequences.AddRange(first.Schema.Sequences.Select(s => s with { Name = first.TargetName(s.Name) }));
         return schema;
     }
 
@@ -138,13 +142,7 @@ internal sealed class ChainTranslator : ITranslator
 
         var issues = stage1Issues.Concat(results.SelectMany(r => r.Issues)).Distinct().ToList();
         var body = string.Join("\n", results.Select(r => string.Join('\n', r.Script.Split('\n').SkipWhile(l => l.StartsWith("--", StringComparison.Ordinal)))));
-        var source = outer.Source switch
-        {
-            Dialect.SqlServer => "SQL Server",
-            Dialect.MySql => "MySQL",
-            _ => "SQLite",
-        };
-        var header = new StringBuilder($"-- Converted by trek convert from {source} {code.Kind.ToString().ToLowerInvariant()} {code.Name} (by way of PostgreSQL).");
+        var header = new StringBuilder($"-- Converted by trek convert from {outer.SourceDisplay} {code.Kind.ToString().ToLowerInvariant()} {code.Name} (by way of PostgreSQL).");
         header.Append(issues.Count == 0 ? " Check it before deploying.\n" : $" {issues.Count} item(s) to review (search for '{Review.Marker}').\n");
         foreach (var issue in issues)
         {
