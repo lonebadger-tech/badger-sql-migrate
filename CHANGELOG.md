@@ -6,7 +6,11 @@ All notable changes to Badger Trek. The format follows [Keep a Changelog](https:
 
 ### Changed
 
-- **SQL Server 2019 or later is required** (was 2016 SP1). SQL Server 2016 and 2017 are past or near the end of Microsoft's support, and lack what trek and `trek convert` now rely on (`STRING_AGG`, temporal history retention, secure enclaves). Azure SQL is unaffected. `trek doctor` flags an older server; CI tests 2019, 2022 and 2025.
+- **Supported database versions follow their vendors' support.** trek supports, and CI tests, only versions that are still supported:
+  - **SQL Server 2019 or later** (was 2016 SP1). SQL Server 2016 and 2017 are past or near the end of Microsoft's support, and lack what trek and `trek convert` now rely on (`STRING_AGG`, temporal history retention, secure enclaves). Azure SQL is unaffected. CI tests 2019, 2022 and 2025.
+  - **PostgreSQL 15 or later** (was 12). The PostgreSQL project supports each major version for five years; 12, 13 and 14 have reached their end of life. CI tests 15 to 18.
+  - **SQLite 3.26 or later**, unchanged: it is what RHEL 8 ships, which is supported until 2029.
+  - `trek doctor` flags a SQL Server or PostgreSQL server older than that.
 
 ### Added
 

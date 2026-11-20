@@ -93,12 +93,13 @@ jobs:
         if: always()
         run: dotnet test tests/Badger.Trek.Providers.Sqlite.Tests -c Release --no-build
 
-  # Every supported PostgreSQL major version: the provider's conformance and feature tests against each.
+  # Every PostgreSQL major version still supported by the PostgreSQL project (5 years each): the provider's
+  # conformance and feature tests against each.
   postgresql:
     strategy:
       fail-fast: false
       matrix:
-        version: ['12', '13', '14', '15', '16', '17', '18']
+        version: ['15', '16', '17', '18']
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

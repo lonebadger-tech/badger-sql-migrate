@@ -19,10 +19,14 @@ Delete this file when the items below are done (it is not documentation).
   passed required check.
 - Repository setting: workflow runs from all external contributors need approval (only brockweaver has write access).
 - Ruleset "CI must pass before merging" (id 27665614) on `dev` (and `main`, which does not exist: releases are
-  tagged on `dev`) requires 18 checks from GitHub Actions: `build` ×3, `sqlserver` 2019/2022/2025 (SQL Server 2019
-  is the minimum since 2026-11-20; the 2016 LocalDB and 2017 jobs were removed), `postgresql` 12–18, and `sqlite` on AlmaLinux 8
+  tagged on `dev`) requires 15 checks from GitHub Actions: `build` ×3, `sqlserver` 2019/2022/2025, `postgresql`
+  15–18, and `sqlite` on AlmaLinux 8
   (3.26.0), AlmaLinux 9 (3.34.1), Ubuntu 22.04 (3.37.2), Debian 12 (3.40.1), Ubuntu 24.04 (3.45.1). A renamed or new CI
   job must be added to the ruleset, or a removed one taken out, or PRs can never merge.
+- Supported versions (user's rule, 2026-11-20): only versions their vendor or distribution still supports. SQL Server
+  2019 and later (the user chose 2019 although 2017 has extended support until 2027-10); PostgreSQL majors the
+  PostgreSQL project still supports (15–18 now; drop each when it reaches 5 years); SQLite back to what supported
+  distributions ship (3.26 for RHEL 8, supported until 2029-05). Revisit when a version leaves support.
 
 ## Testing on bw-4k-pc
 

@@ -49,7 +49,7 @@ def home():
 </div>
 
 <div class="features">
-  <div><h3>SQL Server, PostgreSQL and SQLite</h3><p>One tool for SQL Server 2019 and later and Azure SQL, PostgreSQL 12 to 18, and SQLite 3.26 and later. SQLite has its engine built in: a database file, nothing to install. <a href="{BASE}/docs/sqlite/">SQLite</a> · <a href="{BASE}/docs/converting/">Convert between them</a></p></div>
+  <div><h3>SQL Server, PostgreSQL and SQLite</h3><p>One tool for SQL Server 2019 and later and Azure SQL, PostgreSQL 15 to 18, and SQLite 3.26 and later. SQLite has its engine built in: a database file, nothing to install. <a href="{BASE}/docs/sqlite/">SQLite</a> · <a href="{BASE}/docs/converting/">Convert between them</a></p></div>
   <div><h3>Named changes, no collisions</h3><p>Changes have names, not version numbers. The plan file merges with git's union driver, so two developers adding changes the same day never collide.</p></div>
   <div><h3>Hash-certified</h3><p>SHA-256 per change and a hash chain over the whole plan. Same head hash means byte-identical history on every machine and environment.</p></div>
   <div><h3>Real down, for free</h3><p>Revert scripts are first-class. They are stored in the database at deploy time, so rollback works from any branch, even after the change is gone.</p></div>

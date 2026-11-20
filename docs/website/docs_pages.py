@@ -85,7 +85,7 @@ def overview():
 </ul>
 
 <h2>Supported databases</h2>
-<p>SQL Server 2019 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance. PostgreSQL 12 and later. SQLite 3.26 and later: trek runs the engine built into it, and the scripts it generates also run on the older SQLite that other programs open your database with ({link("docs/sqlite/#versions", "SQLite versions")}). The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
+<p>SQL Server 2019 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance. PostgreSQL 15 and later. SQLite 3.26 and later: trek runs the engine built into it, and the scripts it generates also run on the older SQLite that other programs open your database with ({link("docs/sqlite/#versions", "SQLite versions")}). The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
 """)
 
 
@@ -1471,7 +1471,7 @@ PRAGMA foreign_keys = ON;''', "changes/product-price-check/deploy.sql")}
 
 
 def postgresql():
-    return doc("docs/postgresql/", "PostgreSQL", "PostgreSQL 12 through 18, each tested on every build.", f"""
+    return doc("docs/postgresql/", "PostgreSQL", "PostgreSQL 15 through 18, each tested on every build.", f"""
 {sh('''trek init --provider postgresql
 trek add create-product
 trek deploy''')}
@@ -1500,7 +1500,7 @@ environments:
 <p>Everything else is the same as on SQL Server: the plan, hash certification, revert from stored scripts, environments, variables, bundles, <code>diff-schema</code>, generated changes (<code>add --from-diff</code>, <code>diff-schema --script</code>), rework and repair, and imports.</p>
 
 <h2>Versions and services</h2>
-<p>Every build runs the provider's tests against PostgreSQL 12, 13, 14, 15, 16, 17 and 18 (the official Docker images). Managed services that run standard PostgreSQL, such as Azure Database for PostgreSQL, Amazon RDS and Aurora PostgreSQL, Google Cloud SQL, Supabase and Neon, use the same protocol and catalog and are expected to work, but have not been tested yet. Databases that only speak PostgreSQL's protocol (CockroachDB, YugabyteDB, Redshift) are not supported: they lack advisory locks or parts of the catalog trek reads.</p>
+<p>Every build runs the provider's tests against PostgreSQL 15, 16, 17 and 18 (the official Docker images), the versions the PostgreSQL project still supports. Managed services that run standard PostgreSQL, such as Azure Database for PostgreSQL, Amazon RDS and Aurora PostgreSQL, Google Cloud SQL, Supabase and Neon, use the same protocol and catalog and are expected to work, but have not been tested yet. Databases that only speak PostgreSQL's protocol (CockroachDB, YugabyteDB, Redshift) are not supported: they lack advisory locks or parts of the catalog trek reads.</p>
 
 <h2>Sign-in and TLS</h2>
 <table>
