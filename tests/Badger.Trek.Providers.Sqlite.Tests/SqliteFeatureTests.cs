@@ -58,7 +58,7 @@ public sealed class SqliteFeatureTests
             SELECT c.name, json_extract(o.doc, '$.customer.email') AS email, count(CASE WHEN o.paid THEN 1 END) AS paid_orders, sum(CASE WHEN (NOT o.paid) THEN o.total END) AS open_total FROM customers AS c LEFT JOIN orders AS o ON c.name = o.customer_name WHERE o.updated IS NOT o.created OR o.id IS NULL GROUP BY c.name, email ORDER BY c.name IS NULL, c.name;
             CREATE TRIGGER orders_sync AFTER INSERT ON orders FOR EACH ROW
             BEGIN
-                UPDATE customers AS c SET order_total = (SELECT s.total FROM order_sums AS s WHERE s.customer_name = c.name AND c.name = NEW.customer_name) WHERE EXISTS (SELECT 1 FROM order_sums AS s WHERE s.customer_name = c.name AND c.name = NEW.customer_name);
+                UPDATE customers SET order_total = (SELECT s.total FROM order_sums AS s WHERE s.customer_name = customers.name AND customers.name = NEW.customer_name) WHERE EXISTS (SELECT 1 FROM order_sums AS s WHERE s.customer_name = customers.name AND customers.name = NEW.customer_name);
             END;
             INSERT INTO customers (name) VALUES ('ann'), ('bob'), ('cy');
             INSERT INTO order_sums VALUES ('ann', 30);

@@ -21,6 +21,30 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
     /// <summary>Names replaced while printing (PL/pgSQL variables, TG_OP): lowercase name → SQL.</summary>
     public Dictionary<string, string> NameReplacements { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The alias of an UPDATE or DELETE target, written as the table name: SQLite rejects an alias on the target
+    /// table of a statement inside a trigger, the only place converted statements run.
+    /// </summary>
+    private readonly Dictionary<string, string> targetAliases = new(StringComparer.OrdinalIgnoreCase);
+
+    private string WithoutTargetAlias(string? alias, PgName table, Func<string, string> print)
+    {
+        if (!toSqlite || alias is null)
+        {
+            return print(alias is null ? string.Empty : " AS " + ctx.Ident(alias));
+        }
+
+        targetAliases[alias] = Table(table);
+        try
+        {
+            return print(string.Empty);
+        }
+        finally
+        {
+            targetAliases.Remove(alias);
+        }
+    }
+
     private string Unsupported(string why, string original, string placeholder = "NULL")
     {
         issues.Add($"{why}: {Collapse(original)}");
@@ -84,6 +108,11 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
         if (n.Parts.Count == 2 && NameReplacements.TryGetValue(n.Parts[0] + "." + n.Parts[1], out var field))
         {
             return field;
+        }
+
+        if (n.Parts.Count == 2 && targetAliases.TryGetValue(n.Parts[0], out var target))
+        {
+            return $"{target}.{ctx.Ident(n.Parts[1])}";
         }
 
         if (n.Parts.Count == 2 && (n.Parts[0].Equals("new", StringComparison.OrdinalIgnoreCase) || n.Parts[0].Equals("old", StringComparison.OrdinalIgnoreCase)))
@@ -1077,9 +1106,10 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
         return $"{WithPrefix(i.With)}{verb} INTO {Table(i.Table)}{(i.Alias is null ? string.Empty : " AS " + ctx.Ident(i.Alias))}{columns} {source}{conflict}{Returning(i.Returning)};";
     }
 
-    public string Update(PgUpdate u, string? guard = null)
+    public string Update(PgUpdate u, string? guard = null) => WithoutTargetAlias(u.Alias, u.Table, alias => Update(u, guard, alias));
+
+    private string Update(PgUpdate u, string? guard, string alias)
     {
-        var alias = u.Alias is null ? string.Empty : " AS " + ctx.Ident(u.Alias);
         if (toSqlite && u.From.Count > 0)
         {
             // UPDATE ... FROM needs SQLite 3.33: each value as a correlated subquery, for the rows that have a match.
@@ -1096,9 +1126,10 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
         return $"{WithPrefix(u.With)}UPDATE {Table(u.Table)}{alias} SET {sets}{from}{where}{Returning(u.Returning)};";
     }
 
-    public string Delete(PgDelete d, string? guard = null)
+    public string Delete(PgDelete d, string? guard = null) => WithoutTargetAlias(d.Alias, d.Table, alias => Delete(d, guard, alias));
+
+    private string Delete(PgDelete d, string? guard, string alias)
     {
-        var alias = d.Alias is null ? string.Empty : " AS " + ctx.Ident(d.Alias);
         if (d.Using.Count > 0 && toSqlite)
         {
             // SQLite has no DELETE ... USING: keep the rows that have a match.

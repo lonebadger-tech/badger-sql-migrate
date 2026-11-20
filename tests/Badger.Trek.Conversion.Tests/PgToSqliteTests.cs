@@ -127,7 +127,8 @@ public class PgToSqliteTests(ITestOutputHelper output)
 
         var script = Translate(trigger, function);
 
-        Assert.Contains("UPDATE customers AS c SET order_total = (SELECT s.total FROM order_sums AS s WHERE s.customer_name = c.name AND c.name = NEW.customer_name) WHERE EXISTS (SELECT 1 FROM order_sums AS s WHERE s.customer_name = c.name AND c.name = NEW.customer_name);", script, StringComparison.Ordinal);
+        // SQLite rejects an alias on the target table of a statement in a trigger: the table name stands in for it.
+        Assert.Contains("UPDATE customers SET order_total = (SELECT s.total FROM order_sums AS s WHERE s.customer_name = customers.name AND customers.name = NEW.customer_name) WHERE EXISTS (SELECT 1 FROM order_sums AS s WHERE s.customer_name = customers.name AND customers.name = NEW.customer_name);", script, StringComparison.Ordinal);
         Assert.Contains("RETURNING was left out", script, StringComparison.Ordinal);
         Assert.Empty(NewerThan326(script));
     }
