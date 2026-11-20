@@ -53,6 +53,19 @@ public static class ImportYaml
                     database: local.db
 
                 """
+                : providerId == "mysql"
+                ? """
+                  local:                               # where to deploy: edit to match your server
+                    host: localhost
+                    port: 3306
+                    database: mydatabase
+                    authentication: password
+                    user: root
+                    password: ${env:TREK_LOCAL_PASSWORD}
+                    tls:
+                      mode: optional                   # local development only
+
+                """
                 : providerId == "postgresql"
                 ? """
                   local:                               # where to deploy: edit to match your server

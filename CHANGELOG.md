@@ -2,6 +2,12 @@
 
 All notable changes to Badger Trek. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/). The website's [version history](https://lonebadger.tech/badger-trek/releases/) has the full release notes.
 
+## Unreleased
+
+### Added
+
+- **MySQL**: `trek init --provider mysql`, for MySQL 8.4 and 9.7, the LTS releases that are still supported (each tested on every build). Deploy, revert, verify, repeatables, bundles, the schema fingerprint and `diff-schema` work as on the other databases. MySQL commits DDL as it runs, so changes run without a transaction: a change that fails part-way keeps what already ran, and is recorded only when all of it has run. Scripts are split as the `mysql` client does, with `DELIMITER` around stored program bodies. The journal is `trek_*` tables in the environment's database, and the deploy lock is a named lock. `trek doctor` flags older MySQL releases, Innovation releases and MariaDB. Lint: `USE` (TREK009), mysql client commands and a stored program body without a delimiter (TREK005). Generating changes (`add --from-diff`), `trek convert` and imports from other tools come later.
+
 ## 0.5.0 (November 2026)
 
 ### Changed

@@ -27,6 +27,7 @@ SIDEBAR = [
         ("Variables", "docs/variables/"),
         ("Always Encrypted", "docs/always-encrypted/"),
         ("PostgreSQL", "docs/postgresql/"),
+        ("MySQL", "docs/mysql/"),
         ("SQLite", "docs/sqlite/"),
     ]),
     ("Operate", [
@@ -57,7 +58,7 @@ def link(path, label):
 
 def pages():
     return [overview(), install(), quick_start(), project(), ai(), plan(), changes(), certification(), revert(), fixing_changes(), generating(),
-            teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(), postgresql(), sqlite(),
+            teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(), postgresql(), mysql(), sqlite(),
             commands(), ci_cd(), bundles(), drift(), baseline(), importing(), upgrading(), converting(), journal(), troubleshooting(), extending()]
 
 
@@ -65,7 +66,7 @@ def pages():
 
 def overview():
     return doc("docs/", "Documentation", "Everything about Badger Trek, from the first change to production pipelines.", f"""
-<p>Badger Trek deploys hand-written SQL changes to SQL Server, Azure SQL, PostgreSQL and SQLite, in an order you control, and proves afterwards that every database received exactly what you intended. It is a single command-line tool, <code>trek</code>, for Windows, macOS and Linux.</p>
+<p>Badger Trek deploys hand-written SQL changes to SQL Server, Azure SQL, PostgreSQL, MySQL and SQLite, in an order you control, and proves afterwards that every database received exactly what you intended. It is a single command-line tool, <code>trek</code>, for Windows, macOS and Linux.</p>
 
 <h2>Five ideas</h2>
 <ol>
@@ -85,7 +86,7 @@ def overview():
 </ul>
 
 <h2>Supported databases</h2>
-<p>SQL Server 2019 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance. PostgreSQL 15 and later. SQLite 3.26 and later: trek runs the engine built into it, and the scripts it generates also run on the older SQLite that other programs open your database with ({link("docs/sqlite/#versions", "SQLite versions")}). The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
+<p>SQL Server 2019 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance. PostgreSQL 15 and later. MySQL 8.4 and 9.7 (the LTS releases; see {link("docs/mysql/", "MySQL")}). SQLite 3.26 and later: trek runs the engine built into it, and the scripts it generates also run on the older SQLite that other programs open your database with ({link("docs/sqlite/#versions", "SQLite versions")}). The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
 """)
 
 
@@ -1467,6 +1468,56 @@ PRAGMA foreign_keys = ON;''', "changes/product-price-check/deploy.sql")}
 <h2>Journal and lock</h2>
 <p>SQLite has no schemas, so the journal tables are prefixed instead: <code>trek_changes</code>, <code>trek_repeatables</code>, <code>trek_events</code>, <code>trek_meta</code> and <code>trek_schema_snapshots</code> (the prefix is <code>stateSchema</code>). SQLite's own locks last one transaction and a deploy is many, so trek holds an exclusive lock on a file next to the database, <code>shop.db.trek-lock</code>, for the whole run. The file stays after the run (deleting it could let two deployers lock different files); add <code>*.trek-lock</code> to <code>.gitignore</code>. The lock works between processes on one machine; it is not reliable on network file shares, where SQLite itself is not either.</p>
 <p><code>trek doctor</code> shows the SQLite version, the file, the journal mode, the encoding and whether foreign keys are on. The SQLite built into trek enforces foreign keys unless the connection turns them off (<code>connectionProperties: {{ Foreign Keys: false }}</code>).</p>
+""")
+
+
+def mysql():
+    return doc("docs/mysql/", "MySQL", "MySQL 8.4 and 9.7, the LTS releases, each tested on every build.", f"""
+{sh('''trek init --provider mysql
+trek add create-product
+trek deploy''')}
+{yaml('''provider: mysql
+defaultEnvironment: local
+environments:
+  local:
+    host: localhost
+    port: 3306
+    database: shop                      # trek deploys here and keeps its journal here (trek_* tables)
+    authentication: password
+    user: root
+    password: ${env:TREK_LOCAL_PASSWORD}
+    tls:
+      mode: optional
+  prod:
+    host: shop-prod.mysql.database.azure.com
+    database: shop
+    authentication: entraDefault        # Azure Database for MySQL: an Entra token is the password
+    user: shop-deployers                # the Entra user, group or managed identity the server knows
+    tls:
+      mode: strict
+    connectionProperties:               # any MySqlConnector connection-string keyword
+      Default Command Timeout: 120''', "trek.yaml")}
+<p>The plan, hash certification, revert from stored scripts, environments, variables, repeatables, bundles, <code>verify</code> and <code>diff-schema</code> work as on the other databases. Generating changes from a database (<code>add --from-diff</code>), <code>trek convert</code> and imports from other tools are not available for MySQL yet.</p>
+
+<h2 id="transactions">No transactions for DDL</h2>
+<p>MySQL commits each DDL statement as it runs (<code>CREATE</code>, <code>ALTER</code>, <code>DROP</code>), and it cannot be rolled back. So trek runs MySQL changes without a transaction: a change that fails part-way keeps the statements that already ran, and trek records the change only when all of it has run. Keep changes small (one table change each), make them safe to run again where you can (<code>CREATE TABLE IF NOT EXISTS</code>, <code>DROP ... IF EXISTS</code>), and give each a verify script. After a failure, fix the database by hand or with the change's revert, then deploy again.</p>
+
+<h2 id="delimiter">Stored programs and DELIMITER</h2>
+<p>trek splits scripts the way the <code>mysql</code> client does: a statement ends at <code>;</code>. A procedure, function, trigger or event whose body has several statements needs another delimiter around it, also as in the client; the <code>DELIMITER</code> lines are not sent to the server:</p>
+{sql('''DELIMITER //
+CREATE PROCEDURE add_order(IN amount DECIMAL(12,2))
+BEGIN
+  INSERT INTO orders (total) VALUES (amount);
+  SELECT LAST_INSERT_ID() AS id;
+END //
+DELIMITER ;''')}
+<p><code>trek plan check</code> reports a body that ends at its first <code>;</code> (TREK005), <code>USE</code> (TREK009: it would send the rest of the change, and trek's journal entry, to another database) and mysql client commands such as <code>source</code>. Repeatables are written with <code>CREATE OR REPLACE VIEW</code>, or <code>DROP PROCEDURE IF EXISTS</code> and then <code>CREATE</code>.</p>
+
+<h2 id="journal">The journal</h2>
+<p>In MySQL a schema is a database, and trek works in the environment's database: its journal is the tables <code>trek_meta</code>, <code>trek_changes</code>, <code>trek_repeatables</code>, <code>trek_events</code> and <code>trek_schema_snapshots</code> there (the prefix is <code>stateSchema</code>), so trek needs no right to create databases. The deploy lock is a MySQL named lock (<code>GET_LOCK</code>) per database. The schema fingerprint covers tables, columns, indexes, foreign keys, checks, views, routines, triggers and events, and leaves out the database's own name, which MySQL writes into stored definitions, so the same schema has the same fingerprint in every environment.</p>
+
+<h2>Versions and services</h2>
+<p>Every build runs the provider's tests against MySQL 8.4 and 9.7 (the official Docker images), the long-term-support releases that are still supported; <code>trek doctor</code> flags older releases, Innovation releases and MariaDB. Azure Database for MySQL, Amazon RDS and Aurora MySQL and Google Cloud SQL run standard MySQL and are expected to work, but have not been tested. trek connects with MySqlConnector: <code>connectionProperties</code> takes any of its connection-string keywords, and <code>tls.mode</code> maps to its <code>SslMode</code>.</p>
 """)
 
 

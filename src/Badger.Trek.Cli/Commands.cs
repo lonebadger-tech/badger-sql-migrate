@@ -11,6 +11,7 @@ using Badger.Trek.Core.Plan;
 using Badger.Trek.Core.Preprocessing;
 using Badger.Trek.Core.Project;
 using Badger.Trek.Core.Providers;
+using Badger.Trek.Providers.MySql;
 using Badger.Trek.Providers.PostgreSql;
 using Badger.Trek.Providers.Sqlite;
 using Badger.Trek.Providers.SqlServer;
@@ -40,6 +41,7 @@ public static partial class Commands
         .Register(SqlServerProvider.ProviderId, () => new SqlServerProvider())
         .Register(PostgreSqlProvider.ProviderId, () => new PostgreSqlProvider())
         .Register("postgres", () => new PostgreSqlProvider())
+        .Register(MySqlProvider.ProviderId, () => new MySqlProvider())
         .Register(SqliteProvider.ProviderId, SqliteOptions.SectionName, settings => new SqliteProvider(SqliteOptions.Parse(settings)))
         .Register("sqlite3", SqliteOptions.SectionName, settings => new SqliteProvider(SqliteOptions.Parse(settings)));
 
@@ -82,7 +84,7 @@ public static partial class Commands
         Directory.CreateDirectory(Path.Combine(dir, MigrationProject.RepeatableFolder));
         Directory.CreateDirectory(Path.Combine(dir, MigrationProject.EnvironmentsFolder));
 
-        WriteIfMissing(Path.Combine(dir, TrekConfig.FileName), provider.Id == PostgreSqlProvider.ProviderId ? PostgreSqlConfigTemplate : provider.Id == SqliteProvider.ProviderId ? SqliteConfigTemplate : $$"""
+        WriteIfMissing(Path.Combine(dir, TrekConfig.FileName), provider.Id == PostgreSqlProvider.ProviderId ? PostgreSqlConfigTemplate : provider.Id == MySqlProvider.ProviderId ? MySqlConfigTemplate : provider.Id == SqliteProvider.ProviderId ? SqliteConfigTemplate : $$"""
             # Badger Trek configuration
             provider: {{provider.Id}}
             defaultEnvironment: local
@@ -198,6 +200,46 @@ public static partial class Commands
         #    connectionProperties:            # any Npgsql connection-string keyword
         #      Search Path: app,public
         #      Command Timeout: 120
+
+        """;
+
+    private const string MySqlConfigTemplate = """
+        # Badger Trek configuration
+        provider: mysql
+        defaultEnvironment: local
+
+        # Script variables, referenced as {Name} in scripts. Values are not part of change hashes.
+        # Environments can override them under their own 'variables:'.
+        variables: {}
+
+        # MySQL commits DDL as it runs, so changes run without a transaction: a change that fails part-way keeps what
+        # it already did. Keep changes small, and give each a verify script.
+        environments:
+          # Names starting with '_' are templates: other environments inherit them with 'extends'.
+          _azure:
+            database: mydatabase
+            tls: { mode: strict }
+            authentication: entraDefault       # Azure Database for MySQL: Entra token as the password
+            user: myapp-deployers              # the Entra user, group or managed identity the server knows
+
+          local:
+            host: localhost
+            port: 3306
+            database: mydatabase               # trek deploys to this database and keeps its journal there (trek_* tables)
+            authentication: password
+            user: root
+            password: ${env:TREK_LOCAL_PASSWORD}
+            tls:
+              mode: optional                   # local development only
+
+        #  prod:
+        #    extends: _azure
+        #    host: myapp-prod.mysql.database.azure.com
+        #    protected: true                  # deploy/revert require typing the environment name (or --yes)
+        #    allowRevert: false               # fix forward in production
+        #    ordering: strict                 # exact plan order; prod history is certified
+        #    connectionProperties:            # any MySqlConnector connection-string keyword
+        #      Default Command Timeout: 120
 
         """;
 

@@ -8,6 +8,13 @@ Delete this file when the items below are done (it is not documentation).
 
 ## Still pending (ask the user)
 
+- MySQL support (user's request, 2026-11-20), four PRs: (1) provider core: done in the mysql-provider PR;
+  (2) add --from-diff / diff-schema --script for MySQL (ISchemaScripter, IScratchDatabases); (3) trek convert to and
+  from MySQL in every direction (exporter, data transfer, MySQL<->PostgreSQL translators; conversions go through
+  PostgreSQL's syntax); (4) imports and baseline --from for MySQL (Flyway jdbc:mysql, DbUp, Sqitch engine mysql,
+  EF Core with the Pomelo/Oracle providers). MySqlProvider.DefaultSchema is empty (a MySQL schema is a database):
+  ForeignJournal.SplitTable needs to handle that in (4). Ship all four as 0.6.0.
+
 - Dogfooding suggestions not done: `baseline --check-schema`, excluding objects from the schema fingerprint (e.g. an
   old EF/Flyway history table), DNS check before an Entra token in `doctor`, a `trek clone`.
 - The required-checks ruleset has no bypass, so even the maintainer cannot push straight to `dev`; everything
@@ -19,13 +26,14 @@ Delete this file when the items below are done (it is not documentation).
   passed required check.
 - Repository setting: workflow runs from all external contributors need approval (only brockweaver has write access).
 - Ruleset "CI must pass before merging" (id 27665614) on `dev` (and `main`, which does not exist: releases are
-  tagged on `dev`) requires 15 checks from GitHub Actions: `build` ×3, `sqlserver` 2019/2022/2025, `postgresql`
-  15–18, and `sqlite` on AlmaLinux 8
+  tagged on `dev`) requires 17 checks from GitHub Actions: `build` ×3, `sqlserver` 2019/2022/2025, `postgresql`
+  15–18, `mysql` 8.4/9.7, and `sqlite` on AlmaLinux 8
   (3.26.0), AlmaLinux 9 (3.34.1), Ubuntu 22.04 (3.37.2), Debian 12 (3.40.1), Ubuntu 24.04 (3.45.1). A renamed or new CI
   job must be added to the ruleset, or a removed one taken out, or PRs can never merge.
 - Supported versions (user's rule, 2026-11-20): only versions their vendor or distribution still supports. SQL Server
   2019 and later (the user chose 2019 although 2017 has extended support until 2027-10); PostgreSQL majors the
-  PostgreSQL project still supports (15–18 now; drop each when it reaches 5 years); SQLite back to what supported
+  PostgreSQL project still supports (15–18 now; drop each when it reaches 5 years); MySQL LTS releases still
+  supported (8.4 until 2032-04, 9.7 until 2034-04; 8.0 ended 2026-04; Innovation releases are not covered); SQLite back to what supported
   distributions ship (3.26 for RHEL 8, supported until 2029-05). Revisit when a version leaves support.
 
 ## Testing on bw-4k-pc
