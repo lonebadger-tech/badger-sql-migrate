@@ -4,6 +4,8 @@ Free, cross-platform (Windows, macOS, Linux) database migrations for SQL Server,
 
 Documentation: [lonebadger.tech/badger-trek](https://lonebadger.tech/badger-trek/)
 
+> **Coming from Badger SQL Migrate (`Badger.SqlMigrate`, command `bsm`)?** Badger Trek is the same tool under a new name, and it reads nothing the old one wrote. Uninstall `Badger.SqlMigrate`, install `Badger.Trek`, rename `bsm.yaml`/`bsm.plan` to `trek.yaml`/`trek.plan`, and move each database's journal once (trek prints the SQL, and the history is kept): [Upgrading from Badger SQL Migrate](https://lonebadger.tech/badger-trek/docs/upgrading/).
+
 ## Install
 
 ```bash

@@ -2,6 +2,14 @@
 
 All notable changes to Badger Trek. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/). The website's [version history](https://lonebadger.tech/badger-trek/releases/) has the full release notes.
 
+## 0.4.1 (November 2026)
+
+### Fixed
+
+- A database deployed by Badger SQL Migrate (0.3.0 and earlier) no longer looks empty: 0.4.0 found no journal in state schema `trek`, showed every change as pending, and `trek deploy` would have run them all again. Every command that reads or creates the journal now stops when only a Badger SQL Migrate journal (state schema `bsm`, `bsm_*` tables on SQLite) is there, and prints the provider's SQL to move it to `trek` once, keeping the history, or suggests `stateSchema: bsm`. trek still reads nothing from the old journal itself.
+- With `bsm.yaml` and no `trek.yaml`, trek explains the rename instead of suggesting `trek init`.
+- The nuget.org package page and `trek ai-guide` explain the rename. The new [Upgrading from Badger SQL Migrate](https://lonebadger.tech/badger-trek/docs/upgrading/) page replaces the 0.4.0 advice to adopt each database with `trek baseline`.
+
 ## 0.4.0 (November 2026)
 
 **Breaking: renamed from Badger SQL Migrate to Badger Trek, with no backwards compatibility.** The command is `trek`, the NuGet package `Badger.Trek` (the `Badger.SqlMigrate` package is deprecated), and the repository `lonebadger-tech/badger-trek`. Everything the tool names follows: project files `trek.yaml` and `trek.plan`, the `trek` journal schema (`trek_*` tables on SQLite), `-- trek:` script directives, `{trek.*}` variables, `TREK_*` environment variables, `~/.trek`, and lint codes `TREK001` and up. trek does not read anything from 0.3.0 and earlier (`bsm.yaml`, the `bsm` journal, `BSM_*` variables): pointed at a database deployed by an earlier version, it finds no journal. To move over, uninstall `Badger.SqlMigrate`, install `Badger.Trek`, rename the project files and the names inside the scripts, and adopt each existing database with `trek baseline`.

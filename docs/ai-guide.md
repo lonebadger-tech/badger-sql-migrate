@@ -20,6 +20,12 @@ environments/<env>/      repeatables that run only in that environment (seed dat
 Read `trek.yaml` first to learn the provider: `provider: sqlserver` means T-SQL, `provider: postgresql` means
 PostgreSQL, `provider: sqlite` means SQLite. Never put connection strings, passwords or secrets in scripts.
 
+Badger Trek was called Badger SQL Migrate (command `bsm`, NuGet `Badger.SqlMigrate`) up to 0.3.0. A folder with
+`bsm.yaml` and `bsm.plan` is an old project: don't run `trek init` over it. Tell the person it needs upgrading
+(https://lonebadger.tech/badger-trek/docs/upgrading/): the files are renamed, and each database's journal is moved
+once with SQL that trek prints. Never run that SQL yourself, and don't edit deployed changes to rename
+`-- bsm:` directives unless the person asks.
+
 ## Adding a change
 
 1. Create the change with the CLI (or the `add_change` MCP tool). Don't write plan lines by hand:

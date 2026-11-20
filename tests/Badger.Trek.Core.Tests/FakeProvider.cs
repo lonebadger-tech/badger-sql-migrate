@@ -24,6 +24,9 @@ public sealed class FakeDatabase
 
     public bool StateCreated { get; set; }
 
+    /// <summary>A journal left by Badger SQL Migrate (state schema "bsm").</summary>
+    public bool LegacyJournal { get; set; }
+
     public Dictionary<string, string> Meta { get; set; } = new(StringComparer.Ordinal);
 
     public long NextSequence { get; set; } = 1;
@@ -36,6 +39,7 @@ public sealed class FakeDatabase
         Events = [.. Events],
         Snapshots = [.. Snapshots],
         StateCreated = StateCreated,
+        LegacyJournal = LegacyJournal,
         NextSequence = NextSequence,
         Meta = new(Meta, StringComparer.Ordinal),
     };
@@ -48,6 +52,7 @@ public sealed class FakeDatabase
         Events = other.Events;
         Snapshots = other.Snapshots;
         StateCreated = other.StateCreated;
+        LegacyJournal = other.LegacyJournal;
         NextSequence = other.NextSequence;
         Meta = other.Meta;
     }
@@ -215,7 +220,10 @@ public sealed class FakeProvider : IDatabaseProvider, IStateStore, IDeployLock, 
         return Task.CompletedTask;
     }
 
-    public Task<bool> ExistsAsync(IDatabaseSession session, string schema, CancellationToken cancellationToken) => Task.FromResult(Db(session).StateCreated);
+    public Task<bool> ExistsAsync(IDatabaseSession session, string schema, CancellationToken cancellationToken) =>
+        Task.FromResult(schema == "bsm" ? Db(session).LegacyJournal : Db(session).StateCreated);
+
+    public string MoveScript(string from, string to) => $"MOVE {from} TO {to};";
 
     public Task<IReadOnlyList<AppliedChange>> GetAppliedChangesAsync(IDatabaseSession session, string schema, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<AppliedChange>>(Db(session).Changes.OrderBy(c => c.Sequence).ToList());

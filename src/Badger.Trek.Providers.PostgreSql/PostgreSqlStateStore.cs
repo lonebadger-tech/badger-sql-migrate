@@ -10,6 +10,16 @@ public sealed partial class PostgreSqlStateStore : IStateStore
 {
     public const int StateVersion = 1;
 
+    public string MoveScript(string from, string to)
+    {
+        var (f, t) = (Quote(from), Quote(to));
+        return string.Join("\n", [
+            $"CREATE SCHEMA IF NOT EXISTS {t};",
+            .. StateTables.Names.Select(n => $"ALTER TABLE {f}.{n} SET SCHEMA {t};"),
+            $"DROP SCHEMA {f};",
+        ]);
+    }
+
     public async Task<bool> ExistsAsync(IDatabaseSession session, string schema, CancellationToken cancellationToken)
     {
         var rows = await session.QueryAsync("SELECT to_regclass(@name) IS NOT NULL AS present;", new Dictionary<string, object?> { ["name"] = $"{Quote(schema)}.changes" }, cancellationToken).ConfigureAwait(false);
