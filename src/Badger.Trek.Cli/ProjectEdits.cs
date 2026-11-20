@@ -5,6 +5,7 @@ using Badger.Trek.Core.Hashing;
 using Badger.Trek.Core.Plan;
 using Badger.Trek.Core.Project;
 using Badger.Trek.Core.Providers;
+using Badger.Trek.Providers.MySql;
 using Badger.Trek.Providers.PostgreSql;
 using Badger.Trek.Providers.Sqlite;
 
@@ -294,11 +295,14 @@ public static partial class Commands
 
         var postgres = provider.Id == PostgreSqlProvider.ProviderId;
         var sqlite = provider.Id == SqliteProvider.ProviderId;
+        var mysql = provider.Id == MySqlProvider.ProviderId;
         var text = ReadResource("AGENTS.md")
             .Replace("{{provider}}", provider.DisplayName, StringComparison.Ordinal)
-            .Replace("{{repeatable}}", postgres ? "`CREATE OR REPLACE`" : sqlite ? "`DROP VIEW/TRIGGER IF EXISTS` then `CREATE`" : "`CREATE OR ALTER`", StringComparison.Ordinal)
+            .Replace("{{repeatable}}", postgres ? "`CREATE OR REPLACE`" : mysql ? "`CREATE OR REPLACE VIEW`, or `DROP PROCEDURE/FUNCTION/TRIGGER IF EXISTS` then `CREATE`" : sqlite ? "`DROP VIEW/TRIGGER IF EXISTS` then `CREATE`" : "`CREATE OR ALTER`", StringComparison.Ordinal)
             .Replace("{{dialect}}", postgres
                 ? "PostgreSQL: statements end with `;`, bodies use `$$` quoting, psql's `\\i`, `\\set` and `\\if` work; `\\connect` doesn't."
+                : mysql
+                ? "MySQL: statements end with `;`; wrap procedure, function and trigger bodies in `DELIMITER //` ... `DELIMITER ;`; DDL commits as it runs, so keep changes small; no `USE`."
                 : sqlite
                 ? "SQLite: statements end with `;`; ALTER TABLE only renames, adds or drops simple columns, so other table changes rebuild the table; no sqlite3 dot-commands (`.read`, `.mode`)."
                 : "T-SQL: separate batches with a `GO` line; `CREATE VIEW/PROCEDURE/FUNCTION/TRIGGER` start their own batch; no `USE`.", StringComparison.Ordinal);

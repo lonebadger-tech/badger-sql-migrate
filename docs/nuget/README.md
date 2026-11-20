@@ -1,6 +1,6 @@
 # Badger Trek
 
-Free, cross-platform (Windows, macOS, Linux) database migrations for SQL Server, Azure SQL, PostgreSQL and SQLite with **real up and down**, **named changes instead of version numbers**, and **SHA-256 hash certification** of everything that reaches a database.
+Free, cross-platform (Windows, macOS, Linux) database migrations for SQL Server, Azure SQL, PostgreSQL, MySQL and SQLite with **real up and down**, **named changes instead of version numbers**, and **SHA-256 hash certification** of everything that reaches a database.
 
 Documentation: [lonebadger.tech/badger-trek](https://lonebadger.tech/badger-trek/)
 

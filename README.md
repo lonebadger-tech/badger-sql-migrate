@@ -6,7 +6,7 @@
 
 Free, open-source, cross-platform (Windows, macOS, Linux) database migrations with **real up and down**, **named changes instead of version numbers**, and **SHA-256 hash certification** of everything that reaches a database.
 
-Providers: **SQL Server / Azure SQL**, **PostgreSQL** (`trek init --provider postgresql`) and **SQLite** (`trek init --provider sqlite`). The engine is vendor-neutral, so MySQL can be added as a provider without touching the engine or CLI.
+Providers: **SQL Server / Azure SQL**, **PostgreSQL** (`trek init --provider postgresql`), **MySQL** (`trek init --provider mysql`) and **SQLite** (`trek init --provider sqlite`). The engine is vendor-neutral: providers live in their own assemblies.
 
 - **Documentation:** [lonebadger.tech/badger-trek](https://lonebadger.tech/badger-trek/) (also as Markdown for AI assistants: [llms.txt](https://www.lonebadger.tech/llms.txt))
 - **Download:** [standalone binaries](https://lonebadger.tech/badger-trek/download/) or `dotnet tool install -g Badger.Trek`

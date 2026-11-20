@@ -4,6 +4,7 @@
     <Project Path="src/Badger.Trek.Connectivity/Badger.Trek.Connectivity.csproj" />
     <Project Path="src/Badger.Trek.Conversion/Badger.Trek.Conversion.csproj" />
     <Project Path="src/Badger.Trek.Core/Badger.Trek.Core.csproj" />
+    <Project Path="src/Badger.Trek.Providers.MySql/Badger.Trek.Providers.MySql.csproj" />
     <Project Path="src/Badger.Trek.Providers.PostgreSql/Badger.Trek.Providers.PostgreSql.csproj" />
     <Project Path="src/Badger.Trek.Providers.Sqlite/Badger.Trek.Providers.Sqlite.csproj" />
     <Project Path="src/Badger.Trek.Providers.SqlServer/Badger.Trek.Providers.SqlServer.csproj" />
@@ -14,6 +15,7 @@
     <Project Path="tests/Badger.Trek.Conversion.IntegrationTests/Badger.Trek.Conversion.IntegrationTests.csproj" />
     <Project Path="tests/Badger.Trek.Conversion.Tests/Badger.Trek.Conversion.Tests.csproj" />
     <Project Path="tests/Badger.Trek.Core.Tests/Badger.Trek.Core.Tests.csproj" />
+    <Project Path="tests/Badger.Trek.Providers.MySql.Tests/Badger.Trek.Providers.MySql.Tests.csproj" />
     <Project Path="tests/Badger.Trek.Providers.PostgreSql.Tests/Badger.Trek.Providers.PostgreSql.Tests.csproj" />
     <Project Path="tests/Badger.Trek.Providers.Sqlite.Tests/Badger.Trek.Providers.Sqlite.Tests.csproj" />
     <Project Path="tests/Badger.Trek.Providers.SqlServer.Tests/Badger.Trek.Providers.SqlServer.Tests.csproj" />
