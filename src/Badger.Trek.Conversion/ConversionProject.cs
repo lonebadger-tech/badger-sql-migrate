@@ -415,6 +415,7 @@ public static partial class ConversionProject
                         }
 
                         sb.Append($" {mapping.Type} GENERATED ALWAYS AS ({expr}) {(c.ComputedStored ? "STORED" : "VIRTUAL")}");
+                        ctx.Issue(owner, $"computed column {c.Name} is a generated column, which needs SQLite 3.31, newer than sqlite.minVersion (3.26): raise sqlite.minVersion if every program that opens the database has 3.31, or compute it in a view or trigger instead");
                     }
                     else if (pg)
                     {

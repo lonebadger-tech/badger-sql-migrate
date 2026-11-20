@@ -263,15 +263,79 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
             return $"CAST(julianday({Expr(b.Left)}) - julianday({Expr(b.Right)}) AS INTEGER)";
         }
 
+        if (toSqlite && b.Op is "->" or "->>" or "#>" or "#>>")
+        {
+            return Json(b);
+        }
+
         return b.Op switch
         {
             "and" or "or" => $"{Expr(b.Left)} {b.Op.ToUpperInvariant()} {Expr(b.Right)}",
             "^" when toSqlite => $"pow({Expr(b.Left)}, {Expr(b.Right)})",
             "#" or "@>" or "<@" or "?" or "?|" or "?&" or "&&" or "@@" when toSqlite => Unsupported($"operator {b.Op} has no SQLite counterpart", Show(b)),
-            "#>" or "#>>" when toSqlite && StringArg(b.Right) is { } path => $"{Expr(b.Left)} {(b.Op == "#>>" ? "->>" : "->")} {Lit("$" + string.Concat(path.Trim('{', '}').Split(',').Select(p => int.TryParse(p.Trim(), out _) ? $"[{p.Trim()}]" : "." + p.Trim())))}",
             _ => $"{Expr(b.Left)} {b.Op} {Expr(b.Right)}",
         };
     }
+
+    /// <summary>
+    /// PostgreSQL's JSON operators as json_extract. SQLite's own -> and ->> need 3.38, and converted projects run on
+    /// SQLite 3.26 and later (sqlite.minVersion's default). A chain (doc -> 'a' ->> 'b') becomes one path.
+    /// </summary>
+    private string Json(PgBinary b)
+    {
+        var path = new List<string>();
+        PgExpr root = b;
+        while (Unparen(root) is PgBinary { Op: "->" or "->>" or "#>" or "#>>" } step
+               && (ReferenceEquals(step, b) || step.Op is "->" or "#>")
+               && JsonSegments(step) is { } segments)
+        {
+            path.InsertRange(0, segments);
+            root = step.Left;
+        }
+
+        string extract;
+        if (ReferenceEquals(root, b))
+        {
+            if (b.Op is "#>" or "#>>")
+            {
+                return Unsupported("JSON path operator with a path that is not a literal", Show(b));
+            }
+
+            // A key that is only known at run time: taken as an object key.
+            extract = $"json_extract({Expr(b.Left)}, '$.\"' || {Expr(b.Right)} || '\"')";
+        }
+        else
+        {
+            extract = $"json_extract({Expr(root)}, {Lit("$" + string.Concat(path))})";
+        }
+
+        return b.Op is "->>" or "#>>"
+            ? extract
+            : $"json_quote({extract})" + Note("-> became json_quote(json_extract(...)): a missing key gives 'null' instead of NULL");
+    }
+
+    /// <summary>The JSON path segments one -> / #> step adds, or null when its key or path is not a literal.</summary>
+    private static List<string>? JsonSegments(PgBinary step)
+    {
+        if (step.Op is "#>" or "#>>")
+        {
+            return StringArg(step.Right) is { } p
+                ? [.. p.Trim('{', '}').Split(',').Select(s => s.Trim()).Select(s => JsonSegment(s, int.TryParse(s, out var i) && i >= 0))]
+                : null;
+        }
+
+        if (Unparen(step.Right) is PgLiteral { Kind: LiteralKind.Number } n)
+        {
+            return int.TryParse(n.Value, out var index) && index >= 0 ? [$"[{index}]"] : null;
+        }
+
+        return StringArg(step.Right) is { } key ? [JsonSegment(key, false)] : null;
+    }
+
+    private static string JsonSegment(string key, bool index) =>
+        index ? $"[{key}]"
+        : Regex.IsMatch(key, "^[A-Za-z_][A-Za-z0-9_]*$") ? "." + key
+        : ".\"" + key.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
 
     private static bool IsDateLike(PgExpr e) => Unparen(e) switch
     {
@@ -518,13 +582,36 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
         return $" OVER ({string.Join(' ', parts)})";
     }
 
-    private string Aggregate(string name, PgCall c, IReadOnlyList<PgExpr> args)
+    private string Aggregate(string name, PgCall c, IReadOnlyList<PgExpr> args, string? extraArg = null)
     {
         var distinct = c.Distinct ? "DISTINCT " : string.Empty;
-        var inner = c.StarArg ? "*" : string.Join(", ", args.Select(Expr));
+        List<string> values = c.StarArg ? ["*"] : [.. args.Select(Expr)];
+        if (extraArg is not null)
+        {
+            values.Add(extraArg);
+        }
+
         var order = c.OrderBy.Count > 0 ? " " + OrderBy(c.OrderBy) : string.Empty;
         var filter = c.Filter is null ? string.Empty : $" FILTER (WHERE {Expr(c.Filter)})";
-        return $"{name}({distinct}{inner}{order}){filter}";
+        var note = string.Empty;
+        if (toSqlite)
+        {
+            if (c.Filter is not null)
+            {
+                // FILTER (WHERE ...) needs SQLite 3.30. Aggregates skip NULLs, so a CASE without ELSE gives the same result.
+                var condition = Expr(c.Filter);
+                values[0] = c.StarArg ? $"CASE WHEN {condition} THEN 1 END" : $"CASE WHEN {condition} THEN {values[0]} END";
+                filter = string.Empty;
+            }
+
+            if (order.Length > 0)
+            {
+                order = string.Empty;
+                note = Note($"ORDER BY inside {name}() needs SQLite 3.44 and was left out: the values are in no particular order");
+            }
+        }
+
+        return $"{name}({distinct}{string.Join(", ", values)}{order}){filter}{note}";
     }
 
     /// <summary>PostgreSQL functions in SQLite.</summary>
@@ -539,7 +626,7 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
             "current_date" => "CURRENT_DATE",
             "current_time" or "localtime" => "CURRENT_TIME",
             "count" or "sum" or "avg" or "min" or "max" or "total" => Aggregate(name, c, args),
-            "string_agg" => $"group_concat({A(0)}, {(args.Count > 1 ? A(1) : "','")}{(c.OrderBy.Count > 0 ? " " + OrderBy(c.OrderBy) : string.Empty)})",
+            "string_agg" => Aggregate("group_concat", c, args.Take(1).ToList(), args.Count > 1 ? A(1) : "','"),
             "array_agg" or "json_agg" or "jsonb_agg" => Aggregate("json_group_array", c, args),
             "coalesce" or "nullif" or "lower" or "upper" or "replace" or "abs" or "round" or "length" or "trim" or "ltrim" or "rtrim" or "substr" or "random"
                 or "row_number" or "rank" or "dense_rank" or "ntile" or "lag" or "lead" or "first_value" or "last_value" or "percent_rank" or "cume_dist"
@@ -755,8 +842,26 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
 
     // ------------------------------------------------------------------ queries
 
-    public string OrderBy(IReadOnlyList<PgOrder> order) =>
-        "ORDER BY " + string.Join(", ", order.Select(o => Expr(o.Expr) + (o.Descending ? " DESC" : string.Empty) + (o.Nulls is null ? string.Empty : " NULLS " + o.Nulls.ToUpperInvariant())));
+    public string OrderBy(IReadOnlyList<PgOrder> order) => "ORDER BY " + string.Join(", ", order.Select(OrderTerm));
+
+    private string OrderTerm(PgOrder o)
+    {
+        var term = Expr(o.Expr) + (o.Descending ? " DESC" : string.Empty);
+        if (o.Nulls is null)
+        {
+            return term;
+        }
+
+        var nullsLast = o.Nulls.Equals("last", StringComparison.OrdinalIgnoreCase);
+        if (!toSqlite)
+        {
+            return term + (nullsLast ? " NULLS LAST" : " NULLS FIRST");
+        }
+
+        // NULLS FIRST / LAST needs SQLite 3.30. SQLite sorts NULLs first ascending and last descending; otherwise sort on
+        // IS NULL first.
+        return nullsLast == o.Descending ? term : $"{Expr(o.Expr)} IS {(nullsLast ? string.Empty : "NOT ")}NULL, {term}";
+    }
 
     public string Query(PgQuery q)
     {
@@ -874,6 +979,14 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
                 }
 
                 return $"{(fn.Lateral && !toSqlite ? "LATERAL " : string.Empty)}{Call(fn.Call)}{(fn.Ordinality && !toSqlite ? " WITH ORDINALITY" : string.Empty)}{Alias(fn.Alias, toSqlite ? [] : fn.ColumnAliases)}";
+            case PgJoin { Kind: "right" } j when toSqlite:
+            {
+                // RIGHT JOIN needs SQLite 3.39: the same join as a LEFT JOIN with the sides swapped.
+                var tail = j.On is not null ? " ON " + Expr(j.On) : j.Using.Count > 0 ? $" USING ({string.Join(", ", j.Using.Select(ctx.Ident))})" : string.Empty;
+                var left = j.Left is PgJoin ? $"({From(j.Left)})" : From(j.Left);
+                return $"{From(j.Right)} {(j.Natural ? "NATURAL " : string.Empty)}LEFT JOIN {left}{tail}";
+            }
+
             case PgJoin j:
             {
                 var kind = j.Kind switch
@@ -885,6 +998,11 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
                     _ => "JOIN",
                 };
                 var tail = j.On is not null ? " ON " + Expr(j.On) : j.Using.Count > 0 ? $" USING ({string.Join(", ", j.Using.Select(ctx.Ident))})" : string.Empty;
+                if (toSqlite && j.Kind == "full")
+                {
+                    tail += Note("FULL JOIN needs SQLite 3.39, newer than sqlite.minVersion (3.26): rewrite it as a LEFT JOIN plus the unmatched rows of the other side (UNION ALL), or raise sqlite.minVersion");
+                }
+
                 return $"{From(j.Left)} {(j.Natural ? "NATURAL " : string.Empty)}{kind} {From(j.Right)}{tail}";
             }
 
@@ -905,7 +1023,9 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
     };
 
     private string Returning(IReadOnlyList<PgTarget> returning) =>
-        returning.Count == 0 ? string.Empty : " RETURNING " + string.Join(", ", returning.Select(t => Expr(t.Expr) + (t.Alias is null ? string.Empty : " AS " + ctx.Ident(t.Alias))));
+        returning.Count == 0 ? string.Empty
+        : toSqlite ? Note("RETURNING was left out: it needs SQLite 3.35, and SQLite does not allow it in a trigger")
+        : " RETURNING " + string.Join(", ", returning.Select(t => Expr(t.Expr) + (t.Alias is null ? string.Empty : " AS " + ctx.Ident(t.Alias))));
 
     private string WithPrefix(IReadOnlyList<PgCte> with) =>
         with.Count == 0 ? string.Empty : Query(new PgQuery(with, false, new PgSelectCore(false, null, [], [], null, [], null), [], null, null)).Split(" SELECT NULL", 2)[0] + " ";
@@ -959,10 +1079,21 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
 
     public string Update(PgUpdate u, string? guard = null)
     {
+        var alias = u.Alias is null ? string.Empty : " AS " + ctx.Ident(u.Alias);
+        if (toSqlite && u.From.Count > 0)
+        {
+            // UPDATE ... FROM needs SQLite 3.33: each value as a correlated subquery, for the rows that have a match.
+            var sources = string.Join(", ", u.From.Select(From));
+            var match = u.Where is null ? string.Empty : " WHERE " + Expr(u.Where);
+            var values = string.Join(", ", u.Sets.Select(s => $"{ctx.Ident(s.Column)} = (SELECT {Expr(s.Value)} FROM {sources}{match})"));
+            var exists = $"EXISTS (SELECT 1 FROM {sources}{match})";
+            return $"{WithPrefix(u.With)}UPDATE {Table(u.Table)}{alias} SET {values}{Where(new PgRawExpr(exists), guard, raw: exists)}{Returning(u.Returning)};";
+        }
+
         var sets = string.Join(", ", u.Sets.Select(s => $"{ctx.Ident(s.Column)} = {Expr(s.Value)}"));
         var where = Where(u.Where, guard);
         var from = u.From.Count == 0 ? string.Empty : " FROM " + string.Join(", ", u.From.Select(From));
-        return $"{WithPrefix(u.With)}UPDATE {Table(u.Table)}{(u.Alias is null ? string.Empty : " AS " + ctx.Ident(u.Alias))} SET {sets}{from}{where}{Returning(u.Returning)};";
+        return $"{WithPrefix(u.With)}UPDATE {Table(u.Table)}{alias} SET {sets}{from}{where}{Returning(u.Returning)};";
     }
 
     public string Delete(PgDelete d, string? guard = null)

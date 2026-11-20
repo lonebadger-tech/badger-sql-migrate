@@ -40,6 +40,41 @@ public sealed class SqliteFeatureTests
         Assert.Equal(string.Empty, await provider.Schema.CaptureAsync(session, "trek", CancellationToken.None));
     }
 
+    /// <summary>
+    /// What 'trek convert --to sqlite' writes instead of syntax newer than SQLite 3.26 (json_extract for ->>, IS NULL
+    /// sort keys for NULLS LAST, CASE for FILTER, LEFT JOIN for RIGHT JOIN, correlated subqueries for UPDATE ... FROM
+    /// in a trigger), run on this engine. CI runs it on each distribution's SQLite, down to 3.26 on AlmaLinux 8.
+    /// </summary>
+    [Fact]
+    public async Task Sql_that_convert_writes_for_sqlite_3_26_runs()
+    {
+        await using var db = new TestDatabase();
+        await using var session = await provider.OpenSessionAsync(db.Profile, SessionContext.Empty, CancellationToken.None);
+        await session.ExecuteAsync("""
+            CREATE TABLE customers (name TEXT PRIMARY KEY, order_total REAL);
+            CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_name TEXT, paid INTEGER, total REAL, doc TEXT, updated TEXT, created TEXT);
+            CREATE TABLE order_sums (customer_name TEXT PRIMARY KEY, total REAL);
+            CREATE VIEW rewritten AS
+            SELECT c.name, json_extract(o.doc, '$.customer.email') AS email, count(CASE WHEN o.paid THEN 1 END) AS paid_orders, sum(CASE WHEN (NOT o.paid) THEN o.total END) AS open_total FROM customers AS c LEFT JOIN orders AS o ON c.name = o.customer_name WHERE o.updated IS NOT o.created OR o.id IS NULL GROUP BY c.name, email ORDER BY c.name IS NULL, c.name;
+            CREATE TRIGGER orders_sync AFTER INSERT ON orders FOR EACH ROW
+            BEGIN
+                UPDATE customers AS c SET order_total = (SELECT s.total FROM order_sums AS s WHERE s.customer_name = c.name AND c.name = NEW.customer_name) WHERE EXISTS (SELECT 1 FROM order_sums AS s WHERE s.customer_name = c.name AND c.name = NEW.customer_name);
+            END;
+            INSERT INTO customers (name) VALUES ('ann'), ('bob'), ('cy');
+            INSERT INTO order_sums VALUES ('ann', 30);
+            INSERT INTO orders (customer_name, paid, total, doc, created) VALUES
+              ('ann', 1, 10, '{"customer": {"email": "ann@example.com"}}', 'a'),
+              ('ann', 0, 20, '{"customer": {"email": "ann@example.com"}}', 'b'),
+              ('bob', 0, 5, '{"customer": {}}', 'c');
+            """, null, CancellationToken.None);
+
+        var rows = await session.QueryAsync("SELECT name, email, paid_orders, open_total FROM rewritten;", null, CancellationToken.None);
+        Assert.Equal(["ann|ann@example.com|1|20", "bob||0|5", "cy||0|"], rows.Select(r => $"{r["name"]}|{r["email"]}|{r["paid_orders"]}|{r["open_total"]}"));
+
+        var totals = await session.QueryAsync("SELECT name, order_total FROM customers ORDER BY name;", null, CancellationToken.None);
+        Assert.Equal(["ann|30", "bob|", "cy|"], totals.Select(r => $"{r["name"]}|{r["order_total"]}"));
+    }
+
     [Fact]
     public void Network_settings_and_in_memory_databases_are_rejected()
     {

@@ -2,6 +2,13 @@
 
 All notable changes to Badger Trek. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/). The website's [version history](https://lonebadger.tech/badger-trek/releases/) has the full release notes.
 
+## Unreleased
+
+### Fixed
+
+- `trek convert schema --to sqlite` writes SQL that SQLite 3.26 runs, the default `sqlite.minVersion`, so the converted project no longer fails its own lint (TREK008). PostgreSQL's `->`/`->>`/`#>>` become `json_extract` (a chain becomes one path), `NULLS FIRST`/`LAST` an `IS NULL` sort key, an aggregate's `FILTER (WHERE ...)` a `CASE` inside it, `RIGHT JOIN` a `LEFT JOIN` with the sides swapped, and `UPDATE ... FROM` in a trigger correlated subqueries. `RETURNING` in a trigger is left out, since SQLite does not allow it there. Generated columns, `FULL JOIN` and `ORDER BY` inside an aggregate, which have no older form, get a REVIEW marker naming the SQLite version they need.
+- `trek convert data` into SQLite with a relative `database:` finds the file the converted project was deployed to, whether `trek deploy` ran in the target folder or with `-C` from the source folder. It stops when both candidate files exist, or neither, instead of loading into or creating the wrong file.
+
 ## 0.4.1 (November 2026)
 
 ### Fixed

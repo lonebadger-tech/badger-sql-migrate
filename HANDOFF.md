@@ -10,12 +10,6 @@ Delete this file when the items below are done (it is not documentation).
 
 - Dogfooding suggestions not done: `baseline --check-schema`, excluding objects from the schema fingerprint (e.g. an
   old EF/Flyway history table), DNS check before an Entra token in `doctor`, a `trek clone`.
-- `trek convert data` resolves a SQLite target's relative `database:` from the working directory (as documented, like
-  the `sqlite3` shell), not from the `--target` project. Running it from the source project after `trek deploy` in the
-  target folder points at a different, empty file. Ask whether to resolve it from the target project.
-- `trek convert schema --to sqlite` does not follow `sqlite.minVersion`: translated views and triggers can use
-  `RETURNING`, `->>`, `unixepoch()` and generated columns (all newer than 3.26). Lint flags them (TREK008) in the
-  converted project. Ask whether conversion should write SQL for the oldest version instead.
 - The required-checks ruleset has no bypass, so even the maintainer cannot push straight to `dev`; everything
   goes through a PR. Ask whether to add an admin bypass for emergencies.
 
