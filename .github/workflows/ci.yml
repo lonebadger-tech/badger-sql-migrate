@@ -69,11 +69,18 @@ jobs:
           - { version: '3.45.1', distro: 'Ubuntu 24.04', image: 'ubuntu:24.04', library: /usr/lib/x86_64-linux-gnu/libsqlite3.so.0 }
     runs-on: ubuntu-latest
     container: ${{ matrix.image }}
+    env:
+      # AlmaLinux: .NET runs without ICU (see the install step).
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: ${{ startsWith(matrix.image, 'almalinux') }}
     steps:
       - name: Install the distribution's SQLite and what .NET needs
         run: |
           if command -v dnf >/dev/null; then
-            dnf install -y sqlite-libs libicu tar gzip findutils git
+            # The AlmaLinux images already have sqlite-libs, tar, gzip and findutils, so nothing is installed: any dnf
+            # command first downloads the repository metadata, which took minutes on AlmaLinux 8 (once 19). .NET runs
+            # without libicu (DOTNET_SYSTEM_GLOBALIZATION_INVARIANT above), and actions/checkout fetches the
+            # repository through the GitHub API when git is not installed.
+            rpm -q sqlite-libs tar gzip findutils
           else
             apt-get update
             DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libsqlite3-0 libicu-dev ca-certificates curl git
