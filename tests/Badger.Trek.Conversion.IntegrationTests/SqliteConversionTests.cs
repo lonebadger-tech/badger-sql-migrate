@@ -22,7 +22,7 @@ public sealed class SqliteConversionTests(Servers servers) : IDisposable
 
     private static GlobalOptions G(string dir, string? connectionString = null) => new(dir, null, connectionString, [], false, new ConsoleOutput(false, false, true)) { AgentsFile = false };
 
-    private static string Sample(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Samples", name));
+    private static string Sample(string name) => TestFiles.Sample(name);
 
     private string SqliteDatabase(string? script = null)
     {
@@ -61,7 +61,7 @@ public sealed class SqliteConversionTests(Servers servers) : IDisposable
         return project;
     }
 
-    private static string Quote(string s) => "\"" + s.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
+    private static string Quote(string s) => TestFiles.YamlQuote(s);
 
     [SkippableFact]
     public async Task Sqlite_to_PostgreSql()

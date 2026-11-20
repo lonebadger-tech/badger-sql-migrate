@@ -1,0 +1,13 @@
+# Line endings: LF everywhere, in the repository and in every checkout, on every OS (core.autocrlf is ignored).
+* text=auto eol=lf
+
+# Binary files are never converted.
+*.png binary
+*.ico binary
+*.jpg binary
+*.gif binary
+*.zip binary
+*.gz binary
+*.nupkg binary
+*.dll binary
+*.exe binary

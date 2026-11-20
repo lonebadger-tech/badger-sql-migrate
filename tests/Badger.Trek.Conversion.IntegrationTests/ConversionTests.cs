@@ -129,14 +129,14 @@ public sealed class ConversionTests(Servers servers) : IDisposable
 
     private static GlobalOptions G(string dir, string? connectionString = null) => new(dir, null, connectionString, [], false, new ConsoleOutput(false, false, true)) { AgentsFile = false };
 
-    private static string Sample(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Samples", name));
+    private static string Sample(string name) => TestFiles.Sample(name);
 
     /// <summary>Points the converted project's local environment at the test database.</summary>
     private static void Target(string project, string connectionString)
     {
         var yaml = Path.Combine(project, "trek.yaml");
         var text = File.ReadAllText(yaml);
-        text = text[..text.IndexOf("\nenvironments:", StringComparison.Ordinal)] + $"\nenvironments:\n  local:\n    connectionString: \"{connectionString.Replace("\"", "\\\"", StringComparison.Ordinal)}\"\n";
+        text = text[..text.IndexOf("\nenvironments:", StringComparison.Ordinal)] + $"\nenvironments:\n  local:\n    connectionString: {TestFiles.YamlQuote(connectionString)}\n";
         File.WriteAllText(yaml, text);
     }
 
