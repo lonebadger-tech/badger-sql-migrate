@@ -58,6 +58,7 @@ public sealed class Servers : IAsyncLifetime
         }
 
         MySqlUnavailableReason = UnavailableReason;
+        MariaDbUnavailableReason = UnavailableReason;
         if (UnavailableReason is not null)
         {
             return;
