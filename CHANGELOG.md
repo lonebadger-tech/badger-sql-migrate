@@ -2,7 +2,7 @@
 
 All notable changes to Badger Trek. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/). The website's [version history](https://lonebadger.tech/badger-trek/releases/) has the full release notes.
 
-## Unreleased
+## 0.5.0 (November 2026)
 
 ### Changed
 

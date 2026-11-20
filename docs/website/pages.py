@@ -180,6 +180,25 @@ def releases():
     body = f"""
 <section class="release" id="v{VERSION}">
   <h2>Version {VERSION} <span class="date">{RELEASE_DATE}</span></h2>
+  <h3>Supported database versions (breaking)</h3>
+  <ul>
+    <li>trek now supports, and tests, only database versions their vendor or distribution still supports: <strong>SQL Server 2019 or later</strong> (was 2016 SP1), <strong>PostgreSQL 15 or later</strong> (was 12; 12, 13 and 14 have reached their end of life), and SQLite 3.26 or later as before (RHEL 8 is supported until 2029). Azure SQL is unaffected</li>
+    <li><code>trek doctor</code> says when a SQL Server or PostgreSQL server is older than that</li>
+  </ul>
+  <h3>Entity Framework Core</h3>
+  <ul>
+    <li><code>trek import ef</code> turns EF Core migrations into a trek project: one change per migration, with <code>Up()</code> as the deploy script and <code>Down()</code> as the revert. Point it at the project that holds the migrations and trek runs <code>dotnet ef migrations script</code> for both directions, or give it the scripts. The provider comes from the SQL, for SQL Server, PostgreSQL and SQLite</li>
+    <li><code>trek baseline --from ef</code> adopts databases EF already migrated, by reading their <code>__EFMigrationsHistory</code>. See <a href="{BASE}/docs/importing/#ef">Moving from other tools</a></li>
+  </ul>
+  <h3>Converting to SQLite</h3>
+  <ul>
+    <li><code>trek convert schema --to sqlite</code> writes SQL that SQLite 3.26 runs: PostgreSQL's JSON operators become <code>json_extract</code>, <code>NULLS LAST</code> an <code>IS NULL</code> sort key, aggregate <code>FILTER</code> a <code>CASE</code>, <code>RIGHT JOIN</code> a <code>LEFT JOIN</code>, and <code>UPDATE ... FROM</code> in triggers correlated subqueries. What has no older form is marked for review</li>
+    <li><code>trek convert data</code> into SQLite with a relative <code>database:</code> finds the file the converted project was deployed to, and stops instead of loading into or creating the wrong one</li>
+  </ul>
+</section>
+
+<section class="release" id="v0.4.1">
+  <h2>Version 0.4.1 <span class="date">November 2026</span></h2>
   <h3>Upgrading from Badger SQL Migrate</h3>
   <ul>
     <li>A database deployed by Badger SQL Migrate no longer looks empty to trek. 0.4.0 found no trek journal in it, showed every change as pending, and a deploy would have run them all again. trek now stops with the SQL that moves the old journal to the <code>trek</code> state schema once, keeping the full history, or suggests <code>stateSchema: bsm</code>. trek still reads nothing from the old journal itself</li>

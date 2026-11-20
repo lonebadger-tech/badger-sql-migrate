@@ -10,6 +10,6 @@
     <Product>Badger Trek</Product>
     <Copyright>Copyright © Lone Badger Tech, LLC</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Version>0.4.1</Version>
+    <Version>0.5.0</Version>
   </PropertyGroup>
 </Project>
