@@ -32,6 +32,8 @@ dotnet tool install -g Badger.Trek
 
 No .NET SDK? Self-contained executables for Windows, macOS and Linux are on the [download page](https://lonebadger.tech/badger-trek/download/).
 
+**Coming from Badger SQL Migrate (`Badger.SqlMigrate`, 0.3.0 and earlier)?** Badger Trek is the same tool under a new name, and 0.4.0 is a clean break: it reads nothing the old tool wrote. Run `dotnet tool uninstall -g Badger.SqlMigrate`, install `Badger.Trek`, rename the project files to `trek.yaml` and `trek.plan` and the names inside the scripts to `trek`, and adopt each existing database with `trek baseline`. See the [0.4.0 release notes](https://lonebadger.tech/badger-trek/releases/#v0.4.0).
+
 ## Quick start
 
 ```bash

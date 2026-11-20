@@ -179,6 +179,22 @@ def releases():
     body = f"""
 <section class="release" id="v{VERSION}">
   <h2>Version {VERSION} <span class="date">{RELEASE_DATE}</span></h2>
+  <h3>Renamed to Badger Trek (breaking)</h3>
+  <ul>
+    <li>Badger SQL Migrate is now <strong>Badger Trek</strong>: the command is <code>trek</code>, the NuGet package <code>Badger.Trek</code> (<code>Badger.SqlMigrate</code> is deprecated), the repository <code>lonebadger-tech/badger-trek</code>. Project files are <code>trek.yaml</code> and <code>trek.plan</code>, the journal schema <code>trek</code> (<code>trek_*</code> tables on SQLite), script directives <code>-- trek:</code>, variables <code>{{trek.*}}</code>, environment variables <code>TREK_*</code>, the home folder <code>~/.trek</code>, and lint codes <code>TREK001</code> and up</li>
+    <li>There is no backwards compatibility: trek reads nothing from 0.3.0 and earlier, and a database deployed by an earlier version has no trek journal. To move over, run <code>dotnet tool uninstall -g Badger.SqlMigrate</code> and <code>dotnet tool install -g Badger.Trek</code>, rename the project files and the names inside the scripts, and adopt each existing database with <code>trek baseline</code></li>
+  </ul>
+  <h3>SQLite</h3>
+  <ul>
+    <li>A SQLite provider (<code>trek init --provider sqlite</code>): database files with the engine built in, nothing to install. Statement splitting as the <code>sqlite3</code> shell does it, a file lock for the whole deploy, a schema fingerprint, and <code>add --from-diff</code> / <code>diff-schema --script</code> that use <code>ALTER TABLE</code> where SQLite can and the documented table rebuild where it cannot. Imports and Sqitch/Flyway projects map to it</li>
+    <li>Works with SQLite 3.26 and later. <code>sqlite.minVersion</code> in <code>trek.yaml</code> is the oldest SQLite that opens the project's databases, and lint TREK008 warns about SQL newer than that. On Linux systems older than glibc 2.33 (RHEL 8, Ubuntu 20.04, Debian 11) trek uses the system's libsqlite3; <code>TREK_SQLITE_LIBRARY</code> picks one explicitly and <code>trek doctor</code> shows which is in use</li>
+    <li><strong>Behaviour change:</strong> with the default <code>minVersion: "3.26"</code>, <code>add --from-diff</code> drops a column by rebuilding the table instead of <code>ALTER TABLE ... DROP COLUMN</code>. Set <code>minVersion: "3.35"</code> to keep the old output</li>
+  </ul>
+  <h3>Converting databases</h3>
+  <ul>
+    <li><code>trek convert schema</code> turns a live SQL Server, PostgreSQL or SQLite database into a new trek project for another of them: types mapped, views, functions, procedures and triggers translated, and every uncertain spot marked for review and listed in <code>CONVERSION.md</code>. See <a href="{BASE}/docs/converting/">Converting databases</a></li>
+    <li><code>trek convert data</code> then copies the rows (bulk copy, <code>COPY</code> or prepared inserts) and compares row counts</li>
+  </ul>
   <h3>AI assistants</h3>
   <ul>
     <li><code>trek mcp</code> is a Model Context Protocol server for Claude Code, Claude Desktop, VS Code, Cursor and other MCP clients: tools to add changes with their scripts, set <code>!notx</code>, rework, write repeatables, run <code>plan check</code> with lint codes, lint SQL and render scripts. It reads and writes project files only and never connects to a database</li>
@@ -189,7 +205,12 @@ def releases():
   </ul>
   <h3>Fixes</h3>
   <ul>
-    <li><code>--connection-string</code> is used as given: the environment's user, password and authentication no longer override the ones in the string</li>
+    <li><code>--connection-string</code> is used as given: the environment's user, password, authentication and <code>tls</code> settings no longer override the ones in the string</li>
+    <li>SQL Server 2016: deploy, verify, <code>add --from-diff</code>, Always Encrypted keys and <code>convert data</code> no longer fail on columns and functions added in later versions; temporal tables fingerprint the same on 2016 and later</li>
+    <li>PostgreSQL 14.25, 15.20, 16.16, 17.12, 18.7 and later: every table no longer shows as drifted (internal <code>pg_attver</code> column options are left out)</li>
+    <li>On Windows, the MCP server's <code>add_change</code> and <code>rework_change</code> no longer hang looking up git's user name</li>
+    <li>A failure recording the schema fingerprint after a deploy is a warning, and the next deploy records it; <code>trek verify</code> says when no fingerprint is recorded instead of reporting a match</li>
+    <li><code>trek doctor</code> works for logins without VIEW SERVER STATE; <code>revert -y</code> no longer prints "would revert"; a missing SQL Server database gets a clear message</li>
   </ul>
   <h3>SQL projects (SSDT)</h3>
   <ul>

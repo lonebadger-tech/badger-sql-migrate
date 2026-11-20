@@ -6,18 +6,21 @@ Delete this file when the items below are done (it is not documentation).
 
 ## Still pending (ask the user)
 
-- **After the rename to Badger Trek** (done in the `rename-badger-trek` PR, repository renamed to `badger-trek`), the
-  user has to do these on nuget.org, which only they can: point the Trusted Publishing policy at the new repository
-  name (`lonebadger-tech/badger-trek`, workflow `release.yml`), make sure it allows the new package id `Badger.Trek`
-  (the first push creates it), and deprecate the old `Badger.SqlMigrate` package with a pointer to `Badger.Trek`. The
-  website moves from `lonebadger.tech/badger-sql-migrate/` to `lonebadger.tech/badger-trek/`: deploy it there and
-  redirect the old path. The local checkout folder is still `C:\githubcode\badger-sql-migrate`; renaming it is optional.
+- **After the rename to Badger Trek** (PR #5; repository renamed to `lonebadger-tech/badger-trek`; local checkout
+  `C:\githubcode\badger-trek`). Done on nuget.org 2026-11-19: the Trusted Publishing policy is now "Badger Trek" for
+  package `Badger.Trek` (workflow `release.yml`; it still shows the repository as `badger-sql-migrate` but matches
+  GitHub's permanent repository ID #1444619319, which a rename keeps), and every `Badger.SqlMigrate` version is
+  deprecated as legacy with a message pointing to `Badger.Trek`. Still to do:
+  - Release 0.4.0 (prepared: version, CHANGELOG, website release notes, README "Coming from Badger.SqlMigrate"
+    note, package description "Formerly Badger.SqlMigrate"): merge to `main`, push tag `v0.4.0`, then run
+    `build/mirror-release.sh`. 0.4.0 is a hard break by the user's decision: nothing from `bsm` 0.3.0 is read.
+  - After the first `Badger.Trek` release: confirm Trusted Publishing worked from the renamed repository, and edit the
+    `Badger.SqlMigrate` deprecation to set `Badger.Trek` as the alternate package (nuget.org only accepts an existing
+    package there).
+  - The website moves from `lonebadger.tech/badger-sql-migrate/` to `lonebadger.tech/badger-trek/`: deploy it there
+    and redirect the old path.
 - Dogfooding suggestions not done: `baseline --check-schema`, excluding objects from the schema fingerprint (e.g. an
   old EF/Flyway history table), DNS check before an Entra token in `doctor`, a `trek clone`.
-- Release questions: `ai-guide`/`mcp` are documented but not in NuGet 0.3.0; CHANGELOG lists 0.1.0 while NuGet has
-  0.3.0. The next release notes should call out one behavior change: with the new default `sqlite.minVersion: "3.26"`,
-  `trek add --from-diff` rebuilds a SQLite table to drop a column instead of `ALTER TABLE ... DROP COLUMN` (set
-  `minVersion: "3.35"` to keep the old output).
 - `trek convert data` resolves a SQLite target's relative `database:` from the working directory (as documented, like
   the `sqlite3` shell), not from the `--target` project. Running it from the source project after `trek deploy` in the
   target folder points at a different, empty file. Ask whether to resolve it from the target project.
@@ -26,8 +29,6 @@ Delete this file when the items below are done (it is not documentation).
   converted project. Ask whether conversion should write SQL for the oldest version instead.
 - The required-checks ruleset has no bypass, so even the maintainer cannot push straight to `dev`/`main`; everything
   goes through a PR. Ask whether to add an admin bypass for emergencies.
-- `docs/website/docs_pages.py` does not compile with Python 3.12 (`unterminated string literal` around line 1662, in
-  the conversion page's SQLite table). It was already broken before PR #4. Check how the site is built and fix it.
 
 ## CI and GitHub settings (done; keep in mind)
 
@@ -41,10 +42,10 @@ Delete this file when the items below are done (it is not documentation).
 
 ## Testing on bw-4k-pc
 
-- LocalDB instances `bsm2016` (SQL Server 2016 SP3, 13.0) and `bsmnew` (SQL Server 2025, 17.0) exist there (named
-  before the rename):
+- LocalDB instances `trek2016` (SQL Server 2016 SP3, 13.0) and `treknew` (SQL Server 2025, 17.0) exist there (the old,
+  empty `bsm2016`/`bsmnew` instances can be removed with `sqllocaldb stop <name>` and `sqllocaldb delete <name>`):
 
-      TREK_TEST_SQLSERVER="Server=(localdb)\bsm2016;Integrated Security=true;TrustServerCertificate=true"
+      TREK_TEST_SQLSERVER="Server=(localdb)\trek2016;Integrated Security=true;TrustServerCertificate=true"
       dotnet test tests/Badger.Trek.Providers.SqlServer.Tests
 
 - SQLite against another engine: `TREK_SQLITE_LIBRARY=<path to sqlite3.dll or libsqlite3.so.0>`, plus

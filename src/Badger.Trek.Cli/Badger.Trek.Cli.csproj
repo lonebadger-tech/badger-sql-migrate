@@ -35,7 +35,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>trek</ToolCommandName>
     <PackageId>Badger.Trek</PackageId>
-    <Description>Badger Trek: free, cross-platform, hash-certified database migrations for SQL Server, Azure SQL, PostgreSQL and SQLite, with real up and down, named changes, environments, Entra ID and Always Encrypted.</Description>
+    <Description>Badger Trek: free, cross-platform, hash-certified database migrations for SQL Server, Azure SQL, PostgreSQL and SQLite, with real up and down, named changes, environments, Entra ID and Always Encrypted. Formerly Badger.SqlMigrate.</Description>
     <PackageTags>sql-server;azure-sql;postgresql;sqlite;migrations;database;schema;devops;cli;entra-id;always-encrypted</PackageTags>
     <PackageProjectUrl>https://lonebadger.tech/badger-trek/</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
