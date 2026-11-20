@@ -85,7 +85,7 @@ def overview():
 </ul>
 
 <h2>Supported databases</h2>
-<p>SQL Server 2016 SP1 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance; features that need a newer server, such as history retention for temporal tables (2017) or Always Encrypted with secure enclaves (2019), need it only where you use them. PostgreSQL 12 and later. SQLite 3.26 and later: trek runs the engine built into it, and the scripts it generates also run on the older SQLite that other programs open your database with ({link("docs/sqlite/#versions", "SQLite versions")}). The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
+<p>SQL Server 2019 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance. PostgreSQL 12 and later. SQLite 3.26 and later: trek runs the engine built into it, and the scripts it generates also run on the older SQLite that other programs open your database with ({link("docs/sqlite/#versions", "SQLite versions")}). The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
 """)
 
 
@@ -819,7 +819,7 @@ def connections():
   host: (localdb)\\MSSQLLocalDB
   database: MyApp
   authentication: integrated''')}
-<p>trek works with SQL Server 2016 and later, including LocalDB.</p>
+<p>trek works with SQL Server 2019 and later, including LocalDB.</p>
 
 <h2>Any SqlClient setting</h2>
 <p><code>connectionProperties</code> accepts every keyword SqlClient understands and applies them last, over everything else. Invalid keywords or values are reported by <code>trek doctor</code> and before connecting.</p>

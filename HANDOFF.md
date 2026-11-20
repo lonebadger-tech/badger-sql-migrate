@@ -19,22 +19,23 @@ Delete this file when the items below are done (it is not documentation).
   passed required check.
 - Repository setting: workflow runs from all external contributors need approval (only brockweaver has write access).
 - Ruleset "CI must pass before merging" (id 27665614) on `dev` (and `main`, which does not exist: releases are
-  tagged on `dev`) requires 20 checks from GitHub Actions: `build` ×3, `sqlserver` 2016 SP1 LocalDB/2017/2019/2022/2025, `postgresql` 12–18, and `sqlite` on AlmaLinux 8
+  tagged on `dev`) requires 18 checks from GitHub Actions: `build` ×3, `sqlserver` 2019/2022/2025 (SQL Server 2019
+  is the minimum since 2026-11-20; the 2016 LocalDB and 2017 jobs were removed), `postgresql` 12–18, and `sqlite` on AlmaLinux 8
   (3.26.0), AlmaLinux 9 (3.34.1), Ubuntu 22.04 (3.37.2), Debian 12 (3.40.1), Ubuntu 24.04 (3.45.1). A renamed or new CI
   job must be added to the ruleset, or a removed one taken out, or PRs can never merge.
 
 ## Testing on bw-4k-pc
 
-- LocalDB instances `trek2016` (SQL Server 2016 SP3, 13.0) and `treknew` (SQL Server 2025, 17.0) exist there:
+- LocalDB instance `treknew` (SQL Server 2025, 17.0) is the one to test with. `trek2016` (SQL Server 2016) is left over
+  from before the 2019 minimum; remove it with `sqllocaldb stop trek2016` and `sqllocaldb delete trek2016`. Docker
+  Desktop works there now (reinstalled 2026-11-20), so the PostgreSQL and conversion integration tests run too.
 
-      TREK_TEST_SQLSERVER="Server=(localdb)\trek2016;Integrated Security=true;TrustServerCertificate=true"
+      TREK_TEST_SQLSERVER="Server=(localdb)\treknew;Integrated Security=true;TrustServerCertificate=true"
       dotnet test tests/Badger.Trek.Providers.SqlServer.Tests
 
 - SQLite against another engine: `TREK_SQLITE_LIBRARY=<path to sqlite3.dll or libsqlite3.so.0>`, plus
   `TREK_TEST_SQLITE_VERSION=3.26.0` to assert the version. The official 3.26.0 Windows DLL is
   `https://www.sqlite.org/2018/sqlite-dll-win64-x64-3260000.zip`.
-- Docker Desktop is installed but does not start (WSL is not installed), so the PostgreSQL and conversion
-  integration tests skip there; CI covers them.
 
 ## Standing rules from the user (normally in the Mac's Claude config)
 
