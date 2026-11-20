@@ -41,9 +41,41 @@ internal static class Schemas
         return s;
     }
 
+    /// <summary>A MySQL database (schema "shop"), column types as information_schema's COLUMN_TYPE prints them.</summary>
+    public static PortableSchema MySql()
+    {
+        var s = new PortableSchema { SourceProvider = "mysql", DefaultSchema = "shop", CaseInsensitive = true, Collation = "utf8mb4_0900_ai_ci" };
+        s.Tables.Add(new PortableTable(new PortableName("shop", "orders"),
+            [
+                new PortableColumn("id", "int", false) { Identity = new PortableIdentity(1, 1, false) },
+                new PortableColumn("customer_name", "varchar(200)", false),
+                new PortableColumn("status", "enum('new','paid','shipped')", false) { Default = "'new'" },
+                new PortableColumn("paid", "tinyint(1)", false) { Default = "0" },
+                new PortableColumn("qty", "int", false) { Default = "1" },
+                new PortableColumn("price", "decimal(12,2)", false),
+                new PortableColumn("total", "decimal(12,2)", false) { Computed = "(`price` * `qty`)", ComputedStored = true },
+                new PortableColumn("created", "datetime(6)", false) { Default = "CURRENT_TIMESTAMP(6)" },
+                new PortableColumn("updated", "datetime", true),
+                new PortableColumn("ref", "char(36)", false) { Default = "(uuid())" },
+                new PortableColumn("doc", "json", true),
+            ],
+            new PortableKey("PRIMARY", ["id"]), [], [new PortableCheck("orders_chk_1", "(`total` >= 0)")], [], []));
+        s.Tables.Add(new PortableTable(new PortableName("shop", "customers"),
+            [
+                new PortableColumn("name", "varchar(100)", false),
+                new PortableColumn("email", "varchar(200)", true),
+            ],
+            new PortableKey("PRIMARY", ["name"]), [], [], [], []));
+        return s;
+    }
+
     public static ConversionContext ToTSql() => new(Postgres(), new ConversionOptions { TargetProvider = "sqlserver" });
 
     public static ConversionContext ToSqlite() => new(Postgres(), new ConversionOptions { TargetProvider = "sqlite" });
+
+    public static ConversionContext ToMySql() => new(Postgres(), new ConversionOptions { TargetProvider = "mysql" });
+
+    public static ConversionContext MySqlToPg() => new(MySql(), new ConversionOptions { TargetProvider = "postgresql" });
 
     public static ConversionContext ToPg(NameStyle? names = null) =>
         new(SqlServer(), new ConversionOptions { TargetProvider = "postgresql", Names = names });

@@ -44,6 +44,10 @@ public sealed partial class MySqlProvider : IDatabaseProvider
 
     public IScratchDatabases ScratchDatabases => new Scripting.MySqlScratchDatabases(this);
 
+    public Core.Conversion.ISchemaExporter Exporter { get; } = new Conversion.MySqlExporter();
+
+    public Core.Conversion.IDataTransfer Data { get; } = new Conversion.MySqlDataTransfer();
+
     /// <summary>In MySQL a schema is a database; trek works inside the environment's database.</summary>
     public string DefaultSchema => string.Empty;
 

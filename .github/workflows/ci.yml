@@ -100,7 +100,8 @@ jobs:
         if: always()
         run: dotnet test tests/Badger.Trek.Providers.Sqlite.Tests -c Release --no-build
 
-  # Every MySQL LTS release still supported (8.4, 9.7): the provider's conformance and feature tests against each.
+  # Every MySQL LTS release still supported (8.4, 9.7): the provider's conformance and feature tests against each,
+  # and trek convert to and from MySQL.
   mysql:
     strategy:
       fail-fast: false
@@ -113,6 +114,10 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet test tests/Badger.Trek.Providers.MySql.Tests -c Release
+        env:
+          TREK_TEST_MYSQL_IMAGE: mysql:${{ matrix.version }}
+      - if: always()
+        run: dotnet test tests/Badger.Trek.Conversion.IntegrationTests -c Release --filter "FullyQualifiedName~MySqlConversionTests"
         env:
           TREK_TEST_MYSQL_IMAGE: mysql:${{ matrix.version }}
 

@@ -138,7 +138,12 @@ internal sealed class ChainTranslator : ITranslator
 
         var issues = stage1Issues.Concat(results.SelectMany(r => r.Issues)).Distinct().ToList();
         var body = string.Join("\n", results.Select(r => string.Join('\n', r.Script.Split('\n').SkipWhile(l => l.StartsWith("--", StringComparison.Ordinal)))));
-        var source = outer.Source == Dialect.SqlServer ? "SQL Server" : "SQLite";
+        var source = outer.Source switch
+        {
+            Dialect.SqlServer => "SQL Server",
+            Dialect.MySql => "MySQL",
+            _ => "SQLite",
+        };
         var header = new StringBuilder($"-- Converted by trek convert from {source} {code.Kind.ToString().ToLowerInvariant()} {code.Name} (by way of PostgreSQL).");
         header.Append(issues.Count == 0 ? " Check it before deploying.\n" : $" {issues.Count} item(s) to review (search for '{Review.Marker}').\n");
         foreach (var issue in issues)
@@ -147,7 +152,7 @@ internal sealed class ChainTranslator : ITranslator
         }
 
         var target = outer.TargetName(code.Name);
-        var fileName = outer.Target == Dialect.Sqlite ? $"{target.Name}.sql" : $"{target.Schema}.{target.Name}.sql";
+        var fileName = outer.FlatTarget ? $"{target.Name}.sql" : $"{target.Schema}.{target.Name}.sql";
         return new TranslatedCode(code, results[0].Folder, fileName, header + body.TrimEnd() + "\n", issues);
     }
 }

@@ -34,6 +34,47 @@ public static partial class ConversionProject
         _ => throw new Core.MigrationException($"Converting {ctx.Source} to {ctx.Target} is not supported."),
     };
 
+    /// <summary>
+    /// A view that calls a routine written commented out (not translated) cannot be created, so it is commented out too,
+    /// and so on for views that use those views.
+    /// </summary>
+    private static List<TranslatedCode> CommentOutBrokenViews(ConversionContext ctx, List<TranslatedCode> translated)
+    {
+        static bool Inactive(string script) =>
+            Regex.Replace(Regex.Replace(script, @"/\*.*?\*/", string.Empty, RegexOptions.Singleline), @"--[^\n]*", string.Empty).Trim().Length == 0;
+
+        bool changed;
+        do
+        {
+            changed = false;
+            // A missing view is matched by name; a missing routine only where it is called, name( or `name`(.
+            var missing = translated.Where(t => Inactive(t.Script))
+                .Select(t => (Name: ctx.TargetName(t.Source.Name).Name, Call: t.Source.Kind != PortableCodeKind.View)).ToList();
+            for (var i = 0; i < translated.Count; i++)
+            {
+                var t = translated[i];
+                if (t.Source.Kind != PortableCodeKind.View || Inactive(t.Script))
+                {
+                    continue;
+                }
+
+                var used = missing.FirstOrDefault(m => Regex.IsMatch(t.Script, $@"(?<![\w$]){Regex.Escape(m.Name)}" + (m.Call ? @"[`""\]]?\s*\(" : @"(?![\w$])"), RegexOptions.IgnoreCase)).Name;
+                if (used is null)
+                {
+                    continue;
+                }
+
+                var message = $"view uses {used}, which was not translated; it is commented out until {used} is rewritten";
+                ctx.Issue(t.Source.Name.ToString(), message);
+                translated[i] = t with { Script = Review.CommentedOut(t.Script.TrimEnd(), Review.Comment(message)) + "\n", Issues = [.. t.Issues, message] };
+                changed = true;
+            }
+        }
+        while (changed);
+
+        return translated;
+    }
+
     public static ConversionResult Build(PortableSchema schema, ConversionOptions options)
     {
         var ctx = new ConversionContext(schema, options);
@@ -45,7 +86,7 @@ public static partial class ConversionProject
         project.Warnings.AddRange(schema.Warnings);
 
         // Code first: functions that defaults, checks or computed columns call must exist before the tables.
-        var translated = schema.Code.Select(c => translator.Code(c, schema.Code)).Where(t => t.Script.Length > 0).ToList();
+        var translated = CommentOutBrokenViews(ctx, schema.Code.Select(c => translator.Code(c, schema.Code)).Where(t => t.Script.Length > 0).ToList());
         var tableDdl = writer.Tables();
         var early = translated.Where(t => t.Folder == "functions" && Regex.IsMatch(tableDdl.Deploy, $@"\b{Regex.Escape(ctx.Names.Name(t.Source.Name.Name))}\s*\(", RegexOptions.IgnoreCase)).ToList();
 
@@ -115,7 +156,7 @@ public static partial class ConversionProject
 
     private static string Report(ConversionContext ctx, IReadOnlyList<TranslatedCode> code)
     {
-        static string Display(Dialect d) => d switch { Dialect.SqlServer => "SQL Server", Dialect.Sqlite => "SQLite", _ => "PostgreSQL" };
+        static string Display(Dialect d) => d switch { Dialect.SqlServer => "SQL Server", Dialect.Sqlite => "SQLite", Dialect.MySql => "MySQL", _ => "PostgreSQL" };
         var source = Display(ctx.Source);
         var target = Display(ctx.Target);
         var sb = new StringBuilder();
@@ -197,6 +238,7 @@ public static partial class ConversionProject
         private readonly bool pg = ctx.Target == Dialect.PostgreSql;
         private readonly bool lite = ctx.Target == Dialect.Sqlite;
         private readonly bool ss = ctx.Target == Dialect.SqlServer;
+        private readonly bool my = ctx.Target == Dialect.MySql;
 
         /// <summary>Columns that compare case-insensitively need PostgreSQL's trek_ci collation.</summary>
         private bool NeedsCaseInsensitiveCollation =>
@@ -217,7 +259,7 @@ public static partial class ConversionProject
         private string Unique(string schema, string name, string table)
         {
             var mapped = ctx.Names.Name(name);
-            if (pg && Encoding.UTF8.GetByteCount(mapped) > 63)
+            if ((pg && Encoding.UTF8.GetByteCount(mapped) > 63) || (my && mapped.Length > 64))
             {
                 var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(mapped)))[..8].ToLowerInvariant();
                 mapped = mapped[..50] + "_" + hash;
@@ -247,14 +289,17 @@ public static partial class ConversionProject
 
         public (string, string) Schemas()
         {
-            if (lite)
+            if (lite || my)
             {
                 return (string.Empty, string.Empty);
             }
 
             var deploy = new List<string>();
             var revert = new List<string>();
-            foreach (var s in ctx.Schema.Schemas.Select(ctx.Names.Schema).Distinct(StringComparer.OrdinalIgnoreCase))
+            // The target's default schema (dbo, public) is already there, whichever source schema maps to it.
+            var builtIn = ConversionContext.DefaultSchemaOf(ctx.Target);
+            foreach (var s in ctx.Schema.Schemas.Select(ctx.Names.Schema).Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(s => !string.Equals(s, builtIn, StringComparison.OrdinalIgnoreCase)))
             {
                 deploy.Add(pg ? $"CREATE SCHEMA IF NOT EXISTS {ctx.Quote(s)};" : $"CREATE SCHEMA {ctx.Quote(s)};");
                 revert.Add(pg ? $"DROP SCHEMA IF EXISTS {ctx.Quote(s)};" : $"DROP SCHEMA {ctx.Quote(s)};");
@@ -265,9 +310,9 @@ public static partial class ConversionProject
 
         public (string, string) Types()
         {
-            if (lite)
+            if (lite || my)
             {
-                // Enums and domains become their base type with checks on each column; NOCASE is built in.
+                // Enums and domains become their base type with checks on each column (MySQL: an ENUM column); NOCASE is built in.
                 return (string.Empty, string.Empty);
             }
 
@@ -320,11 +365,11 @@ public static partial class ConversionProject
 
         public (string, string) Sequences()
         {
-            if (lite)
+            if (lite || my)
             {
                 foreach (var s in ctx.Schema.Sequences)
                 {
-                    ctx.Issue(s.Name.ToString(), "SQLite has no sequences: the sequence is not converted, and defaults that draw from it are dropped");
+                    ctx.Issue(s.Name.ToString(), $"{(my ? "MySQL" : "SQLite")} has no sequences: the sequence is not converted, and defaults that draw from it are dropped");
                 }
 
                 return (string.Empty, string.Empty);
@@ -400,10 +445,26 @@ public static partial class ConversionProject
             var constraints = new List<string>();
             var comments = new List<string>();
             var rowidKey = false;
+            var tableOptions = new List<string>();
+
+            // MySQL indexes only the start of TEXT and BLOB columns: one in a key or index gets a bounded type instead.
+            var keyColumns = (table.PrimaryKey?.Columns ?? [])
+                .Concat(table.Uniques.SelectMany(u => u.Columns))
+                .Concat(table.ForeignKeys.SelectMany(f => f.Columns))
+                .Concat(table.Indexes.SelectMany(i => i.Columns.Where(c => !c.IsExpression).Select(c => c.Text)))
+                .Concat(ctx.Schema.Tables.SelectMany(other => other.ForeignKeys.Where(f => f.Referenced.Key == table.Name.Key).SelectMany(f => f.ReferencedColumns)))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             foreach (var c in table.Columns)
             {
                 var column = ctx.Ident(c.Name);
                 var mapping = Map(c.Type, owner);
+                if (my && keyColumns.Contains(c.Name) && mapping.Type is "LONGTEXT" or "LONGBLOB")
+                {
+                    var bounded = mapping.Type == "LONGTEXT" ? "VARCHAR(255)" : "VARBINARY(255)";
+                    ctx.Issue(owner, $"column {c.Name} ({c.Type}) is in a key or index, which MySQL cannot build on unbounded text: it became {bounded}; check the longest value");
+                    mapping = mapping with { Type = bounded };
+                }
+
                 var sb = new StringBuilder(column);
                 var domain = DomainOf(c.Type);
                 if (c.Computed is not null)
@@ -419,6 +480,10 @@ public static partial class ConversionProject
 
                         sb.Append($" {mapping.Type} GENERATED ALWAYS AS ({expr}) {(c.ComputedStored ? "STORED" : "VIRTUAL")}");
                         ctx.Issue(owner, $"computed column {c.Name} is a generated column, which needs SQLite 3.31, newer than sqlite.minVersion (3.26): raise sqlite.minVersion if every program that opens the database has 3.31, or compute it in a view or trigger instead");
+                    }
+                    else if (my)
+                    {
+                        sb.Append($" {mapping.Type} GENERATED ALWAYS AS ({expr}) {(c.ComputedStored ? "STORED" : "VIRTUAL")}");
                     }
                     else if (pg)
                     {
@@ -448,6 +513,10 @@ public static partial class ConversionProject
                 {
                     sb.Append(" COLLATE NOCASE");
                 }
+                else if (my && mapping.IsText && IsNoCase(c.Collation))
+                {
+                    sb.Append(" COLLATE utf8mb4_0900_as_ci");
+                }
                 else if (c.Collation?.Equals("NOCASE", StringComparison.OrdinalIgnoreCase) == true && mapping.IsText && ss)
                 {
                     // SQL Server's default collation is already case-insensitive.
@@ -470,6 +539,25 @@ public static partial class ConversionProject
                         ctx.Issue(owner, $"identity column {c.Name} is not the table's single integer primary key, so SQLite cannot number it: values must be supplied");
                     }
                 }
+                else if (c.Identity is { } myId && my)
+                {
+                    sb.Append(" AUTO_INCREMENT");
+                    if (table.PrimaryKey?.Columns is not [var first, ..] || !string.Equals(first, c.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // MySQL needs an AUTO_INCREMENT column to start an index.
+                        constraints.Add($"KEY {ctx.Quote(Unique(schema, Generated(table.Name.Name, c.Name + "_seq"), table.Name.Name))} ({column})");
+                    }
+
+                    if (myId.Seed != 1)
+                    {
+                        tableOptions.Add($"AUTO_INCREMENT={myId.Seed}");
+                    }
+
+                    if (myId.Increment != 1)
+                    {
+                        ctx.Issue(owner, $"identity column {c.Name} increments by {myId.Increment}; MySQL increments by the server's auto_increment_increment (1 by default)");
+                    }
+                }
                 else if (c.Identity is { } id)
                 {
                     sb.Append(pg
@@ -481,10 +569,15 @@ public static partial class ConversionProject
                 if (defaultExpr is not null)
                 {
                     var value = translator.Expression(StripParens(defaultExpr), new ExpressionSite(owner, mapping.Type));
-                    sb.Append(lite ? $" DEFAULT ({value})" : pg ? $" DEFAULT {value}" : $" CONSTRAINT {ctx.Quote(Unique(schema, $"DF_{table.Name.Name}_{c.Name}", table.Name.Name))} DEFAULT ({value})");
+                    sb.Append(my ? MySqlDefault(value, mapping.Type) : lite ? $" DEFAULT ({value})" : pg ? $" DEFAULT {value}" : $" CONSTRAINT {ctx.Quote(Unique(schema, $"DF_{table.Name.Name}_{c.Name}", table.Name.Name))} DEFAULT ({value})");
                 }
 
                 sb.Append(c.Nullable ? (ss ? " NULL" : string.Empty) : " NOT NULL");
+                if (my && c.Comment is { Length: > 0 } inline)
+                {
+                    sb.Append(" COMMENT ").Append(ctx.Literal(inline));
+                }
+
                 lines.Add(sb.ToString());
 
                 if (mapping.Check is not null)
@@ -502,7 +595,7 @@ public static partial class ConversionProject
                 {
                     comments.Add($"-- {ctx.Names.Name(c.Name)}: {c.Comment.Replace('\n', ' ')}");
                 }
-                else if (c.Comment is { Length: > 0 } comment)
+                else if (c.Comment is { Length: > 0 } comment && !my)
                 {
                     comments.Add(pg
                         ? $"COMMENT ON COLUMN {tableName}.{column} IS {ctx.Literal(comment)};"
@@ -559,6 +652,10 @@ public static partial class ConversionProject
             {
                 comments.Insert(0, $"-- {ctx.Names.Name(table.Name.Name)}: {table.Comment.Replace('\n', ' ')}");
             }
+            else if (table.Comment is { Length: > 0 } myComment && my)
+            {
+                tableOptions.Add($"COMMENT={ctx.Literal(myComment)}");
+            }
             else if (table.Comment is { Length: > 0 } tableComment)
             {
                 comments.Insert(0, pg
@@ -573,7 +670,32 @@ public static partial class ConversionProject
                 return (string.Concat(comments.Select(c => c + "\n")) + $"CREATE TABLE {tableName} (\n{body}\n);", []);
             }
 
+            if (my)
+            {
+                // Comparisons behave as in the source: case-insensitive (SQL Server) or case-sensitive (PostgreSQL, SQLite).
+                var collation = ctx.CaseInsensitiveCollation ? "utf8mb4_0900_as_ci" : "utf8mb4_0900_as_cs";
+                tableOptions.InsertRange(0, ["ENGINE=InnoDB", "DEFAULT CHARSET=utf8mb4", $"COLLATE={collation}"]);
+                return ($"CREATE TABLE {tableName} (\n{body}\n) {string.Join(' ', tableOptions)};", comments);
+            }
+
             return ($"CREATE TABLE {tableName} (\n{body}\n);", comments);
+        }
+
+        /// <summary>
+        /// A MySQL column default: CURRENT_TIMESTAMP on a DATETIME or TIMESTAMP is written bare, with the column's
+        /// fractional precision (MySQL requires them to match); anything else is an expression default in parentheses,
+        /// which MySQL accepts for every type, TEXT, BLOB and JSON included.
+        /// </summary>
+        private static string MySqlDefault(string value, string type)
+        {
+            var precision = Regex.Match(type, @"^(?:DATETIME|TIMESTAMP)(?:\((?<p>\d)\))?$", RegexOptions.IgnoreCase);
+            if (precision.Success && Regex.IsMatch(value.Trim(), @"^(?:CURRENT_TIMESTAMP|NOW|LOCALTIMESTAMP)\s*(?:\(\s*\d?\s*\))?$", RegexOptions.IgnoreCase))
+            {
+                var p = precision.Groups["p"].Success ? $"({precision.Groups["p"].Value})" : string.Empty;
+                return $" DEFAULT CURRENT_TIMESTAMP{p}";
+            }
+
+            return $" DEFAULT ({value})";
         }
 
         private PortableDomain? DomainOf(string type)
@@ -635,7 +757,11 @@ public static partial class ConversionProject
                 var tableName = ctx.Qualified(table.Name);
                 foreach (var fk in table.ForeignKeys)
                 {
-                    var name = ctx.Quote(Unique(schema, fk.Name ?? (pg ? Generated(table.Name.Name, string.Join('_', fk.Columns) + "_fkey") : $"FK_{table.Name.Name}_{fk.Referenced.Name}"), table.Name.Name));
+                    var name = ctx.Quote(Unique(schema, fk.Name ?? (pg || my ? Generated(table.Name.Name, string.Join('_', fk.Columns) + "_fkey") : $"FK_{table.Name.Name}_{fk.Referenced.Name}"), table.Name.Name));
+                    if (my && (fk.OnDelete == "SET DEFAULT" || fk.OnUpdate == "SET DEFAULT"))
+                    {
+                        ctx.Issue(table.Name.ToString(), $"foreign key {fk.Name}: InnoDB does not support SET DEFAULT; it became NO ACTION");
+                    }
                     var sb = new StringBuilder($"ALTER TABLE {tableName} ADD CONSTRAINT {name} FOREIGN KEY ({Columns(fk.Columns)}) REFERENCES {ctx.Qualified(fk.Referenced)} ({Columns(fk.ReferencedColumns)})");
                     sb.Append(Action("DELETE", fk.OnDelete)).Append(Action("UPDATE", fk.OnUpdate));
                     cascades |= fk.OnDelete is not ("NO ACTION" or "RESTRICT") || fk.OnUpdate is not ("NO ACTION" or "RESTRICT");
@@ -645,11 +771,11 @@ public static partial class ConversionProject
                     }
 
                     deploy.Add(sb.Append(';').ToString());
-                    revert.Add($"ALTER TABLE {tableName} DROP CONSTRAINT {name};");
+                    revert.Add(my ? $"ALTER TABLE {tableName} DROP FOREIGN KEY {name};" : $"ALTER TABLE {tableName} DROP CONSTRAINT {name};");
                 }
             }
 
-            if (!pg && cascades)
+            if (ss && cascades)
             {
                 ctx.Issue("foreign keys", "SQL Server rejects ON DELETE/UPDATE actions that could reach a table along two paths or a cycle; if 'trek deploy' reports that, change one of them to NO ACTION and handle it in a trigger");
             }
@@ -660,6 +786,7 @@ public static partial class ConversionProject
         private string Action(string verb, string action) => action switch
         {
             "NO ACTION" => string.Empty,
+            "SET DEFAULT" when my => string.Empty,
             "RESTRICT" => ss ? string.Empty : $" ON {verb} RESTRICT",
             _ => $" ON {verb} {action}",
         };
@@ -694,24 +821,58 @@ public static partial class ConversionProject
                         continue;
                     }
 
-                    if (method is not null and not "btree")
+                    var kind = my && method is "FULLTEXT" or "SPATIAL" ? method + " " : string.Empty;
+                    if (method is "FULLTEXT" or "SPATIAL" && !my)
+                    {
+                        ctx.Issue(owner, $"MySQL {method} index {index.Name} became a B-tree index; use the target's full-text or spatial features instead");
+                    }
+                    else if (method is not null and not "btree" && kind.Length == 0)
                     {
                         ctx.Issue(owner, $"{method} index {index.Name} became a B-tree index");
                     }
 
-                    var name = ctx.Quote(Unique(schema, index.Name, table.Name.Name));
-                    var columns = string.Join(", ", index.Columns.Select(c => (c.IsExpression ? $"({translator.Expression(c.Text, new ExpressionSite(owner))})" : ctx.Ident(c.Text)) + (c.Descending ? " DESC" : string.Empty)));
-                    var sb = new StringBuilder($"CREATE {(index.Unique ? "UNIQUE " : string.Empty)}{(ss ? "NONCLUSTERED " : string.Empty)}INDEX {name} ON {tableName} ({columns})");
-                    if (index.Included.Count > 0 && lite)
+                    if (my && index.Filter is not null && index.Unique)
                     {
-                        ctx.Issue(owner, $"index {index.Name}: SQLite has no INCLUDE columns; they were left out");
+                        ctx.Issue(owner, $"filtered unique index {index.Name} is not converted: MySQL has no filtered indexes; enforce the rule with a generated column or a trigger");
+                        continue;
+                    }
+
+                    var name = ctx.Quote(Unique(schema, index.Name, table.Name.Name));
+                    string Key(PortableIndexColumn c)
+                    {
+                        if (!c.IsExpression)
+                        {
+                            return ctx.Ident(c.Text);
+                        }
+
+                        var expression = translator.Expression(c.Text, new ExpressionSite(owner));
+                        // MySQL cannot index an expression whose result is TEXT: one over a text column is cast to CHAR(255).
+                        if (my && table.Columns.Any(col => ctx.KindOf(col.Type) == ConversionContext.ColumnKind.Text
+                            && Regex.IsMatch(c.Text, $@"(?<![\w$]){Regex.Escape(col.Name)}(?![\w$])", RegexOptions.IgnoreCase)))
+                        {
+                            ctx.Issue(owner, $"index {index.Name}: the expression is cast to CHAR(255) because MySQL cannot index TEXT; MySQL uses the index only for queries that write the same CAST");
+                            return $"(CAST({expression} AS CHAR(255)))";
+                        }
+
+                        return $"({expression})";
+                    }
+
+                    var columns = string.Join(", ", index.Columns.Select(c => Key(c) + (c.Descending ? " DESC" : string.Empty)));
+                    var sb = new StringBuilder($"CREATE {(index.Unique ? "UNIQUE " : string.Empty)}{kind}{(ss ? "NONCLUSTERED " : string.Empty)}INDEX {name} ON {tableName} ({columns})");
+                    if (index.Included.Count > 0 && (lite || my))
+                    {
+                        ctx.Issue(owner, $"index {index.Name}: {(my ? "MySQL" : "SQLite")} has no INCLUDE columns; they were left out");
                     }
                     else if (index.Included.Count > 0)
                     {
                         sb.Append($" INCLUDE ({Columns(index.Included)})");
                     }
 
-                    if (index.Filter is not null)
+                    if (index.Filter is not null && my)
+                    {
+                        ctx.Issue(owner, $"index {index.Name}: MySQL has no filtered indexes; it indexes every row");
+                    }
+                    else if (index.Filter is not null)
                     {
                         sb.Append(" WHERE ").Append(translator.Predicate(StripParens(index.Filter), new ExpressionSite(owner)));
                     }

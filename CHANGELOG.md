@@ -6,8 +6,18 @@ All notable changes to Badger Trek. The format follows [Keep a Changelog](https:
 
 ### Added
 
-- **MySQL**: `trek init --provider mysql`, for MySQL 8.4 and 9.7, the LTS releases that are still supported (each tested on every build). Deploy, revert, verify, repeatables, bundles, the schema fingerprint and `diff-schema` work as on the other databases. MySQL commits DDL as it runs, so changes run without a transaction: a change that fails part-way keeps what already ran, and is recorded only when all of it has run. Scripts are split as the `mysql` client does, with `DELIMITER` around stored program bodies. The journal is `trek_*` tables in the environment's database, and the deploy lock is a named lock. `trek doctor` flags older MySQL releases, Innovation releases and MariaDB. Lint: `USE` (TREK009), mysql client commands and a stored program body without a delimiter (TREK005). `trek convert` and imports from other tools come later.
+- **MySQL**: `trek init --provider mysql`, for MySQL 8.4 and 9.7, the LTS releases that are still supported (each tested on every build). Deploy, revert, verify, repeatables, bundles, the schema fingerprint and `diff-schema` work as on the other databases. MySQL commits DDL as it runs, so changes run without a transaction: a change that fails part-way keeps what already ran, and is recorded only when all of it has run. Scripts are split as the `mysql` client does, with `DELIMITER` around stored program bodies. The journal is `trek_*` tables in the environment's database, and the deploy lock is a named lock. `trek doctor` flags older MySQL releases, Innovation releases and MariaDB. Lint: `USE` (TREK009), mysql client commands and a stored program body without a delimiter (TREK005). Imports from other tools come later.
 - MySQL: `trek add --from-diff` and `diff-schema --script` write MySQL changes. Tables change with `ALTER TABLE` (columns added in position, dropped, modified, moved and renamed; indexes, checks, options; a new character set with `CONVERT TO`), foreign keys are added after every table exists, and views, routines, triggers and events are created again without `DEFINER` and with a `DELIMITER` where needed. The shadow database is created on the same server.
+- MySQL: `trek convert schema` and `trek convert data` move a MySQL database to SQL Server, PostgreSQL or SQLite, and any of them to MySQL. Types are mapped (`TINYINT(1)` and booleans, `ENUM` and `SET`, unsigned integers, `JSON`, `AUTO_INCREMENT` and identities), tables are InnoDB with `utf8mb4` and a case-sensitive or case-insensitive collation to match the source, and views are translated (MySQL and SQL Server or SQLite go by way of PostgreSQL's syntax). Functions, procedures and triggers are written commented out for now, with a REVIEW marker. Rows load into MySQL with multi-row inserts in one transaction, foreign keys checked before the commit.
+
+### Changed
+
+- `trek convert schema` always needs `--to`. It no longer picks a target when converting between SQL Server and PostgreSQL: every provider converts to every other, and none is the default.
+
+### Fixed
+
+- `trek convert schema` no longer creates the target's default schema (`dbo`, `public`) when a source schema maps to it, and no longer drops it on revert.
+- A converted view that calls a routine which could not be translated is commented out with it, so the project deploys; before, creating the view failed.
 
 ## 0.5.0 (November 2026)
 

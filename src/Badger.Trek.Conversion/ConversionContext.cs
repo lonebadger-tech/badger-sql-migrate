@@ -38,12 +38,12 @@ public sealed class ConversionContext
         Target = DialectOf(options.TargetProvider);
         if (Source == Target)
         {
-            throw new Core.MigrationException($"The database is already {options.TargetProvider}; convert to the other provider.");
+            throw new Core.MigrationException($"The database is already {options.TargetProvider}; pass --to with a different provider.");
         }
 
         var style = options.Names ?? (Target == Dialect.PostgreSql ? NameStyle.Lower : NameStyle.Keep);
         Names = new NameMapper(schema.DefaultSchema, DefaultSchemaOf(Target), style);
-        CaseInsensitiveCollation = Target is Dialect.PostgreSql or Dialect.Sqlite && schema.CaseInsensitive && !options.CaseSensitive;
+        CaseInsensitiveCollation = Target is Dialect.PostgreSql or Dialect.Sqlite or Dialect.MySql && schema.CaseInsensitive && !options.CaseSensitive;
         enums = schema.Enums.ToDictionary(e => e.Name.Key, StringComparer.OrdinalIgnoreCase);
         domains = schema.Domains.ToDictionary(d => d.Name.Key, StringComparer.OrdinalIgnoreCase);
 

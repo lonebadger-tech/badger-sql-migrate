@@ -29,6 +29,9 @@ public sealed class MySqlSession : IDatabaseSession
 
     internal MySqlConnection Connection => connection;
 
+    /// <summary>The open transaction, which a command run on <see cref="Connection"/> must join.</summary>
+    internal MySqlTransaction? Transaction => transaction;
+
     public TimeSpan? CommandTimeout { get; set; }
 
     public async Task BeginTransactionAsync(CancellationToken cancellationToken)

@@ -223,7 +223,7 @@ def releases():
   </ul>
   <h3>Converting databases</h3>
   <ul>
-    <li><code>trek convert schema</code> turns a live SQL Server, PostgreSQL or SQLite database into a new trek project for another of them: types mapped, views, functions, procedures and triggers translated, and every uncertain spot marked for review and listed in <code>CONVERSION.md</code>. See <a href="{BASE}/docs/converting/">Converting databases</a></li>
+    <li><code>trek convert schema</code> turns a live SQL Server, PostgreSQL, MySQL or SQLite database into a new trek project for another of them: types mapped, views, functions, procedures and triggers translated, and every uncertain spot marked for review and listed in <code>CONVERSION.md</code>. See <a href="{BASE}/docs/converting/">Converting databases</a></li>
     <li><code>trek convert data</code> then copies the rows (bulk copy, <code>COPY</code> or prepared inserts) and compares row counts</li>
   </ul>
   <h3>AI assistants</h3>

@@ -19,13 +19,26 @@ internal sealed class PgParser
 
     /// <param name="sqlite">Read SQLite: [name] and `name` identifiers, ==, a IS b, GLOB, INSERT OR REPLACE.</param>
     public PgParser(string text, bool sqlite = false)
+        : this(text, sqlite ? ParseMode.Sqlite : ParseMode.PostgreSql)
+    {
+    }
+
+    /// <param name="mode">
+    /// SQLite: see the other constructor. MySQL: `name` identifiers, backslash escapes, # comments, &lt;=&gt;, || and &amp;&amp;
+    /// as OR and AND, !, DIV, MOD, ^ (XOR), REGEXP / RLIKE, x'..' and b'..', INTERVAL n UNIT, LIMIT offset, count,
+    /// CONVERT(), GROUP_CONCAT(... SEPARATOR ...) and CREATE ... VIEW as SHOW CREATE VIEW writes it.
+    /// </param>
+    public PgParser(string text, ParseMode mode)
     {
         this.text = text;
-        this.sqlite = sqlite;
-        tokens = PgLexer.Tokenize(text, sqlite);
+        sqlite = mode == ParseMode.Sqlite;
+        mysql = mode == ParseMode.MySql;
+        tokens = PgLexer.Tokenize(text, mode);
     }
 
     private readonly bool sqlite;
+
+    private readonly bool mysql;
 
     private static readonly HashSet<string> Reserved = new(StringComparer.Ordinal)
     {
@@ -985,6 +998,12 @@ internal sealed class PgParser
             if (AcceptWord("limit"))
             {
                 limit = AcceptWord("all") ? null : Expr();
+                if (mysql && AcceptPunct(","))
+                {
+                    // MySQL: LIMIT offset, count.
+                    offset = limit;
+                    limit = Expr();
+                }
             }
             else if (AcceptWord("offset"))
             {
@@ -1339,7 +1358,7 @@ internal sealed class PgParser
     private PgExpr Or()
     {
         var left = And();
-        while (AcceptWord("or"))
+        while (AcceptWord("or") || (mysql && AcceptPunct("||")))
         {
             left = new PgBinary("or", left, And());
         }
@@ -1350,7 +1369,7 @@ internal sealed class PgParser
     private PgExpr And()
     {
         var left = Not();
-        while (AcceptWord("and"))
+        while (AcceptWord("and") || (mysql && AcceptPunct("&&")))
         {
             left = new PgBinary("and", left, Not());
         }
@@ -1410,9 +1429,16 @@ internal sealed class PgParser
     private PgExpr Comparison()
     {
         var left = Pattern();
-        while (Peek().Kind == TokenKind.Operator && ComparisonOps.Contains(Peek().Text))
+        while (Peek().Kind == TokenKind.Operator && (ComparisonOps.Contains(Peek().Text) || (mysql && Peek().Text == "<=>")))
         {
             var op = Next().Text;
+            if (op == "<=>")
+            {
+                // MySQL's null-safe equality.
+                left = new PgIsDistinct(left, Pattern(), true);
+                continue;
+            }
+
             if (op == "!=")
             {
                 op = "<>";
@@ -1467,6 +1493,10 @@ internal sealed class PgParser
                 var op = Peek(-1).Value;
                 left = new PgLike(left, op, Other(), null, not);
             }
+            else if (mysql && (AcceptWord("regexp") || AcceptWord("rlike")))
+            {
+                left = new PgLike(left, "regexp", Other(), null, not);
+            }
             else if (AcceptWords("similar", "to"))
             {
                 var pattern = Other();
@@ -1512,7 +1542,7 @@ internal sealed class PgParser
     private PgExpr Other()
     {
         var left = Additive();
-        while (Peek().Kind == TokenKind.Operator && OtherOps.Contains(Peek().Text))
+        while (Peek().Kind == TokenKind.Operator && OtherOps.Contains(Peek().Text) && !(mysql && Peek().Text is "||" or "&&"))
         {
             var op = Next().Text;
             var right = Additive();
@@ -1547,9 +1577,9 @@ internal sealed class PgParser
     private PgExpr Multiplicative()
     {
         var left = Power();
-        while (IsPunct("*") || IsPunct("/") || IsPunct("%"))
+        while (IsPunct("*") || IsPunct("/") || IsPunct("%") || (mysql && (IsWord("div") || IsWord("mod"))))
         {
-            var op = Next().Text;
+            var op = Next().Value switch { "div" => "div", "mod" => "%", var o => o };
             left = new PgBinary(op, left, Power());
         }
 
@@ -1562,7 +1592,9 @@ internal sealed class PgParser
         while (IsPunct("^"))
         {
             pos++;
-            left = new PgBinary("^", left, Unary());
+
+            // MySQL's ^ is bitwise XOR, PostgreSQL's #.
+            left = new PgBinary(mysql ? "#" : "^", left, Unary());
         }
 
         return left;
@@ -1570,6 +1602,12 @@ internal sealed class PgParser
 
     private PgExpr Unary()
     {
+        if (mysql && IsPunct("!"))
+        {
+            pos++;
+            return new PgUnary("not", Unary());
+        }
+
         if (IsPunct("-") || IsPunct("+") || IsPunct("~"))
         {
             var op = Next().Text;
@@ -1646,6 +1684,11 @@ internal sealed class PgParser
         {
             parts[0] = head + " varying";
         }
+        else if (mysql && head is "signed" or "unsigned")
+        {
+            // MySQL: CAST(x AS SIGNED INTEGER).
+            _ = AcceptWord("integer") || AcceptWord("int");
+        }
 
         while (IsPunct(".") && Peek(1).Kind is TokenKind.Word or TokenKind.QuotedIdent)
         {
@@ -1666,6 +1709,12 @@ internal sealed class PgParser
 
             ExpectPunct(")");
             type += "(" + string.Join(",", args) + ")";
+        }
+
+        if (mysql && (AcceptWord("charset") || AcceptWords("character", "set")))
+        {
+            // MySQL: CAST(x AS CHAR CHARSET utf8mb4); the character set does not carry over.
+            Identifier();
         }
 
         if (AcceptWords("with", "time", "zone"))
@@ -1696,6 +1745,10 @@ internal sealed class PgParser
             case TokenKind.Number:
                 pos++;
                 return new PgLiteral(LiteralKind.Number, t.Text);
+            case TokenKind.String when mysql && t.Text.StartsWith("x'", StringComparison.Ordinal):
+                // MySQL x'4142' / 0x4142: a binary string.
+                pos++;
+                return new PgTypedLiteral("bytea", "\\x" + t.Value.ToLowerInvariant());
             case TokenKind.String:
                 pos++;
                 return new PgLiteral(LiteralKind.String, t.Value);
@@ -1755,6 +1808,26 @@ internal sealed class PgParser
                 return new PgLiteral(LiteralKind.Default, "default");
             case "case":
                 return Case();
+            case "interval" when mysql && MySqlInterval() is { } interval:
+                return interval;
+            case "convert" when mysql && IsPunct("(", 1):
+            {
+                // MySQL: CONVERT(x, type) is a cast; CONVERT(x USING charset) only changes the character set.
+                pos += 2;
+                var e = Expr();
+                if (AcceptPunct(","))
+                {
+                    var type = TypeName();
+                    ExpectPunct(")");
+                    return new PgCast(e, type);
+                }
+
+                ExpectWord("using");
+                Identifier();
+                ExpectPunct(")");
+                return e;
+            }
+
             case "cast":
             {
                 pos++;
@@ -1899,7 +1972,12 @@ internal sealed class PgParser
             case "current_schema" when !IsPunct("(", 1):
             case "user" when !IsPunct("(", 1):
                 pos++;
-                if (IsPunct("(") && t.Value is "current_timestamp" or "localtimestamp" or "current_time" or "localtime")
+                if (mysql && IsPunct("(") && IsPunct(")", 1))
+                {
+                    // MySQL: CURRENT_DATE(), CURRENT_USER().
+                    pos += 2;
+                }
+                else if (IsPunct("(") && t.Value is "current_timestamp" or "localtimestamp" or "current_time" or "localtime")
                 {
                     pos++;
                     Next();
@@ -2007,6 +2085,13 @@ internal sealed class PgParser
             if (AcceptWords("order", "by"))
             {
                 order = OrderList();
+            }
+
+            if (mysql && AcceptWord("separator"))
+            {
+                // MySQL: GROUP_CONCAT(x ORDER BY y SEPARATOR ', '); kept as a last, named argument.
+                names.Add("separator");
+                args.Add(Expr());
             }
         }
 
@@ -2142,6 +2227,149 @@ internal sealed class PgParser
         return (name, columns, QueryOnly());
     }
 
+    // ------------------------------------------------------------------ MySQL
+
+    /// <summary>
+    /// A MySQL view as SHOW CREATE VIEW writes it: CREATE [OR REPLACE] [ALGORITHM=...] [DEFINER=...] [SQL SECURITY ...]
+    /// VIEW name [(columns)] AS query [WITH [CASCADED | LOCAL] CHECK OPTION].
+    /// </summary>
+    public MySqlViewDef MySqlView()
+    {
+        ExpectWord("create");
+        AcceptWords("or", "replace");
+        while (!AtEnd && !IsWord("view"))
+        {
+            if (AcceptWord("algorithm"))
+            {
+                ExpectPunct("=");
+                Next();
+            }
+            else if (AcceptWord("definer"))
+            {
+                ExpectPunct("=");
+                while (!AtEnd && !IsWord("sql") && !IsWord("view"))
+                {
+                    Next();
+                }
+            }
+            else if (AcceptWords("sql", "security"))
+            {
+                Next();
+            }
+            else
+            {
+                throw Error("expected VIEW");
+            }
+        }
+
+        ExpectWord("view");
+        var name = QualifiedName().Last;
+        var columns = IsPunct("(") ? NameList() : [];
+        ExpectWord("as");
+        var query = Query();
+        string? check = null;
+        if (AcceptWord("with"))
+        {
+            check = AcceptWord("local") ? "LOCAL" : "CASCADED";
+            AcceptWord("cascaded");
+            ExpectWords("check", "option");
+        }
+
+        AcceptPunct(";");
+        if (!AtEnd)
+        {
+            throw Error("unexpected text after the view");
+        }
+
+        return new MySqlViewDef(name, columns, query, check);
+    }
+
+    /// <summary>MySQL interval units and the PostgreSQL units of their parts (DAY_HOUR '1 2' is 1 day 2 hours).</summary>
+    private static readonly Dictionary<string, string[]> MySqlIntervalUnits = new(StringComparer.Ordinal)
+    {
+        ["microsecond"] = ["microsecond"],
+        ["second"] = ["second"],
+        ["minute"] = ["minute"],
+        ["hour"] = ["hour"],
+        ["day"] = ["day"],
+        ["week"] = ["week"],
+        ["month"] = ["month"],
+        ["quarter"] = ["quarter"],
+        ["year"] = ["year"],
+        ["second_microsecond"] = ["second", "microsecond"],
+        ["minute_microsecond"] = ["minute", "second", "microsecond"],
+        ["minute_second"] = ["minute", "second"],
+        ["hour_microsecond"] = ["hour", "minute", "second", "microsecond"],
+        ["hour_second"] = ["hour", "minute", "second"],
+        ["hour_minute"] = ["hour", "minute"],
+        ["day_microsecond"] = ["day", "hour", "minute", "second", "microsecond"],
+        ["day_second"] = ["day", "hour", "minute", "second"],
+        ["day_minute"] = ["day", "hour", "minute"],
+        ["day_hour"] = ["day", "hour"],
+        ["year_month"] = ["year", "month"],
+    };
+
+    /// <summary>
+    /// MySQL's INTERVAL expr unit, as a PostgreSQL interval: a literal amount becomes interval '2 day', a computed one
+    /// (n) * interval '1 day'. Null (nothing consumed) when no unit follows, e.g. the INTERVAL(n, a, b) function.
+    /// </summary>
+    private PgExpr? MySqlInterval()
+    {
+        var save = pos;
+        pos++;
+        try
+        {
+            var amount = Additive();
+            if (Peek().Kind == TokenKind.Word && MySqlIntervalUnits.TryGetValue(Peek().Value, out var units))
+            {
+                pos++;
+                return IntervalValue(amount, units) ?? throw Error("INTERVAL value");
+            }
+        }
+        catch (PgParseException)
+        {
+            // Not an interval: read it as a name or a call instead.
+        }
+
+        pos = save;
+        return null;
+    }
+
+    private static PgExpr? IntervalValue(PgExpr amount, string[] units)
+    {
+        var literal = amount switch
+        {
+            PgLiteral { Kind: LiteralKind.Number or LiteralKind.String } l => l.Value.Trim(),
+            _ => null,
+        };
+        if (units.Length == 1)
+        {
+            var quarter = units[0] == "quarter";
+            if (literal is not null && decimal.TryParse(literal, NumberStyles.Number, CultureInfo.InvariantCulture, out var n))
+            {
+                return new PgTypedLiteral("interval", quarter ? $"{(n * 3).ToString(CultureInfo.InvariantCulture)} month" : $"{literal} {units[0]}");
+            }
+
+            var factor = amount is PgName or PgLiteral or PgParam or PgCall ? amount : new PgCall(new PgName(["("]), [amount]);
+            return new PgBinary("*", factor, new PgTypedLiteral("interval", quarter ? "3 month" : $"1 {units[0]}"));
+        }
+
+        if (literal is null)
+        {
+            return null;
+        }
+
+        var negative = literal.StartsWith('-');
+        var values = System.Text.RegularExpressions.Regex.Matches(literal, @"\d+").Select(m => m.Value).ToList();
+        if (values.Count == 0 || values.Count > units.Length)
+        {
+            return null;
+        }
+
+        var parts = values.Select((v, i) => $"{(negative ? "-" : string.Empty)}{v} {units[units.Length - values.Count + i]}");
+        return new PgTypedLiteral("interval", string.Join(' ', parts));
+    }
+
     // ------------------------------------------------------------------ CREATE FUNCTION / PROCEDURE headers
 
     /// <summary>Parses pg_get_functiondef output: name, arguments, RETURNS, LANGUAGE and the body text.</summary>
@@ -2244,6 +2472,9 @@ internal sealed class PgParser
 }
 
 /// <summary>A SQLite CREATE TRIGGER: one event, row level, a body of SQL statements.</summary>
+/// <param name="CheckOption">CASCADED or LOCAL when the view has WITH CHECK OPTION, else null.</param>
+internal sealed record MySqlViewDef(string Name, IReadOnlyList<string> Columns, PgQuery Query, string? CheckOption);
+
 internal sealed record SqliteTriggerDef(string Name, string Timing, string Event, IReadOnlyList<string> Columns, PgName Table, PgExpr? When, IReadOnlyList<PgStatement> Body);
 
 internal sealed record RoutineArg(string Mode, string? Name, string Type, PgExpr? Default);

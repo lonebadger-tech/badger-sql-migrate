@@ -10,8 +10,11 @@ Delete this file when the items below are done (it is not documentation).
 
 - MySQL support (user's request, 2026-11-20), four PRs: (1) provider core: done in the mysql-provider PR;
   (2) add --from-diff / diff-schema --script for MySQL: done in the mysql-from-diff PR; (3) trek convert to and
-  from MySQL in every direction (exporter, data transfer, MySQL<->PostgreSQL translators; conversions go through
-  PostgreSQL's syntax); (4) imports and baseline --from for MySQL (Flyway jdbc:mysql, DbUp, Sqitch engine mysql,
+  from MySQL in every direction: tables, keys, indexes, views and data done in the mysql-convert PR (MySQL and SQL
+  Server or SQLite go through PostgreSQL's syntax); still to do in follow-up PRs: translating functions, procedures
+  and triggers PL/pgSQL <-> MySQL (now written commented out). MySQL cannot turn triggers off during
+  `convert data`, so once triggers are translated the load must suppress them (for example a session variable the
+  generated triggers check); (4) imports and baseline --from for MySQL (Flyway jdbc:mysql, DbUp, Sqitch engine mysql,
   EF Core with the Pomelo/Oracle providers). MySqlProvider.DefaultSchema is empty (a MySQL schema is a database):
   ForeignJournal.SplitTable needs to handle that in (4). Ship all four as 0.6.0.
 

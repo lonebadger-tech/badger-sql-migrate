@@ -8,7 +8,7 @@ using Badger.Trek.Core.Providers;
 
 namespace Badger.Trek.Cli;
 
-/// <summary>'trek convert': move a live database to the other provider as a new trek project, then copy its rows.</summary>
+/// <summary>'trek convert': move a live database to another provider (--to) as a new trek project, then copy its rows.</summary>
 public static partial class Commands
 {
     public const string ConversionReportFile = "CONVERSION.md";
@@ -79,20 +79,13 @@ public static partial class Commands
         }
     }
 
-    private static string OtherProvider(string provider) => ConversionContext.DialectOf(provider) switch
-    {
-        Dialect.SqlServer => "postgresql",
-        Dialect.PostgreSql => "sqlserver",
-        _ => throw new MigrationException("Pass --to sqlserver or --to postgresql: a SQLite database can become either."),
-    };
-
     private static Func<PortableName, bool> Globs(IEnumerable<string> patterns)
     {
         var regexes = patterns.Select(p => new Regex("^" + Regex.Escape(p).Replace(@"\*", ".*", StringComparison.Ordinal).Replace(@"\?", ".", StringComparison.Ordinal) + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)).ToList();
         return name => regexes.Any(r => r.IsMatch($"{name.Schema}.{name.Name}"));
     }
 
-    public static async Task<int> ConvertSchema(GlobalOptions g, string outDir, string? toProvider, string? fromProvider, string? names, bool caseSensitive, string[] exclude, bool dryRun, CancellationToken ct)
+    public static async Task<int> ConvertSchema(GlobalOptions g, string outDir, string toProvider, string? fromProvider, string? names, bool caseSensitive, string[] exclude, bool dryRun, CancellationToken ct)
     {
         RequireWorkingCopy(g, "convert");
         PortableSchema schema;
@@ -100,7 +93,7 @@ public static partial class Commands
         await using (var source = await OpenSource(g, fromProvider, ct))
         {
             var exporter = source.Provider.Exporter ?? throw new MigrationException($"{source.Provider.DisplayName} databases cannot be converted yet.");
-            target = Providers.Resolve(toProvider ?? OtherProvider(source.Provider.Id)).Id;
+            target = Providers.Resolve(toProvider).Id;
             g.Out.Muted($"reading {source.Session.Description}");
             schema = await exporter.ExportAsync(source.Session, new ExportOptions
             {
