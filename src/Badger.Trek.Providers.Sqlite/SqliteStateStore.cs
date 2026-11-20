@@ -15,6 +15,12 @@ public sealed partial class SqliteStateStore : IStateStore
 
     public static readonly string[] Tables = ["meta", "changes", "repeatables", "events", "schema_snapshots"];
 
+    public string MoveScript(string from, string to)
+    {
+        var (f, t) = (Prefix(from), Prefix(to));
+        return string.Join("\n", StateTables.Names.Select(n => $"ALTER TABLE {f}{n} RENAME TO {t}{n};"));
+    }
+
     public async Task<bool> ExistsAsync(IDatabaseSession session, string schema, CancellationToken cancellationToken)
     {
         var rows = await session.QueryAsync("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = @name;", new Dictionary<string, object?> { ["name"] = Prefix(schema) + "changes" }, cancellationToken).ConfigureAwait(false);

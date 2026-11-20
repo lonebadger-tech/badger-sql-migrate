@@ -179,6 +179,17 @@ def releases():
     body = f"""
 <section class="release" id="v{VERSION}">
   <h2>Version {VERSION} <span class="date">{RELEASE_DATE}</span></h2>
+  <h3>Upgrading from Badger SQL Migrate</h3>
+  <ul>
+    <li>A database deployed by Badger SQL Migrate no longer looks empty to trek. 0.4.0 found no trek journal in it, showed every change as pending, and a deploy would have run them all again. trek now stops with the SQL that moves the old journal to the <code>trek</code> state schema once, keeping the full history, or suggests <code>stateSchema: bsm</code>. trek still reads nothing from the old journal itself</li>
+    <li>A folder with <code>bsm.yaml</code> and no <code>trek.yaml</code> gets the rename steps instead of "run trek init"</li>
+    <li>New page: <a href="{BASE}/docs/upgrading/">Upgrading from Badger SQL Migrate</a>. Moving the journal replaces the 0.4.0 advice to adopt each database with <code>trek baseline</code></li>
+    <li>The nuget.org package page and <code>trek ai-guide</code> now explain the rename</li>
+  </ul>
+</section>
+
+<section class="release" id="v0.4.0">
+  <h2>Version 0.4.0 <span class="date">November 2026</span></h2>
   <h3>Renamed to Badger Trek (breaking)</h3>
   <ul>
     <li>Badger SQL Migrate is now <strong>Badger Trek</strong>: the command is <code>trek</code>, the NuGet package <code>Badger.Trek</code> (<code>Badger.SqlMigrate</code> is deprecated), the repository <code>lonebadger-tech/badger-trek</code>. Project files are <code>trek.yaml</code> and <code>trek.plan</code>, the journal schema <code>trek</code> (<code>trek_*</code> tables on SQLite), script directives <code>-- trek:</code>, variables <code>{{trek.*}}</code>, environment variables <code>TREK_*</code>, the home folder <code>~/.trek</code>, and lint codes <code>TREK001</code> and up</li>

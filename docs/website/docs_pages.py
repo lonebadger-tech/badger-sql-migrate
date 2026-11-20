@@ -36,6 +36,7 @@ SIDEBAR = [
         ("Schema drift", "docs/drift/"),
         ("Existing databases", "docs/baseline/"),
         ("Moving from other tools", "docs/importing/"),
+        ("Upgrading from Badger SQL Migrate", "docs/upgrading/"),
         ("Converting between databases", "docs/converting/"),
         ("Journal tables", "docs/journal/"),
         ("Troubleshooting", "docs/troubleshooting/"),
@@ -57,7 +58,7 @@ def link(path, label):
 def pages():
     return [overview(), install(), quick_start(), project(), ai(), plan(), changes(), certification(), revert(), fixing_changes(), generating(),
             teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(), postgresql(), sqlite(),
-            commands(), ci_cd(), bundles(), drift(), baseline(), importing(), converting(), journal(), troubleshooting(), extending()]
+            commands(), ci_cd(), bundles(), drift(), baseline(), importing(), upgrading(), converting(), journal(), troubleshooting(), extending()]
 
 
 # ---------------------------------------------------------------- get started
@@ -1644,6 +1645,62 @@ trek verify -C ../db-pg''')}
 <p>The target tables must be empty; <code>--truncate</code> empties them first. <code>--tables "sales.*"</code> copies only some. Run it after deploying the converted project, while the source is not being written to.</p>
 """)
 
+def upgrading():
+    return doc("docs/upgrading/", "Upgrading from Badger SQL Migrate", "Badger SQL Migrate (bsm, NuGet Badger.SqlMigrate, 0.3.0 and earlier) is now Badger Trek. Rename the project files, move each database's journal once, and keep the full history.", f"""
+<p>Badger Trek 0.4.0 is the same tool under a new name, and a clean break: it reads nothing Badger SQL Migrate wrote. The journal layout did not change, only its name, so nothing has to be redeployed. trek stops with this page's steps when it finds a <code>bsm.yaml</code> without a <code>trek.yaml</code>, or a database with a Badger SQL Migrate journal and no Badger Trek journal, instead of treating the database as empty.</p>
+
+<h2 id="tool">1. Install Badger Trek</h2>
+{sh('''dotnet tool uninstall --global Badger.SqlMigrate
+dotnet tool install --global Badger.Trek''')}
+<p>With a local tool manifest, use <code>dotnet tool uninstall Badger.SqlMigrate</code> and <code>dotnet tool install Badger.Trek</code>; the command is <code>dotnet trek</code>. In pipelines, replace <code>bsm</code> with <code>trek</code> and rebuild {link("docs/bundles/", "bundles")} with <code>trek bundle create</code>.</p>
+
+<h2 id="project">2. Rename the project</h2>
+{sh('''git mv bsm.yaml trek.yaml
+git mv bsm.plan trek.plan''')}
+<table>
+<tr><th>Badger SQL Migrate</th><th>Badger Trek</th></tr>
+<tr><td><code>bsm.yaml</code>, <code>bsm.plan</code></td><td><code>trek.yaml</code>, <code>trek.plan</code></td></tr>
+<tr><td><code>-- bsm:preprocess off</code>, <code>-- bsm:requires</code></td><td><code>-- trek:preprocess off</code>, <code>-- trek:requires</code></td></tr>
+<tr><td><code>{{bsm.provider}}</code>, <code>{{bsm.version}}</code>, <code>{{bsm.schema}}</code></td><td><code>{{trek.provider}}</code>, <code>{{trek.version}}</code>, <code>{{trek.schema}}</code></td></tr>
+<tr><td><code>BSM_*</code> environment variables, <code>~/.bsm</code></td><td><code>TREK_*</code>, <code>~/.trek</code> (saved Entra sign-ins are not carried over: sign in again)</td></tr>
+<tr><td>Lint codes <code>BSM001</code>…</td><td><code>TREK001</code>…</td></tr>
+</table>
+<p>Run <code>trek plan check</code>: the plan head is the same as before if only the files were renamed.</p>
+
+<h2 id="journal">3. Move each database's journal</h2>
+<p>Badger SQL Migrate kept its journal in state schema <code>bsm</code> (tables <code>bsm_*</code> on SQLite); Badger Trek uses <code>trek</code>. Move it once per database, with the same rights a deploy has. trek prints the exact SQL for the database when it stops, and it never runs it itself:</p>
+<h3>SQL Server and Azure SQL</h3>
+{sql('''IF SCHEMA_ID(N'trek') IS NULL EXEC(N'CREATE SCHEMA [trek]');
+ALTER SCHEMA [trek] TRANSFER [bsm].[meta];
+ALTER SCHEMA [trek] TRANSFER [bsm].[changes];
+ALTER SCHEMA [trek] TRANSFER [bsm].[repeatables];
+ALTER SCHEMA [trek] TRANSFER [bsm].[events];
+ALTER SCHEMA [trek] TRANSFER [bsm].[schema_snapshots];
+DROP SCHEMA [bsm];''')}
+<h3>PostgreSQL</h3>
+{sql('''CREATE SCHEMA IF NOT EXISTS "trek";
+ALTER TABLE "bsm".meta SET SCHEMA "trek";
+ALTER TABLE "bsm".changes SET SCHEMA "trek";
+ALTER TABLE "bsm".repeatables SET SCHEMA "trek";
+ALTER TABLE "bsm".events SET SCHEMA "trek";
+ALTER TABLE "bsm".schema_snapshots SET SCHEMA "trek";
+DROP SCHEMA "bsm";''')}
+<h3>SQLite</h3>
+{sql('''ALTER TABLE bsm_meta RENAME TO trek_meta;
+ALTER TABLE bsm_changes RENAME TO trek_changes;
+ALTER TABLE bsm_repeatables RENAME TO trek_repeatables;
+ALTER TABLE bsm_events RENAME TO trek_events;
+ALTER TABLE bsm_schema_snapshots RENAME TO trek_schema_snapshots;''')}
+<p>The final <code>DROP SCHEMA</code> fails if anything else is left in <code>bsm</code>, which is the point: nothing of yours is dropped. To leave the journal where it is instead, set <code>stateSchema: bsm</code> on each environment in <code>trek.yaml</code> (see {link("docs/journal/", "Journal tables")}); trek then uses it as its own.</p>
+
+<h2 id="check">4. Check</h2>
+{sh('''trek status -e prod     # up to date and certified, same head as before
+trek verify -e prod     # same schema fingerprint
+trek log -e prod        # the history from Badger SQL Migrate''')}
+<p>Renaming <code>-- bsm:</code> directives or <code>{{bsm.*}}</code> variables inside changes that are already deployed changes their hashes, and trek reports them as edited after deployment. Those edits are harmless: accept them once with <code>trek repair</code> (see {link("docs/fixing-changes/", "Fixing deployed changes")}). A repeatable whose text changed is simply applied again on the next deploy.</p>
+""")
+
+
 def journal():
     return doc("docs/journal/", "Journal tables", "What trek stores in each database (schema trek, configurable).", f"""
 <table>
@@ -1668,6 +1725,7 @@ def troubleshooting():
         ("“These changes were edited after they were deployed”", "A deployed change's scripts changed (even whitespace). For new behaviour, restore the deployed version and use <code>trek rework</code>; for a harmless edit such as a revert fix, use <code>trek repair</code>. See " + link("docs/fixing-changes/", "Fixing deployed changes") + "."),
         ("“This database belongs to environment 'test'…”", "You are pointing one environment's settings at another environment's database. Check <code>--env</code> and the host/database. If the database was copied on purpose, pass <code>--claim-environment</code> once."),
         ("“Timed out … waiting for the deploy lock”", "Another deploy is running against the database. Wait, or raise <code>lockTimeoutSeconds</code>."),
+        ("“This database has a Badger SQL Migrate journal …” or “… but bsm.yaml is there”", "The project or database comes from Badger SQL Migrate, trek's earlier name. Rename the project files and move the journal once, as the message shows; see " + link("docs/upgrading/", "Upgrading from Badger SQL Migrate") + "."),
         ("“… cannot run inside a transaction”", "Lint TREK001. Mark the change <code>!notx</code> in the plan and make the script re-runnable."),
         ("“unknown variable {x}”", "Define it under <code>variables:</code>, pass <code>--var x=…</code>, write <code>{{x}}</code> for a literal, or set <code>preprocessor.unknown: keep</code>."),
         ("“renders differently than when it was deployed”", "A variable used by the change changed value. Run <code>trek vars</code>; restore the value, or use <code>--allow-variable-drift</code> if the change is intended."),

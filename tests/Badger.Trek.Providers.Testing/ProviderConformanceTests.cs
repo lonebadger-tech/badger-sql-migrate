@@ -249,6 +249,43 @@ public abstract class ProviderConformanceTests
         }
     }
 
+    [SkippableFact]
+    public async Task A_bsm_journal_stops_trek_until_the_suggested_script_moves_it()
+    {
+        await using var db = await RequireDatabaseAsync();
+        using var project = NewProject();
+        project.Change("t1", Dialect.CreateTable("t1"), Dialect.DropTable("t1"), Dialect.VerifyTableExists("t1"));
+        project.Change("t2", Dialect.CreateTable("t2"), Dialect.DropTable("t2"));
+
+        // Badger SQL Migrate 0.3.0 kept the same journal under state schema "bsm".
+        var legacy = db.Profile with { StateSchema = MigrationEngine.LegacyStateSchema };
+        await using (var e = await EngineAsync(db, project, legacy))
+        {
+            Assert.Equal(["t1", "t2"], (await e.Engine.DeployAsync(new DeployOptions())).Deployed);
+        }
+
+        await using (var e = await EngineAsync(db, project))
+        {
+            var stopped = await Assert.ThrowsAsync<MigrationException>(() => e.Engine.StatusAsync());
+            Assert.Contains("Badger SQL Migrate journal", stopped.Message, StringComparison.Ordinal);
+            await Assert.ThrowsAsync<MigrationException>(() => e.Engine.DeployAsync(new DeployOptions()));
+            Assert.False(await Provider.StateStore.ExistsAsync(e.Session, db.Profile.StateSchema, CancellationToken.None));
+
+            await e.Session.ExecuteAsync(Provider.StateStore.MoveScript(MigrationEngine.LegacyStateSchema, db.Profile.StateSchema), null, CancellationToken.None);
+        }
+
+        await using (var e = await EngineAsync(db, project))
+        {
+            Assert.False(await Provider.StateStore.ExistsAsync(e.Session, MigrationEngine.LegacyStateSchema, CancellationToken.None));
+            var verify = await e.Engine.VerifyAsync();
+            Assert.True(verify.Ok, string.Join("\n", verify.Problems));
+            Assert.True(verify.Status.UpToDate);
+            Assert.True(verify.Status.Certified);
+            Assert.Contains(await e.Engine.LogAsync(10), ev => ev.Kind == MigrationEventKind.Deploy && ev.Name == "t2");
+            Assert.Equal(["t2"], (await e.Engine.RevertAsync(new RevertOptions { To = "t1" })).Reverted);
+        }
+    }
+
     private async Task<IConformanceDatabase> RequireDatabaseAsync()
     {
         var db = await CreateDatabaseAsync();
@@ -258,10 +295,11 @@ public abstract class ProviderConformanceTests
 
     private static ConformanceProject NewProject() => new();
 
-    private async Task<EngineHandle> EngineAsync(IConformanceDatabase db, ConformanceProject project)
+    private async Task<EngineHandle> EngineAsync(IConformanceDatabase db, ConformanceProject project, DeploymentEnvironment? profile = null)
     {
-        var session = await Provider.OpenSessionAsync(db.Profile, SessionContext.Empty, CancellationToken.None);
-        var engine = new MigrationEngine(project.Load(Provider.Id), Provider, db.Profile, session, new Actor("conformance", "test", "0.0.0"));
+        profile ??= db.Profile;
+        var session = await Provider.OpenSessionAsync(profile, SessionContext.Empty, CancellationToken.None);
+        var engine = new MigrationEngine(project.Load(Provider.Id), Provider, profile, session, new Actor("conformance", "test", "0.0.0"));
         return new EngineHandle(engine, session);
     }
 

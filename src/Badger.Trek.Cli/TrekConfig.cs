@@ -43,6 +43,9 @@ public sealed class TrekConfig
 {
     public const string FileName = "trek.yaml";
 
+    /// <summary>The project file of Badger SQL Migrate (0.3.0 and earlier); only used to explain the rename.</summary>
+    public const string LegacyFileName = "bsm.yaml";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -88,6 +91,15 @@ public sealed class TrekConfig
         var path = Path.Combine(projectDir, FileName);
         if (!File.Exists(path))
         {
+            if (File.Exists(Path.Combine(projectDir, LegacyFileName)))
+            {
+                throw new MigrationException(
+                    $"No {FileName} found in '{projectDir}', but {LegacyFileName} is there: this is a Badger SQL Migrate project. " +
+                    $"Badger Trek renamed the project files: rename {LegacyFileName} to {FileName} and bsm.plan to trek.plan, and the names inside the scripts " +
+                    "(-- bsm: directives, {bsm.*} variables, BSM_* environment variables). Databases it deployed need their journal moved once: " +
+                    "see https://lonebadger.tech/badger-trek/docs/upgrading/");
+            }
+
             throw new MigrationException($"No {FileName} found in '{projectDir}'. Run 'trek init' or pass --project <dir>.");
         }
 

@@ -135,6 +135,63 @@ public sealed class MigrationEngine
 
     private string Schema => environment.StateSchema;
 
+    /// <summary>The state schema of Badger SQL Migrate (0.3.0 and earlier), whose journal trek does not read.</summary>
+    public const string LegacyStateSchema = "bsm";
+
+    private bool legacyChecked;
+
+    /// <summary>Whether the journal exists; stops when only a Badger SQL Migrate journal does.</summary>
+    private async Task<bool> JournalExistsAsync(CancellationToken cancellationToken)
+    {
+        if (await provider.StateStore.ExistsAsync(session, Schema, cancellationToken).ConfigureAwait(false))
+        {
+            return true;
+        }
+
+        await ThrowIfLegacyJournalAsync(cancellationToken).ConfigureAwait(false);
+        return false;
+    }
+
+    /// <summary>Creates or upgrades the journal, unless the database only has a Badger SQL Migrate journal.</summary>
+    private async Task EnsureJournalAsync(CancellationToken cancellationToken)
+    {
+        await JournalExistsAsync(cancellationToken).ConfigureAwait(false);
+        await provider.StateStore.EnsureCreatedAsync(session, Schema, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A database deployed by Badger SQL Migrate has its journal in state schema "bsm", which trek does not read:
+    /// without this check every change would look pending and a deploy would run them all again. Stops with the SQL
+    /// that moves the journal (history included) instead of reading it.
+    /// </summary>
+    private async Task ThrowIfLegacyJournalAsync(CancellationToken cancellationToken)
+    {
+        if (legacyChecked || string.Equals(Schema, LegacyStateSchema, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (!await provider.StateStore.ExistsAsync(session, LegacyStateSchema, cancellationToken).ConfigureAwait(false))
+        {
+            legacyChecked = true;
+            return;
+        }
+
+        throw new MigrationException(LegacyJournalMessage(provider.StateStore.MoveScript(LegacyStateSchema, Schema), Schema, environment.Name));
+    }
+
+    internal static string LegacyJournalMessage(string moveScript, string schema, string environmentName) =>
+        $"""
+        This database has a Badger SQL Migrate journal (state schema '{LegacyStateSchema}') and no Badger Trek journal (state schema '{schema}').
+        Badger Trek does not read the old journal: it would treat every change as pending, and a deploy would run them all again.
+        Move the journal once (it keeps the full history), then run the command again:
+
+        {moveScript.Replace("\n", "\n    ", StringComparison.Ordinal).Insert(0, "    ")}
+
+        Or keep the journal where it is with 'stateSchema: {LegacyStateSchema}' on environment '{environmentName}' in trek.yaml.
+        See https://lonebadger.tech/badger-trek/docs/upgrading/
+        """;
+
     /// <summary>The meta key recording which environment owns the database.</summary>
     public const string EnvironmentMetaKey = "environment";
 
@@ -158,7 +215,7 @@ public sealed class MigrationEngine
 
     /// <summary>The environment name recorded in the database on its first deploy, or null.</summary>
     public async Task<string?> GetRecordedEnvironmentAsync(CancellationToken cancellationToken = default) =>
-        await provider.StateStore.ExistsAsync(session, Schema, cancellationToken).ConfigureAwait(false)
+        await JournalExistsAsync(cancellationToken).ConfigureAwait(false)
             ? await provider.StateStore.GetMetaAsync(session, Schema, EnvironmentMetaKey, cancellationToken).ConfigureAwait(false)
             : null;
 
@@ -175,7 +232,7 @@ public sealed class MigrationEngine
         await using var lockHandle = await AcquireLockAsync(dryRun, cancellationToken).ConfigureAwait(false);
         if (!dryRun)
         {
-            await provider.StateStore.EnsureCreatedAsync(session, Schema, cancellationToken).ConfigureAwait(false);
+            await EnsureJournalAsync(cancellationToken).ConfigureAwait(false);
             await ClaimEnvironmentAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -184,7 +241,7 @@ public sealed class MigrationEngine
 
     public async Task<StatusReport> StatusAsync(CancellationToken cancellationToken = default)
     {
-        var applied = await provider.StateStore.ExistsAsync(session, Schema, cancellationToken).ConfigureAwait(false)
+        var applied = await JournalExistsAsync(cancellationToken).ConfigureAwait(false)
             ? await provider.StateStore.GetAppliedChangesAsync(session, Schema, cancellationToken).ConfigureAwait(false)
             : [];
         return StatusReport.Build(project, applied);
@@ -221,7 +278,7 @@ public sealed class MigrationEngine
         await using var lockHandle = await AcquireLockAsync(options.DryRun, cancellationToken).ConfigureAwait(false);
         if (!options.DryRun)
         {
-            await provider.StateStore.EnsureCreatedAsync(session, Schema, cancellationToken).ConfigureAwait(false);
+            await EnsureJournalAsync(cancellationToken).ConfigureAwait(false);
             await ClaimEnvironmentAsync(cancellationToken).ConfigureAwait(false);
         }
         else
@@ -590,7 +647,7 @@ public sealed class MigrationEngine
     {
         EnsureProjectIsValid();
         await using var lockHandle = await AcquireLockAsync(false, cancellationToken).ConfigureAwait(false);
-        await provider.StateStore.EnsureCreatedAsync(session, Schema, cancellationToken).ConfigureAwait(false);
+        await EnsureJournalAsync(cancellationToken).ConfigureAwait(false);
         await ClaimEnvironmentAsync(cancellationToken).ConfigureAwait(false);
         var status = await StatusAsync(cancellationToken).ConfigureAwait(false);
         ThrowOnMismatch(status);
@@ -626,7 +683,7 @@ public sealed class MigrationEngine
 
     /// <summary>The schema as recorded after the last deploy or revert, or null.</summary>
     public async Task<SchemaSnapshot?> GetRecordedSchemaAsync(CancellationToken cancellationToken = default) =>
-        await provider.StateStore.ExistsAsync(session, Schema, cancellationToken).ConfigureAwait(false)
+        await JournalExistsAsync(cancellationToken).ConfigureAwait(false)
             ? await provider.StateStore.GetLatestSchemaSnapshotAsync(session, Schema, cancellationToken).ConfigureAwait(false)
             : null;
 
@@ -636,7 +693,7 @@ public sealed class MigrationEngine
         EnsureProjectIsValid();
         var targetIndex = ResolveTarget(to);
         await using var lockHandle = await AcquireLockAsync(false, cancellationToken).ConfigureAwait(false);
-        await provider.StateStore.EnsureCreatedAsync(session, Schema, cancellationToken).ConfigureAwait(false);
+        await EnsureJournalAsync(cancellationToken).ConfigureAwait(false);
         await ClaimEnvironmentAsync(cancellationToken).ConfigureAwait(false);
         var status = await StatusAsync(cancellationToken).ConfigureAwait(false);
         if (status.Applied.Count > 0)
@@ -674,7 +731,7 @@ public sealed class MigrationEngine
         }
 
         await using var lockHandle = await AcquireLockAsync(false, cancellationToken).ConfigureAwait(false);
-        await provider.StateStore.EnsureCreatedAsync(session, Schema, cancellationToken).ConfigureAwait(false);
+        await EnsureJournalAsync(cancellationToken).ConfigureAwait(false);
         await ClaimEnvironmentAsync(cancellationToken).ConfigureAwait(false);
         var existing = (await provider.StateStore.GetRepeatablesAsync(session, Schema, cancellationToken).ConfigureAwait(false)).Select(r => r.Name).ToHashSet(StringComparer.Ordinal);
         var recorded = new List<string>();
@@ -698,7 +755,7 @@ public sealed class MigrationEngine
     }
 
     public async Task<IReadOnlyList<MigrationEvent>> LogAsync(int limit, CancellationToken cancellationToken = default) =>
-        await provider.StateStore.ExistsAsync(session, Schema, cancellationToken).ConfigureAwait(false)
+        await JournalExistsAsync(cancellationToken).ConfigureAwait(false)
             ? await provider.StateStore.GetEventsAsync(session, Schema, limit, cancellationToken).ConfigureAwait(false)
             : [];
 
@@ -800,7 +857,7 @@ public sealed class MigrationEngine
             return [];
         }
 
-        var existing = dryRun && !await provider.StateStore.ExistsAsync(session, Schema, cancellationToken).ConfigureAwait(false)
+        var existing = dryRun && !await JournalExistsAsync(cancellationToken).ConfigureAwait(false)
             ? new Dictionary<string, AppliedRepeatable>()
             : (await provider.StateStore.GetRepeatablesAsync(session, Schema, cancellationToken).ConfigureAwait(false)).ToDictionary(r => r.Name, StringComparer.Ordinal);
 
@@ -856,7 +913,7 @@ public sealed class MigrationEngine
     /// </summary>
     private async Task<IReadOnlyList<string>> RevertRepeatablesAsync(IReadOnlyList<string> names, bool dryRun, bool quiet, CancellationToken cancellationToken)
     {
-        var stored = await provider.StateStore.ExistsAsync(session, Schema, cancellationToken).ConfigureAwait(false)
+        var stored = await JournalExistsAsync(cancellationToken).ConfigureAwait(false)
             ? (await provider.StateStore.GetRepeatablesAsync(session, Schema, cancellationToken).ConfigureAwait(false)).ToDictionary(r => r.Name, StringComparer.Ordinal)
             : [];
 
@@ -979,7 +1036,7 @@ public sealed class MigrationEngine
     /// <summary>Changes are applied but no fingerprint was ever recorded (e.g. an earlier capture failed): a deploy records one.</summary>
     private async Task<bool> SnapshotMissingAsync(CancellationToken cancellationToken)
     {
-        if (!provider.Capabilities.SupportsSchemaFingerprint || !await provider.StateStore.ExistsAsync(session, Schema, cancellationToken).ConfigureAwait(false))
+        if (!provider.Capabilities.SupportsSchemaFingerprint || !await JournalExistsAsync(cancellationToken).ConfigureAwait(false))
         {
             return false;
         }

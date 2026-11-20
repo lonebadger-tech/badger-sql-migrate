@@ -233,4 +233,24 @@ public sealed class TrekConfigTests : IDisposable
         var ex = Assert.Throws<MigrationException>(() => Load(yaml + "\nenvironments:\n  dev: { database: app.db }\n").CreateProvider());
         Assert.Contains(message, ex.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void A_bsm_project_gets_a_rename_hint_instead_of_trek_init()
+    {
+        File.WriteAllText(Path.Combine(dir, TrekConfig.LegacyFileName), "provider: sqlserver\n");
+
+        var ex = Assert.Throws<MigrationException>(() => TrekConfig.Load(dir));
+
+        Assert.Contains("this is a Badger SQL Migrate project", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("rename bsm.yaml to trek.yaml and bsm.plan to trek.plan", ex.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("trek init", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_empty_folder_still_suggests_trek_init()
+    {
+        var ex = Assert.Throws<MigrationException>(() => TrekConfig.Load(dir));
+
+        Assert.Contains("Run 'trek init'", ex.Message, StringComparison.Ordinal);
+    }
 }

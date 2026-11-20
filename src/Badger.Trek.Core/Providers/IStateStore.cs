@@ -9,6 +9,13 @@ public interface IStateStore
     /// <summary>Returns false (without creating anything) when the state tables do not exist yet.</summary>
     Task<bool> ExistsAsync(IDatabaseSession session, string schema, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// SQL that moves the state tables, with every row, from state schema <paramref name="from"/> to
+    /// <paramref name="to"/> (which has no state tables yet). trek shows it to the user and never runs it itself:
+    /// it is how a database journaled by Badger SQL Migrate (state schema "bsm") moves to Badger Trek.
+    /// </summary>
+    string MoveScript(string from, string to);
+
     /// <summary>Reads a value from the state meta table (null when absent).</summary>
     Task<string?> GetMetaAsync(IDatabaseSession session, string schema, string key, CancellationToken cancellationToken);
 
@@ -38,6 +45,12 @@ public interface IStateStore
     Task InsertSchemaSnapshotAsync(IDatabaseSession session, string schema, SchemaSnapshot snapshot, CancellationToken cancellationToken);
 
     Task<SchemaSnapshot?> GetLatestSchemaSnapshotAsync(IDatabaseSession session, string schema, CancellationToken cancellationToken);
+}
+
+/// <summary>The state tables every store keeps, in creation order.</summary>
+public static class StateTables
+{
+    public static readonly IReadOnlyList<string> Names = ["meta", "changes", "repeatables", "events", "schema_snapshots"];
 }
 
 /// <summary>A change as recorded in the database. Scripts are stored so revert works from any checkout.</summary>

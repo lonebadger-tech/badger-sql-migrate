@@ -15,6 +15,16 @@ public sealed partial class SqlServerStateStore : IStateStore
     /// <summary>Version of the state table layout; bump with an upgrade step in <see cref="EnsureCreatedAsync"/>.</summary>
     public const int StateVersion = 1;
 
+    public string MoveScript(string from, string to)
+    {
+        var (f, t) = (Quote(from), Quote(to));
+        return string.Join("\n", [
+            $"IF SCHEMA_ID(N'{to}') IS NULL EXEC(N'CREATE SCHEMA {t}');",
+            .. StateTables.Names.Select(n => $"ALTER SCHEMA {t} TRANSFER {f}.[{n}];"),
+            $"DROP SCHEMA {f};",
+        ]);
+    }
+
     public async Task<bool> ExistsAsync(IDatabaseSession session, string schema, CancellationToken cancellationToken)
     {
         var rows = await session.QueryAsync(
