@@ -1022,9 +1022,10 @@ def commands():
         ("diff-schema", "[--against env] [--exit-code] [--script file]", "Schema differences: live versus the schema recorded after the last deploy, or versus another environment. --exit-code returns 3 when they differ; --script writes SQL that turns this database into the other."),
         ("verify", "", "Hashes versus working copy, rendered-SQL drift, verify scripts (rolled back), schema drift. Exit 1 on problems."),
         ("log", "[-n|--limit 50]", "Deploy, revert, fail, repeatable and resource events, newest first."),
-        ("baseline", "--to x | --from flyway|dbup|grate|roundhouse|sqitch|sqlproj [--journal schema.table] [--skip-checksums] [-y]", "Record changes as applied without running them: up to x, or as far as the old tool's journal in the database says (with repeatables it already applied, or whose live definition matches). --from sqlproj: the database was published from the SQL project."),
+        ("baseline", "--to x | --from flyway|dbup|ef|grate|roundhouse|sqitch|sqlproj [--journal schema.table] [--skip-checksums] [-y]", "Record changes as applied without running them: up to x, or as far as the old tool's journal in the database says (with repeatables it already applied, or whose live definition matches). --from sqlproj: the database was published from the SQL project."),
         ("import flyway &lt;folder&gt;", "[--config file] [--location dir…] [--provider sqlserver|postgresql|sqlite] [--dry-run]", "Convert a Flyway project into a new trek project (written to -C). No database."),
         ("import dbup &lt;folder&gt;", "[--file-names] [--run-always glob…] [--no-variables] [--var name=value…] [--dry-run]", "Convert DbUp scripts into a new trek project (written to -C). No database."),
+        ("import ef &lt;project folder|up.sql&gt;", "[--down down.sql] [--context name] [--startup-project dir] [--provider …] [--dry-run]", "Convert Entity Framework Core migrations into a new trek project: runs dotnet ef in the project (which builds it), or reads scripts from dotnet ef migrations script. No database."),
         ("import grate &lt;folder&gt;", "[--folder key=name…] [--environment name…] [--ignore-directory-names] [--no-tokens] [--var name=value…] [--dry-run]", "Convert a grate or RoundhousE scripts folder into a new trek project. No database."),
         ("import sqitch &lt;folder&gt;", "[--engine name] [--provider …] [--dry-run]", "Convert a Sqitch project into a new trek project. No database."),
         ("import sqlproj &lt;file.sqlproj|folder&gt;", "[--dry-run]", "Convert an SSDT / SQL Database Project into a new SQL Server trek project: one change or repeatable per object, in dependency order. No database."),
@@ -1222,8 +1223,8 @@ trek baseline --to @baseline -e prod
 trek status -e prod                          # initial-schema shown as (baseline)''')}
 <p>Baseline only works on a database with no deployed changes, takes the deploy lock, records the environment, and writes a schema fingerprint so later drift is detected.</p>
 
-<h2>Coming from Flyway, DbUp or grate</h2>
-<p>For Flyway, DbUp, grate, RoundhousE, Sqitch and SQL projects (SSDT), <code>trek import</code> does the conversion and <code>trek baseline --from</code> reads each database's history for you; see {link("docs/importing/", "Moving from other tools")}. For anything else:</p>
+<h2>Coming from Flyway, DbUp, EF Core or grate</h2>
+<p>For Flyway, DbUp, Entity Framework Core, grate, RoundhousE, Sqitch and SQL projects (SSDT), <code>trek import</code> does the conversion and <code>trek baseline --from</code> reads each database's history for you; see {link("docs/importing/", "Moving from other tools")}. For anything else:</p>
 <ul>
   <li>Convert your versioned scripts into changes (one folder each) in their existing order, or collapse history into one <code>initial-schema</code> change.</li>
   <li>Write revert scripts for the changes you might want to undo; mark the rest <code>!irreversible</code>.</li>
@@ -1235,7 +1236,7 @@ trek status -e prod                          # initial-schema shown as (baseline
 
 
 def importing():
-    return doc("docs/importing/", "Moving from other tools", "Convert a Flyway, DbUp, grate (or RoundhousE), Sqitch or SQL Server Database Project (SSDT), then adopt the databases it already manages without running anything.", f"""
+    return doc("docs/importing/", "Moving from other tools", "Convert a Flyway, DbUp, Entity Framework Core, grate (or RoundhousE), Sqitch or SQL Server Database Project (SSDT), then adopt the databases it already manages without running anything.", f"""
 {sh('''trek import flyway ./flyway-project -C db --dry-run   # see what it would do
 trek import flyway ./flyway-project -C db             # write a new trek project in db/
 trek plan check -C db
@@ -1246,11 +1247,12 @@ trek deploy -C db -e prod                             # from now on''')}
 <tr><th>From</th><th>Import</th><th>Adopt existing databases</th></tr>
 <tr><td>{link("docs/importing/#flyway", "Flyway")}</td><td><code>trek import flyway</code></td><td><code>trek baseline --from flyway</code> (checksums checked)</td></tr>
 <tr><td>{link("docs/importing/#dbup", "DbUp")}</td><td><code>trek import dbup</code></td><td><code>trek baseline --from dbup</code></td></tr>
+<tr><td>{link("docs/importing/#ef", "Entity Framework Core")}</td><td><code>trek import ef</code></td><td><code>trek baseline --from ef</code></td></tr>
 <tr><td>{link("docs/importing/#grate", "grate, RoundhousE")}</td><td><code>trek import grate</code></td><td><code>trek baseline --from grate</code> or <code>--from roundhouse</code> (hashes checked)</td></tr>
 <tr><td>{link("docs/importing/#sqitch", "Sqitch")}</td><td><code>trek import sqitch</code></td><td>PostgreSQL: <code>trek baseline --from sqitch</code> (script hashes checked). Other engines: <code>trek baseline --to &lt;change&gt;</code></td></tr>
 <tr><td>{link("docs/importing/#sqlproj", "SQL projects (SSDT)")}</td><td><code>trek import sqlproj</code></td><td><code>trek baseline --from sqlproj</code> (tables and module definitions checked)</td></tr>
 </table>
-<p>Imports target SQL Server unless you pass <code>--provider postgresql</code> or <code>--provider sqlite</code>; Sqitch projects for PostgreSQL (<code>engine = pg</code>) or SQLite become projects for that provider on their own, and Flyway's <code>jdbc:postgresql</code> and <code>jdbc:sqlite</code> URLs become environments for it.</p>
+<p>Imports target SQL Server unless you pass <code>--provider postgresql</code> or <code>--provider sqlite</code>; EF Core migrations take the provider their SQL was written for, Sqitch projects for PostgreSQL (<code>engine = pg</code>) or SQLite become projects for that provider on their own, and Flyway's <code>jdbc:postgresql</code> and <code>jdbc:sqlite</code> URLs become environments for it.</p>
 <p>Every import marks changes <code>!notx</code> when their scripts contain statements SQL Server refuses inside a transaction (the other tools often run without one), and lists everything it could not carry over.</p>
 
 <h2 id="flyway">Flyway</h2>
@@ -1292,6 +1294,23 @@ trek baseline --from dbup -C db -e prod                    # reads dbo.SchemaVer
 <tr><td><code>$name$</code> variables, <code>WithVariable("name", value)</code></td><td><code>{{name}}</code> variables; pass the values with <code>--var name=value</code>, or add them to <code>trek.yaml</code> afterwards (<code>plan check</code> fails until every variable has a value). <code>--no-variables</code> if the code calls <code>WithVariablesDisabled()</code>.</td></tr>
 </table>
 <p>DbUp has no down scripts, so every change is <code>!irreversible</code>. DbUp runs without a transaction unless configured to; trek runs each change in one, and <code>trek plan check</code> lists any statement that needs <code>!notx</code>.</p>
+
+<h2 id="ef">Entity Framework Core</h2>
+{sh('''trek import ef ./src/Shop.Data -C db                    # runs dotnet ef in that project
+trek import ef up.sql --down down.sql -C db              # or from scripts you wrote
+trek baseline --from ef -C db -e prod                    # reads dbo.__EFMigrationsHistory''')}
+<p>EF Core migrations are C#, so the import works from the SQL EF generates from them. Point it at the project that holds the migrations, and trek runs <code>dotnet ef migrations script</code> twice: once for every migration's <code>Up()</code>, and once from the last migration back to the start for every <code>Down()</code>. That builds the project, and needs the <code>dotnet-ef</code> tool and <code>Microsoft.EntityFrameworkCore.Design</code> in the project; pass <code>--context</code> when it has several DbContexts and <code>--startup-project</code> when another project configures it. To work from scripts instead, write them yourself (without <code>--idempotent</code>):</p>
+{sh('''dotnet ef migrations script -o up.sql
+dotnet ef migrations script <LastMigration> 0 -o down.sql''')}
+<table>
+<tr><th>EF Core</th><th>trek</th></tr>
+<tr><td>Migration <code>20261120131340_AddBlogUrl</code></td><td>Change <code>add-blog-url</code>, in migration order, planned at the migration's timestamp. The plan note <code>ef 20261120131340_AddBlogUrl</code> links it to <code>__EFMigrationsHistory</code>.</td></tr>
+<tr><td><code>Up()</code> as SQL</td><td><code>deploy.sql</code>, without EF's <code>BEGIN TRANSACTION</code>/<code>COMMIT</code> (trek runs each change in its own transaction) and without the <code>__EFMigrationsHistory</code> table and rows</td></tr>
+<tr><td><code>Down()</code> as SQL</td><td><code>revert.sql</code>. Without a down script, changes are <code>!irreversible</code>.</td></tr>
+<tr><td>SQLite table rebuilds (<code>PRAGMA foreign_keys = 0</code> between EF's transactions)</td><td><code>!notx</code>, since the pragma does nothing inside a transaction</td></tr>
+<tr><td>Provider</td><td>From the SQL: SQL Server, PostgreSQL (Npgsql) or SQLite; <code>--provider</code> overrides it</td></tr>
+</table>
+<p>Tested with EF Core 10. Baseline reads <code>__EFMigrationsHistory</code> (in <code>dbo</code>, <code>public</code> or the SQLite file; <code>--journal</code> for another schema or table) and refuses when a migration EF applied has no change in the plan, or one before the last applied migration was skipped. Leave the history table until the application no longer calls <code>Database.Migrate()</code>, and add new changes with <code>trek add</code> from then on: <code>trek add --from-diff</code> can write them from a database you changed with <code>dotnet ef database update</code>.</p>
 
 <h2 id="grate">grate and RoundhousE</h2>
 {sh('''trek import grate ./db -C trek-db --var AppRole=app_reader

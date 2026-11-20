@@ -1,0 +1,30 @@
+﻿START TRANSACTION;
+ALTER TABLE "Blogs" DROP COLUMN "Rating";
+
+ALTER TABLE "Posts" ADD "Title" text NOT NULL DEFAULT '';
+
+DELETE FROM "__EFMigrationsHistory"
+WHERE "MigrationId" = '20261120131455_RatingDropTitle';
+
+COMMIT;
+
+START TRANSACTION;
+DROP INDEX "IX_Blogs_Name";
+
+ALTER TABLE "Blogs" DROP COLUMN "Url";
+
+DELETE FROM "__EFMigrationsHistory"
+WHERE "MigrationId" = '20261120131447_AddBlogUrl';
+
+COMMIT;
+
+START TRANSACTION;
+DROP TABLE "Posts";
+
+DROP TABLE "Blogs";
+
+DELETE FROM "__EFMigrationsHistory"
+WHERE "MigrationId" = '20261120131440_Initial';
+
+COMMIT;
+

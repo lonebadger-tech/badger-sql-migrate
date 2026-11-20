@@ -158,15 +158,15 @@ root.Subcommands.Add(log);
 
 // baseline
 var baselineTo = new Option<string?>("--to") { Description = "Mark changes up to this one as already applied (with --from sqlproj: further than the imported changes)." };
-var baselineFrom = new Option<string?>("--from") { Description = "flyway | dbup | grate | roundhouse | sqitch: read what the database already has from that tool's journal; sqlproj: the database was published from the SQL project (for projects made with 'trek import')." };
-baselineFrom.AcceptOnlyFromAmong("flyway", "dbup", "grate", "roundhouse", "sqitch", "sqlproj");
-var baselineJournal = new Option<string?>("--journal") { Description = "The tool's journal table, [schema.]table (default: flyway_schema_history or SchemaVersions in dbo/public, grate.ScriptsRun, RoundhousE.ScriptsRun, sqitch.changes)." };
+var baselineFrom = new Option<string?>("--from") { Description = "flyway | dbup | ef | grate | roundhouse | sqitch: read what the database already has from that tool's journal; sqlproj: the database was published from the SQL project (for projects made with 'trek import')." };
+baselineFrom.AcceptOnlyFromAmong("flyway", "dbup", "ef", "grate", "roundhouse", "sqitch", "sqlproj");
+var baselineJournal = new Option<string?>("--journal") { Description = "The tool's journal table, [schema.]table (default: flyway_schema_history, SchemaVersions or __EFMigrationsHistory in dbo/public/main, grate.ScriptsRun, RoundhousE.ScriptsRun, sqitch.changes)." };
 var baselineSkipChecksums = new Option<bool>("--skip-checksums") { Description = "Do not compare Flyway's checksums, grate's hashes or Sqitch's script hashes with the imported scripts (sqlproj: do not check that the project's tables exist)." };
 var baseline = new Command("baseline", "Adopt an existing database: record changes as applied without running them.") { baselineTo, baselineFrom, baselineJournal, baselineSkipChecksums, yes };
 baseline.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.Baseline(g, r.GetValue(baselineTo), r.GetValue(baselineFrom), r.GetValue(baselineJournal), r.GetValue(baselineSkipChecksums), r.GetValue(yes), ct)));
 
 // import
-var import = new Command("import", "Convert another tool's migrations (Flyway, DbUp, grate, Sqitch, SQL projects) into a new trek project (written to --project).") { noAgentsFile };
+var import = new Command("import", "Convert another tool's migrations (Flyway, DbUp, Entity Framework Core, grate, Sqitch, SQL projects) into a new trek project (written to --project).") { noAgentsFile };
 var importPath = new Argument<string>("path") { Description = "The folder to import from." };
 var importDryRun = new Option<bool>("--dry-run") { Description = "Show what would be written without writing anything." };
 var importProvider = new Option<string?>("--provider") { Description = "The database the project targets: sqlserver (default), postgresql or sqlite. Sqitch projects for pg or sqlite default to that provider." };
@@ -181,6 +181,13 @@ var dbupNoVariables = new Option<bool>("--no-variables") { Description = "The pr
 var importDbUp = new Command("dbup", "Import DbUp scripts: one change per script in DbUp's order; $variables$ become {variables} (values via --var).") { importPath, dbupFileNames, dbupRunAlways, dbupNoVariables, importProvider, importDryRun };
 importDbUp.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.ImportDbUp(g, r.GetValue(importPath)!, r.GetValue(dbupFileNames), r.GetValue(dbupRunAlways) ?? [], r.GetValue(dbupNoVariables), r.GetValue(importDryRun), r.GetValue(importProvider) ?? "sqlserver")));
 import.Subcommands.Add(importDbUp);
+var importEfPath = new Argument<string>("path") { Description = "The project holding the migrations (trek runs 'dotnet ef' to script them), or a script from 'dotnet ef migrations script'." };
+var efDown = new Option<string?>("--down") { Description = "With a script file: the down script, from 'dotnet ef migrations script <last migration> 0'. Without it, changes are !irreversible." };
+var efContext = new Option<string?>("--context") { Description = "The DbContext, when the project has several (passed to dotnet ef)." };
+var efStartupProject = new Option<string?>("--startup-project") { Description = "The project that configures the DbContext, when it is not the migrations project (passed to dotnet ef)." };
+var importEf = new Command("ef", "Import Entity Framework Core migrations: one change per migration, from Up() and Down() as SQL (dotnet ef migrations script). The provider comes from the SQL.") { importEfPath, efDown, efContext, efStartupProject, importProvider, importDryRun };
+importEf.SetAction((r, ct) => Commands.Run(Globals(r), g => Commands.ImportEf(g, r.GetValue(importEfPath)!, r.GetValue(efDown), r.GetValue(efContext), r.GetValue(efStartupProject), r.GetValue(importDryRun), r.GetValue(importProvider))));
+import.Subcommands.Add(importEf);
 var grateFolder = new Option<string[]>("--folder") { Description = "A renamed grate folder, key=name (e.g. up=ddl). Repeatable." };
 var grateEnvironments = new Option<string[]>("--environment") { Description = "Environment names used in *.ENV.* file names (default: the upper-case parts of those names). Repeatable or comma-separated." };
 var grateIgnoreDirs = new Option<bool>("--ignore-directory-names") { Description = "grate ran with --ignoredirectorynames: script names are file names only." };
