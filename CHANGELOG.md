@@ -4,6 +4,10 @@ All notable changes to Badger Trek. The format follows [Keep a Changelog](https:
 
 ## Unreleased
 
+### Added
+
+- Entity Framework Core: `trek import ef` turns EF Core migrations into a trek project, one change per migration, with each migration's `Up()` as `deploy.sql` and `Down()` as `revert.sql`. Point it at the project holding the migrations and trek runs `dotnet ef migrations script` for both directions, or give it the scripts (`up.sql --down down.sql`). The provider comes from the SQL (SQL Server, PostgreSQL or SQLite). EF's transactions and `__EFMigrationsHistory` rows are left out, and SQLite table rebuilds are `!notx`. `trek baseline --from ef` adopts databases EF already migrated by reading their `__EFMigrationsHistory`. Tested with EF Core 10.
+
 ### Fixed
 
 - `trek convert schema --to sqlite` writes SQL that SQLite 3.26 runs, the default `sqlite.minVersion`, so the converted project no longer fails its own lint (TREK008). PostgreSQL's `->`/`->>`/`#>>` become `json_extract` (a chain becomes one path), `NULLS FIRST`/`LAST` an `IS NULL` sort key, an aggregate's `FILTER (WHERE ...)` a `CASE` inside it, `RIGHT JOIN` a `LEFT JOIN` with the sides swapped, and `UPDATE ... FROM` in a trigger correlated subqueries. `RETURNING` in a trigger is left out, since SQLite does not allow it there, and an `UPDATE` or `DELETE` in a trigger no longer gives its target table an alias, which SQLite rejects in triggers (the table name is used instead). Generated columns, `FULL JOIN` and `ORDER BY` inside an aggregate, which have no older form, get a REVIEW marker naming the SQLite version they need.

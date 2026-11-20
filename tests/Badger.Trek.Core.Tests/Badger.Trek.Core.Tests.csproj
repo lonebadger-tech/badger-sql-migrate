@@ -19,4 +19,10 @@
     <ProjectReference Include="..\..\src\Badger.Trek.Core\Badger.Trek.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Written by 'dotnet ef migrations script' (EF Core 10.0.15) for three migrations of one model, per provider:
+         up.sql is every migration, down.sql is 'script RatingDropTitle 0'. Kept as EF wrote them (BOM included). -->
+    <None Include="EfScripts\**\*.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

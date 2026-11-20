@@ -95,8 +95,9 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 | `diff-schema [--against env] [--exit-code] [--script file]` | What changed since the last deploy, or how two environments differ; SQL to turn one into the other |
 | `verify` | Hash check, run verify scripts, detect schema drift |
 | `log` | Deploy/revert/failure history from the database |
-| `baseline --to x \| --from flyway\|dbup\|grate\|roundhouse\|sqitch\|sqlproj` | Adopt an existing database without running scripts (up to x, as far as the old tool's journal says, or everything a dacpac publish created) |
+| `baseline --to x \| --from flyway\|dbup\|ef\|grate\|roundhouse\|sqitch\|sqlproj` | Adopt an existing database without running scripts (up to x, as far as the old tool's journal says, or everything a dacpac publish created) |
 | `import flyway\|dbup\|grate\|sqitch <dir>` | Convert a Flyway, DbUp, grate/RoundhousE or Sqitch project into a new trek project: migrations, reverts, repeatables, variables, environments |
+| `import ef <project dir \| up.sql>` | Convert Entity Framework Core migrations: each migration's `Up()` and `Down()` as SQL from `dotnet ef migrations script` (trek runs it for a project folder) |
 | `import sqlproj <file.sqlproj>` | Convert an SSDT / SQL Database Project: one change per table, type or schema in dependency order, views/procedures/functions/triggers as repeatables, the post-deployment script and SqlCmdVariables |
 | `convert schema --out <dir>` / `convert data --target <dir>` | Convert a live database between SQL Server, PostgreSQL and SQLite, in any direction: a new project for the other provider (tables, keys, indexes; views, routines and triggers translated, with `CONVERSION.md` listing what to review), then copy the rows and compare counts |
 | `doctor` | Check config, Entra sign-in and connectivity; show resources |

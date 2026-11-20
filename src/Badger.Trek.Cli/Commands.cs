@@ -303,6 +303,126 @@ public static partial class Commands
         return WriteImport(g, imported, dryRun, Providers.Resolve(providerId));
     }
 
+    /// <summary>
+    /// Entity Framework Core: <paramref name="path"/> is either the SQL 'dotnet ef migrations script' wrote (with an
+    /// optional <paramref name="downScript"/>), or the project holding the migrations, for which trek runs
+    /// 'dotnet ef' itself to write both scripts. The provider comes from the script unless given.
+    /// </summary>
+    public static int ImportEf(GlobalOptions g, string path, string? downScript, string? context, string? startupProject, bool dryRun, string? providerId = null)
+    {
+        RequireWorkingCopy(g, "import");
+        EfImportOptions options;
+        if (File.Exists(path))
+        {
+            options = new EfImportOptions
+            {
+                UpScript = File.ReadAllText(path),
+                DownScript = downScript is null ? null : File.ReadAllText(downScript),
+                Source = Path.GetFileName(path),
+            };
+        }
+        else if (Directory.Exists(path))
+        {
+            if (downScript is not null)
+            {
+                throw new MigrationException("--down goes with a script file; for a project folder, trek writes the down script itself.");
+            }
+
+            options = EfScripts(g, path, context, startupProject);
+        }
+        else
+        {
+            throw new MigrationException($"'{path}' is neither a script from 'dotnet ef migrations script' nor a project folder.");
+        }
+
+        var imported = EfImporter.Import(options);
+        return WriteImport(g, imported, dryRun, Providers.Resolve(providerId ?? EfImporter.DetectProvider(options.UpScript)));
+    }
+
+    /// <summary>Runs 'dotnet ef' on the migrations project: the up script, and the down script from the last migration.</summary>
+    private static EfImportOptions EfScripts(GlobalOptions g, string projectDir, string? context, string? startupProject)
+    {
+        var project = Path.GetFullPath(projectDir);
+        List<string> common = ["--project", project];
+        if (startupProject is not null)
+        {
+            common.AddRange(["--startup-project", Path.GetFullPath(startupProject)]);
+        }
+
+        if (context is not null)
+        {
+            common.AddRange(["--context", context]);
+        }
+
+        var work = Path.Combine(Path.GetTempPath(), "trek-ef", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(work);
+        try
+        {
+            g.Out.Muted($"running dotnet ef in {project} (builds the project)");
+            var list = RunDotnetEf(project, ["migrations", "list", "--no-connect", "--json", .. common]);
+            var ids = System.Text.Json.JsonDocument.Parse(JsonPart(list)).RootElement.EnumerateArray().Select(e => e.GetProperty("id").GetString()!).ToList();
+            if (ids.Count == 0)
+            {
+                throw new MigrationException($"{project} has no migrations ('dotnet ef migrations list' lists none).");
+            }
+
+            var up = Path.Combine(work, "up.sql");
+            var down = Path.Combine(work, "down.sql");
+            RunDotnetEf(project, ["migrations", "script", "--no-build", "--output", up, .. common]);
+            RunDotnetEf(project, ["migrations", "script", ids[^1], "0", "--no-build", "--output", down, .. common]);
+            return new EfImportOptions
+            {
+                UpScript = File.ReadAllText(up),
+                DownScript = File.ReadAllText(down),
+                Source = $"dotnet ef migrations script ({Path.GetFileName(project)})",
+            };
+        }
+        finally
+        {
+            Directory.Delete(work, recursive: true);
+        }
+    }
+
+    private static string RunDotnetEf(string workingDirectory, IReadOnlyList<string> arguments)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo("dotnet", ["ef", .. arguments])
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        System.Diagnostics.Process? process;
+        try
+        {
+            process = System.Diagnostics.Process.Start(start);
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            throw new MigrationException($"Could not run 'dotnet ef': {ex.Message}");
+        }
+
+        using var ef = process ?? throw new MigrationException("Could not run 'dotnet ef'.");
+        ef.StandardInput.Close();
+        var output = ef.StandardOutput.ReadToEndAsync();
+        var error = ef.StandardError.ReadToEndAsync();
+        ef.WaitForExit();
+        if (ef.ExitCode != 0)
+        {
+            var text = (error.GetAwaiter().GetResult() + "\n" + output.GetAwaiter().GetResult()).Trim();
+            throw new MigrationException(
+                $"'dotnet ef {string.Join(' ', arguments.Take(2))}' failed (exit code {ef.ExitCode}). It needs the dotnet-ef tool (dotnet tool install --global dotnet-ef) " +
+                $"and Microsoft.EntityFrameworkCore.Design in the project; with several DbContexts pass --context, and --startup-project when another project configures it.\n{text}");
+        }
+
+        return output.GetAwaiter().GetResult();
+    }
+
+    /// <summary>'dotnet ef ... --json' prints build messages before the JSON: the part from the first '['.</summary>
+    private static string JsonPart(string output) =>
+        output.IndexOf('[', StringComparison.Ordinal) is var i and >= 0 ? output[i..] : throw new MigrationException($"'dotnet ef migrations list' printed no JSON:\n{output}");
+
     /// <summary>SQL Server only: SQL projects are T-SQL, read with the SQL Server provider's ScriptDom parser.</summary>
     public static int ImportSqlProj(GlobalOptions g, string path, bool dryRun)
     {
@@ -1405,6 +1525,9 @@ public static partial class Commands
                 case "dbup":
                     to = ForeignJournal.DbUpTarget(project, await ForeignJournal.ReadDbUpAsync(ctx.Session, ctx.Provider, schema, table, ct));
                     break;
+                case "ef":
+                    to = ForeignJournal.EfTarget(project, await ForeignJournal.ReadEfAsync(ctx.Session, ctx.Provider, schema, table, ct));
+                    break;
                 case "sqitch":
                     to = ForeignJournal.SqitchTarget(project, await ForeignJournal.ReadSqitchAsync(ctx.Session, ctx.Provider, schema, table, ct), checkHashes: !skipChecksums);
                     break;
@@ -1414,7 +1537,7 @@ public static partial class Commands
                     repeatables = ForeignJournal.GrateRepeatables(project, runs, Rendered);
                     break;
                 default:
-                    throw new MigrationException("--from must be flyway, dbup, grate, roundhouse or sqitch.");
+                    throw new MigrationException("--from must be flyway, dbup, ef, grate, roundhouse or sqitch.");
             }
             if (to is null)
             {
@@ -1453,7 +1576,9 @@ public static partial class Commands
         {
             g.Out.Info(string.Equals(from, SqlProjImporter.Tool, StringComparison.OrdinalIgnoreCase)
                 ? "the next 'trek deploy' runs the permission and post-deployment scripts once (they may be newer than the published ones), then only what is added or edited after the import. Stop publishing the dacpac to this database."
-                : $"the next 'trek deploy' applies later changes and any other repeatables. {from}'s own journal table is left in place; drop it when you no longer need it.");
+                : string.Equals(from, "ef", StringComparison.OrdinalIgnoreCase)
+                    ? "the next 'trek deploy' applies later changes and any other repeatables. __EFMigrationsHistory is left in place; drop it when the application no longer runs EF migrations (Database.Migrate()) against this database."
+                    : $"the next 'trek deploy' applies later changes and any other repeatables. {from}'s own journal table is left in place; drop it when you no longer need it.");
         }
         return Ok;
     }
@@ -1782,6 +1907,7 @@ public static partial class Commands
         var (schema, table) = tool.ToLowerInvariant() switch
         {
             "dbup" => (defaultSchema, ForeignJournal.DbUpDefaultTable),
+            "ef" => (defaultSchema, EfImporter.HistoryTable),
             "grate" => (ForeignJournal.GrateDefaultSchema, ForeignJournal.GrateDefaultTable),
             "roundhouse" => ("RoundhousE", ForeignJournal.GrateDefaultTable),
             "sqitch" => (ForeignJournal.SqitchDefaultSchema, ForeignJournal.SqitchDefaultTable),

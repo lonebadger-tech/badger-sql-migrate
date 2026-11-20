@@ -39,6 +39,47 @@ public static partial class ForeignJournal
             (string)r["script"]!)).ToList();
     }
 
+    /// <summary>The migration ids in Entity Framework Core's __EFMigrationsHistory, in order.</summary>
+    public static async Task<IReadOnlyList<string>> ReadEfAsync(IDatabaseSession session, IDatabaseProvider provider, string schema, string table, CancellationToken cancellationToken)
+    {
+        var column = provider.QuoteIdentifier("MigrationId");
+        var rows = await Query(session, $"SELECT {column} AS migration_id FROM {provider.QuoteIdentifier(schema)}.{provider.QuoteIdentifier(table)} ORDER BY {column}", schema, table, "Entity Framework", cancellationToken).ConfigureAwait(false);
+        return rows.Select(r => (string)r["migration_id"]!).ToList();
+    }
+
+    /// <summary>
+    /// The last imported change EF applied (null when none). Every migration in __EFMigrationsHistory must be a change
+    /// with an 'ef &lt;id&gt;' note, and every change before the last applied one must have been applied too.
+    /// </summary>
+    public static string? EfTarget(MigrationProject project, IReadOnlyList<string> history)
+    {
+        var changes = project.Changes.Select(c => (c.Name, Id: c.Plan.Note is null ? null : EfNote().Match(c.Plan.Note) is { Success: true } m ? m.Groups["id"].Value : null)).ToList();
+        var problems = new List<string>();
+        var applied = history.ToHashSet(StringComparer.Ordinal);
+        foreach (var id in history.Where(id => changes.All(c => c.Id != id)))
+        {
+            problems.Add($"EF applied migration '{id}', but no change in the plan has the note 'ef {id}'. Import again from a script that includes it.");
+        }
+
+        var lastApplied = changes.FindLastIndex(c => c.Id is not null && applied.Contains(c.Id));
+        for (var i = 0; i < lastApplied; i++)
+        {
+            if (changes[i].Id is null || !applied.Contains(changes[i].Id!))
+            {
+                problems.Add(changes[i].Id is null
+                    ? $"'{changes[i].Name}' comes before migrations EF applied but did not come from EF; move it after them in the plan."
+                    : $"'{changes[i].Name}' ({changes[i].Id}) was not applied by EF, but later migrations were. Apply it with EF first, or move it later in the plan.");
+            }
+        }
+
+        if (problems.Count > 0)
+        {
+            throw new MigrationException("This database's __EFMigrationsHistory does not match the plan:\n  " + string.Join("\n  ", problems));
+        }
+
+        return lastApplied < 0 ? null : changes[lastApplied].Name;
+    }
+
     public static async Task<IReadOnlyList<string>> ReadDbUpAsync(IDatabaseSession session, IDatabaseProvider provider, string schema, string table, CancellationToken cancellationToken)
     {
         var rows = await Query(session, $"SELECT ScriptName FROM {provider.QuoteIdentifier(schema)}.{provider.QuoteIdentifier(table)}", schema, table, "DbUp", cancellationToken).ConfigureAwait(false);
@@ -333,4 +374,7 @@ public static partial class ForeignJournal
 
     [GeneratedRegex(@"^\s*dbup (?<s>.+?)\s*$")]
     private static partial Regex DbUpNote();
+
+    [GeneratedRegex(@"^\s*ef (?<id>\S+)\s*$")]
+    private static partial Regex EfNote();
 }
