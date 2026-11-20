@@ -9,7 +9,7 @@ namespace Badger.Trek.Providers.PostgreSql.Tests;
 
 /// <summary>
 /// One PostgreSQL for the whole run: TREK_TEST_POSTGRES (a connection string to an existing server) or a
-/// Testcontainers container of TREK_TEST_POSTGRES_IMAGE (default postgres:18; CI runs 12 through 18).
+/// Testcontainers container of TREK_TEST_POSTGRES_IMAGE (default postgres:18; CI runs 15 through 18).
 /// When neither is available the database tests skip.
 /// </summary>
 public sealed class PostgreSqlFixture : IAsyncLifetime

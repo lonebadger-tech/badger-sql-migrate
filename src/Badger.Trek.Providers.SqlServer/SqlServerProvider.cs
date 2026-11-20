@@ -119,15 +119,25 @@ public sealed class SqlServerProvider : IDatabaseProvider
             9 => "Azure SQL Edge",
             _ => "SQL Server",
         };
+        var version = Convert.ToString(row["version"], System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
         return
         [
-            new("server", $"{engine} {row["version"]} ({row["edition"]})"),
+            new("server", $"{engine} {version} ({row["edition"]}){UnsupportedVersionNote(engine, version)}"),
             new("login", Convert.ToString(row["login"], System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty),
             new("database", Convert.ToString(row["database"], System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty),
             new("encrypted", Convert.ToString(row["encrypted"], System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"),
             new("auth scheme", Convert.ToString(row["auth_scheme"], System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"),
         ];
     }
+
+    /// <summary>The oldest SQL Server release trek supports: 2019 (version 15). Azure SQL is always current.</summary>
+    public const int OldestSupportedMajorVersion = 15;
+
+    /// <summary>A note for 'trek doctor' when the server is older than SQL Server 2019, else empty.</summary>
+    public static string UnsupportedVersionNote(string engine, string productVersion) =>
+        engine == "SQL Server" && int.TryParse(productVersion.Split('.')[0], System.Globalization.CultureInfo.InvariantCulture, out var major) && major < OldestSupportedMajorVersion
+            ? " - not supported: Badger Trek needs SQL Server 2019 or later"
+            : string.Empty;
 
     public string FormatBatchSeparator() => "GO";
 

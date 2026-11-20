@@ -6,7 +6,7 @@ using Npgsql;
 
 namespace Badger.Trek.Providers.PostgreSql;
 
-/// <summary>PostgreSQL 12+ (including Azure Database for PostgreSQL, Amazon RDS/Aurora, Supabase, Neon).</summary>
+/// <summary>PostgreSQL 15+ (including Azure Database for PostgreSQL, Amazon RDS/Aurora, Supabase, Neon).</summary>
 public sealed class PostgreSqlProvider : IDatabaseProvider
 {
     public const string ProviderId = "postgresql";
@@ -71,18 +71,31 @@ public sealed class PostgreSqlProvider : IDatabaseProvider
         return new PostgreSqlSession(connection, description) { Fingerprint = fingerprint };
     }
 
+    /// <summary>
+    /// The oldest PostgreSQL major version trek supports: the oldest the PostgreSQL project still supports (each major
+    /// version for five years; 14 ended in November 2026).
+    /// </summary>
+    public const int OldestSupportedMajorVersion = 15;
+
+    /// <summary>A note for 'trek doctor' when the server (server_version_num, e.g. 140025) is older than that, else empty.</summary>
+    public static string UnsupportedVersionNote(int serverVersionNum) =>
+        serverVersionNum / 10000 < OldestSupportedMajorVersion
+            ? $" - not supported: PostgreSQL {serverVersionNum / 10000} is past its end of life; Badger Trek needs PostgreSQL {OldestSupportedMajorVersion} or later"
+            : string.Empty;
+
     public async Task<IReadOnlyList<KeyValuePair<string, string>>> DescribeAsync(IDatabaseSession session, CancellationToken cancellationToken)
     {
         var row = (await session.QueryAsync("""
             SELECT version() AS version, current_user AS login, current_database() AS database,
                    (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()) AS ssl,
                    (SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()) AS tls_version,
-                   current_setting('server_encoding') AS encoding
+                   current_setting('server_encoding') AS encoding,
+                   current_setting('server_version_num')::int AS version_num
             """, null, cancellationToken).ConfigureAwait(false))[0];
         string S(string key) => Convert.ToString(row[key], CultureInfo.InvariantCulture) ?? "unknown";
         return
         [
-            new("server", S("version")),
+            new("server", S("version") + UnsupportedVersionNote(Convert.ToInt32(row["version_num"], CultureInfo.InvariantCulture))),
             new("login", S("login")),
             new("database", S("database")),
             new("encrypted", row["ssl"] is true ? $"yes ({S("tls_version")})" : "no"),
