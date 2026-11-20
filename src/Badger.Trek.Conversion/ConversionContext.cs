@@ -7,6 +7,7 @@ public enum Dialect
     PostgreSql,
     SqlServer,
     Sqlite,
+    MySql,
 }
 
 public sealed record ConversionOptions
@@ -75,6 +76,13 @@ public sealed class ConversionContext
     {
         var t = sourceType.Trim().ToLowerInvariant();
         var name = t.Split('(')[0].Trim();
+        if (Source == Dialect.MySql)
+        {
+            return name is "bool" or "boolean" || t.StartsWith("tinyint(1)", StringComparison.Ordinal) ? ColumnKind.Boolean
+                : name is "char" or "varchar" or "tinytext" or "text" or "mediumtext" or "longtext" or "enum" or "set" ? ColumnKind.Text
+                : ColumnKind.Other;
+        }
+
         if (Source == Dialect.Sqlite)
         {
             return t.Contains("bool", StringComparison.Ordinal) ? ColumnKind.Boolean
@@ -128,45 +136,59 @@ public sealed class ConversionContext
     public static string DefaultSchemaOf(Dialect dialect) => dialect switch
     {
         Dialect.PostgreSql => "public",
-        Dialect.Sqlite => "main",
+        Dialect.Sqlite or Dialect.MySql => FlatSchema,
         _ => "dbo",
     };
 
+    /// <summary>The schema of every object in a target without schemas (SQLite; MySQL, where a schema is the database). Never written out.</summary>
+    public const string FlatSchema = "main";
+
+    /// <summary>The target has no schemas inside the database: names are flattened.</summary>
+    public bool FlatTarget => Target is Dialect.Sqlite or Dialect.MySql;
+
     /// <summary>
-    /// A table, view or other schema object's name in the target. SQLite has no schemas: objects outside the source's
-    /// default schema get the schema as a prefix (sales.Customer becomes sales_customer), so names never collide.
+    /// A table, view or other schema object's name in the target. SQLite has no schemas, and in MySQL a schema is the
+    /// database: objects outside the source's default schema get the schema as a prefix (sales.Customer becomes
+    /// sales_customer), so names never collide.
     /// </summary>
     public PortableName TargetName(PortableName source) => TargetName(source.Schema, source.Name);
 
     public PortableName TargetName(string schema, string name)
     {
-        if (Target != Dialect.Sqlite)
+        if (!FlatTarget)
         {
             return new PortableName(Names.Schema(schema), Names.Name(name));
         }
 
-        var flat = string.Equals(schema, Schema.DefaultSchema, StringComparison.OrdinalIgnoreCase) || string.Equals(schema, "main", StringComparison.OrdinalIgnoreCase)
+        var flat = string.Equals(schema, Schema.DefaultSchema, StringComparison.OrdinalIgnoreCase) || string.Equals(schema, FlatSchema, StringComparison.OrdinalIgnoreCase)
             ? Names.Name(name)
             : Names.Name(schema + "_" + name);
-        return new PortableName("main", flat);
+        return new PortableName(FlatSchema, flat);
     }
 
-    /// <summary>A schema-qualified name in the target, quoted as needed (SQLite: the bare name).</summary>
+    /// <summary>A schema-qualified name in the target, quoted as needed (SQLite and MySQL: the bare name).</summary>
     public string Qualified(PortableName name)
     {
         var target = TargetName(name);
-        return Target == Dialect.Sqlite ? Quote(target.Name) : $"{Quote(target.Schema)}.{Quote(target.Name)}";
+        return FlatTarget ? Quote(target.Name) : $"{Quote(target.Schema)}.{Quote(target.Name)}";
     }
 
-    public string QualifiedTarget(string schema, string name) => Target == Dialect.Sqlite ? Quote(name) : $"{Quote(schema)}.{Quote(name)}";
+    public string QualifiedTarget(string schema, string name) => FlatTarget ? Quote(name) : $"{Quote(schema)}.{Quote(name)}";
 
     /// <summary>A target identifier, quoted when the target dialect needs it.</summary>
     public string Quote(string name) => Target switch
     {
         Dialect.PostgreSql => Providers.PostgreSql.Scripting.Sql.Ident(name),
         Dialect.Sqlite => SqliteQuote(name),
+        Dialect.MySql => MySqlQuote(name),
         _ => TSqlQuote(name),
     };
+
+    /// <summary>MySQL: always backquoted (its reserved words change between releases).</summary>
+    public static string MySqlQuote(string name) => "`" + name.Replace("`", "``", StringComparison.Ordinal) + "`";
+
+    /// <summary>A MySQL string literal: backslash is an escape character in MySQL's default SQL mode.</summary>
+    public static string MySqlLiteral(string text) => "'" + text.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("'", "''", StringComparison.Ordinal) + "'";
 
     public static string SqliteQuote(string name) =>
         System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z_][A-Za-z0-9_]*$") && !SqliteReserved.Contains(name) ? name : "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
@@ -191,20 +213,27 @@ public sealed class ConversionContext
     public static string TSqlQuote(string name) =>
         System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z_@#][A-Za-z0-9_@#$]*$") && !TSqlReserved.Contains(name) ? name : Providers.SqlServer.Scripting.Sql.Quote(name);
 
-    public string Literal(string text) => Target == Dialect.SqlServer ? Providers.SqlServer.Scripting.Sql.Literal(text) : Providers.PostgreSql.Scripting.Sql.Literal(text);
+    public string Literal(string text) => Target switch
+    {
+        Dialect.SqlServer => Providers.SqlServer.Scripting.Sql.Literal(text),
+        Dialect.MySql => MySqlLiteral(text),
+        _ => Providers.PostgreSql.Scripting.Sql.Literal(text),
+    };
 
     public static Dialect DialectOf(string provider) => provider.ToLowerInvariant() switch
     {
         "postgresql" or "postgres" => Dialect.PostgreSql,
         "sqlserver" => Dialect.SqlServer,
         "sqlite" or "sqlite3" => Dialect.Sqlite,
-        _ => throw new Core.MigrationException($"trek convert works between sqlserver, postgresql and sqlite, not '{provider}'."),
+        "mysql" => Dialect.MySql,
+        _ => throw new Core.MigrationException($"trek convert works between sqlserver, postgresql, mysql and sqlite, not '{provider}'."),
     };
 
     public static string ProviderOf(Dialect dialect) => dialect switch
     {
         Dialect.PostgreSql => "postgresql",
         Dialect.Sqlite => "sqlite",
+        Dialect.MySql => "mysql",
         _ => "sqlserver",
     };
 

@@ -28,6 +28,9 @@ public static partial class ConversionProject
         (Dialect.PostgreSql, Dialect.Sqlite) => new Sqlite.PgToSqliteTranslator(ctx),
         (Dialect.Sqlite, Dialect.PostgreSql) => new Sqlite.SqliteToPgTranslator(ctx),
         (Dialect.SqlServer, Dialect.Sqlite) or (Dialect.Sqlite, Dialect.SqlServer) => new ChainTranslator(ctx),
+        (Dialect.PostgreSql, Dialect.MySql) => new MySql.PgToMySqlTranslator(ctx),
+        (Dialect.MySql, Dialect.PostgreSql) => new MySql.MySqlToPgTranslator(ctx),
+        (Dialect.SqlServer or Dialect.Sqlite, Dialect.MySql) or (Dialect.MySql, Dialect.SqlServer or Dialect.Sqlite) => new ChainTranslator(ctx),
         _ => throw new Core.MigrationException($"Converting {ctx.Source} to {ctx.Target} is not supported."),
     };
 

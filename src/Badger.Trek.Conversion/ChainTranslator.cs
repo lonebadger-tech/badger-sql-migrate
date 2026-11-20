@@ -5,7 +5,7 @@ using Badger.Trek.Core.Conversion;
 namespace Badger.Trek.Conversion;
 
 /// <summary>
-/// Translates through PostgreSQL: SQL Server → PostgreSQL → SQLite, or SQLite → PostgreSQL → SQL Server. The first step
+/// Translates through PostgreSQL: SQL Server → PostgreSQL → SQLite, SQLite → PostgreSQL → SQL Server, and to or from MySQL. The first step
 /// maps every name the way the whole conversion does; the second keeps names and only changes dialect, working from a
 /// PostgreSQL view of the schema (tables with mapped names and PostgreSQL types) and PostgreSQL definitions of the code.
 /// </summary>
@@ -33,6 +33,7 @@ internal sealed class ChainTranslator : ITranslator
         {
             Dialect.SqlServer => new TSqlToPg.TSqlToPgTranslator(first),
             Dialect.Sqlite => new Sqlite.SqliteToPgTranslator(first),
+            Dialect.MySql => new MySql.MySqlToPgTranslator(first),
             _ => throw new InvalidOperationException($"No chain from {outer.Source}."),
         };
         second = new ConversionContext(IntermediateSchema(first), new ConversionOptions
@@ -45,6 +46,7 @@ internal sealed class ChainTranslator : ITranslator
         {
             Dialect.Sqlite => new Sqlite.PgToSqliteTranslator(second),
             Dialect.SqlServer => new PgToTSqlTranslator(second),
+            Dialect.MySql => new MySql.PgToMySqlTranslator(second),
             _ => throw new InvalidOperationException($"No chain to {outer.Target}."),
         };
     }
