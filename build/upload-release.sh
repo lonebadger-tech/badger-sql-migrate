@@ -11,7 +11,7 @@ version="${1:-$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.pr
 [[ -f artifacts/SHA256SUMS ]] || { echo "Run build/publish.sh first" >&2; exit 1; }
 grep -q -- "-$version[-.]" artifacts/SHA256SUMS || { echo "artifacts/ isn't version $version" >&2; exit 1; }
 
-az storage blob upload-batch --subscription 19a38b65-1dbb-430f-a4ef-9cec80a739fa \
+az storage blob upload-batch --subscription 79d9a297-b1ff-4f40-b1bb-430c97bb5cfa \
   --account-name lonebadgerdownloads --auth-mode key --destination badger-trek \
   --destination-path "v$version" --source artifacts --overwrite --only-show-errors \
   --content-cache-control "public, max-age=86400" -o none
