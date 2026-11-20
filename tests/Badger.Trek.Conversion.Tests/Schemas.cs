@@ -43,6 +43,8 @@ internal static class Schemas
 
     public static ConversionContext ToTSql() => new(Postgres(), new ConversionOptions { TargetProvider = "sqlserver" });
 
+    public static ConversionContext ToSqlite() => new(Postgres(), new ConversionOptions { TargetProvider = "sqlite" });
+
     public static ConversionContext ToPg(NameStyle? names = null) =>
         new(SqlServer(), new ConversionOptions { TargetProvider = "postgresql", Names = names });
 }

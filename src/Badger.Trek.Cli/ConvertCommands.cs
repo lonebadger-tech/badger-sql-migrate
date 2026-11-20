@@ -138,6 +138,37 @@ public static partial class Commands
         return code;
     }
 
+    /// <summary>
+    /// A SQLite target's relative 'database:' resolves from the working directory, as in every trek command. But
+    /// 'convert data' usually runs from the source project, while the target was deployed from its own folder
+    /// ('cd target; trek deploy') or from here ('trek deploy -C target'): the two give different files. Use the one
+    /// that exists, and stop when both or neither do instead of filling or creating the wrong file.
+    /// </summary>
+    public static DeploymentEnvironment SqliteTargetFile(DeploymentEnvironment environment, string targetDir, string workingDirectory)
+    {
+        var database = environment.Database;
+        if (string.IsNullOrEmpty(database) || environment.ConnectionString is not null || Path.IsPathRooted(database)
+            || database.StartsWith('~') || database == ":memory:" || database.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+        {
+            return environment;
+        }
+
+        var fromWorkingDirectory = Path.GetFullPath(Path.Combine(workingDirectory, database));
+        var fromProject = Path.GetFullPath(Path.Combine(workingDirectory, targetDir, database));
+        var same = string.Equals(fromWorkingDirectory, fromProject, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        return (File.Exists(fromWorkingDirectory), File.Exists(fromProject)) switch
+        {
+            (true, _) when same => environment with { Database = fromWorkingDirectory },
+            (true, false) => environment with { Database = fromWorkingDirectory },
+            (false, true) => environment with { Database = fromProject },
+            (true, true) => throw new MigrationException(
+                $"Environment '{environment.Name}' has a relative 'database: {database}', and two such files exist: {fromWorkingDirectory} (from the working directory) and {fromProject} (from the target project). " +
+                "Run 'trek convert data' from the folder you deployed the target from, or make 'database' an absolute path."),
+            _ => throw new MigrationException(
+                $"The target database does not exist: {(same ? fromProject : $"neither {fromWorkingDirectory} nor {fromProject}")}. Deploy the converted project first (trek deploy -C {targetDir}), then copy the data."),
+        };
+    }
+
     public static async Task<int> ConvertData(GlobalOptions g, string targetDir, string? targetEnvironment, string? fromProvider, string[] tables, bool truncate, CancellationToken ct)
     {
         var targetRoot = Path.GetFullPath(targetDir);
@@ -157,6 +188,11 @@ public static partial class Commands
         if (problems.Count > 0)
         {
             throw new MigrationException(string.Join("\n", problems));
+        }
+
+        if (targetProvider.Id == Badger.Trek.Providers.Sqlite.SqliteProvider.ProviderId)
+        {
+            targetEnv = SqliteTargetFile(targetEnv, targetDir, Environment.CurrentDirectory);
         }
 
         await using var source = await OpenSource(g, fromProvider, ct);
