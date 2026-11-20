@@ -9,7 +9,7 @@ Delete this file when the items below are done (it is not documentation).
 ## Still pending (ask the user)
 
 - MySQL support (user's request, 2026-11-20), four PRs: (1) provider core: done in the mysql-provider PR;
-  (2) add --from-diff / diff-schema --script for MySQL (ISchemaScripter, IScratchDatabases); (3) trek convert to and
+  (2) add --from-diff / diff-schema --script for MySQL: done in the mysql-from-diff PR; (3) trek convert to and
   from MySQL in every direction (exporter, data transfer, MySQL<->PostgreSQL translators; conversions go through
   PostgreSQL's syntax); (4) imports and baseline --from for MySQL (Flyway jdbc:mysql, DbUp, Sqitch engine mysql,
   EF Core with the Pomelo/Oracle providers). MySqlProvider.DefaultSchema is empty (a MySQL schema is a database):
