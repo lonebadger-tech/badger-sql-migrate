@@ -6,14 +6,33 @@ using Badger.Trek.Conversion.PgToTSql;
 namespace Badger.Trek.Conversion.Sqlite;
 
 /// <summary>
-/// Writes <see cref="PgParser"/>'s syntax tree back out as SQL: as SQLite when the source is PostgreSQL, as PostgreSQL
-/// when the source is SQLite. Both dialects share most syntax (|| concatenation, LIMIT/OFFSET, boolean expressions,
-/// RETURNING, UPDATE ... FROM), so the work is in functions, dates, casts and the few operators one side lacks.
-/// Untranslatable fragments become REVIEW comments.
+/// Writes <see cref="PgParser"/>'s syntax tree back out as SQL: as SQLite or MySQL when the source is PostgreSQL, as
+/// PostgreSQL when the source is SQLite or MySQL. SQLite and PostgreSQL share most syntax (|| concatenation,
+/// LIMIT/OFFSET, boolean expressions, RETURNING, UPDATE ... FROM), so the work is in functions, dates, casts and the
+/// few operators one side lacks; MySQL's differences live in SqlPrinter.MySql.cs. Untranslatable fragments become
+/// REVIEW comments.
 /// </summary>
 internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> issues)
 {
     private readonly bool toSqlite = ctx.Target == Dialect.Sqlite;
+
+    /// <summary>Writing MySQL or MariaDB (from PostgreSQL).</summary>
+    private readonly bool toMySql = ctx.Target == Dialect.MySql;
+
+    /// <summary>Writing MariaDB: MySQL syntax without the parts MariaDB lacks (->>, REGEXP_LIKE, VALUES ROW, LATERAL).</summary>
+    private readonly bool toMariaDb = ctx.Target == Dialect.MySql && ctx.TargetMariaDb;
+
+    /// <summary>Writing PostgreSQL from MySQL or MariaDB.</summary>
+    private readonly bool fromMySql = ctx.Source == Dialect.MySql && ctx.Target == Dialect.PostgreSql;
+
+    /// <summary>"MySQL" or "MariaDB", for messages about the target.</summary>
+    private string My => ctx.TargetDisplay;
+
+    /// <summary>"MySQL" or "MariaDB", for messages about the source.</summary>
+    private string MySrc => ctx.SourceDisplay;
+
+    /// <summary>Writing PostgreSQL (from SQLite or MySQL).</summary>
+    private readonly bool toPg = ctx.Target == Dialect.PostgreSql;
 
     /// <summary>Table names replaced while printing a trigger body (transition tables → a row of NEW/OLD).</summary>
     public Dictionary<string, string> TableReplacements { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -74,7 +93,7 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
         _ => node.GetType().Name.Replace("Pg", string.Empty, StringComparison.Ordinal),
     };
 
-    private string Lit(string text) => "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
+    private string Lit(string text) => toMySql ? ConversionContext.MySqlLiteral(text) : "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
 
     internal static string? StringArg(PgExpr e) => e switch
     {
@@ -95,7 +114,10 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
             return replacement;
         }
 
-        return name.Parts.Count >= 2 ? ctx.Qualified(new Core.Conversion.PortableName(name.Parts[^2], name.Last)) : ctx.Quote(ctx.TargetName(ctx.Schema.DefaultSchema, name.Last).Name);
+        // MySQL views name their tables without the database: in PostgreSQL they live in the mapped default schema.
+        return name.Parts.Count >= 2 ? ctx.Qualified(new Core.Conversion.PortableName(name.Parts[^2], name.Last))
+            : fromMySql ? ctx.Qualified(new Core.Conversion.PortableName(ctx.Schema.DefaultSchema, name.Last))
+            : ctx.Quote(ctx.TargetName(ctx.Schema.DefaultSchema, name.Last).Name);
     }
 
     private string Name(PgName n)
@@ -140,8 +162,8 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
                 {
                     LiteralKind.String => Lit(l.Value),
                     LiteralKind.Null => "NULL",
-                    LiteralKind.True => "true",
-                    LiteralKind.False => "false",
+                    LiteralKind.True => toMySql ? "TRUE" : "true",
+                    LiteralKind.False => toMySql ? "FALSE" : "false",
                     LiteralKind.Default => "DEFAULT",
                     _ => l.Value,
                 };
@@ -167,6 +189,8 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
                     + (c.Else is null ? string.Empty : $"ELSE {Expr(c.Else)} ") + "END";
             case PgIs i:
                 return $"{Expr(i.Operand)} IS {(i.Not ? "NOT " : string.Empty)}{i.What.ToUpperInvariant()}";
+            case PgIsDistinct d when toMySql:
+                return d.Not ? $"{Expr(d.Left)} <=> {Expr(d.Right)}" : $"NOT ({Expr(d.Left)} <=> {Expr(d.Right)})";
             case PgIsDistinct d:
                 return toSqlite
                     ? $"{Expr(d.Left)} IS {(d.Not ? string.Empty : "NOT ")}{Expr(d.Right)}"
@@ -185,20 +209,27 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
                 return "(" + Query(s.Query) + ")";
             case PgQuantified q:
                 return Quantified(q);
-            case PgArray a when !toSqlite:
+            case PgArray a when toPg:
                 return $"ARRAY[{string.Join(", ", a.Elements.Select(Expr))}]";
+            case PgArray a when toMySql:
+                return $"JSON_ARRAY({string.Join(", ", a.Elements.Select(Expr))})" + Note("an array became a JSON array (JSON_ARRAY)");
             case PgArray a:
                 return $"json_array({string.Join(", ", a.Elements.Select(Expr))})" + Note("an array became a JSON array (json_array)");
-            case PgSubscript s when !toSqlite:
+            case PgSubscript s when toPg:
                 return $"{Expr(s.Operand)}[{Expr(s.Index)}]";
-            case PgRow r when !toSqlite:
+            case PgRow r when toPg:
                 return $"ROW({string.Join(", ", r.Fields.Select(Expr))})";
             case PgRow r:
                 return $"({string.Join(", ", r.Fields.Select(Expr))})";
             case PgExtract x:
-                return toSqlite ? Strftime(x.Field, Expr(x.Source)) : $"EXTRACT({x.Field} FROM {Expr(x.Source)})";
-            case PgAtTimeZone z when !toSqlite:
+                return toSqlite ? Strftime(x.Field, Expr(x.Source))
+                    : toMySql ? MySqlExtract(x.Field, Expr(x.Source))
+                    : fromMySql ? ExtractFromMySql(x.Field, x.Source)
+                    : $"EXTRACT({x.Field} FROM {Expr(x.Source)})";
+            case PgAtTimeZone z when toPg:
                 return $"({Expr(z.Operand)} AT TIME ZONE {Expr(z.Zone)})";
+            case PgAtTimeZone z when toMySql:
+                return AtTimeZoneToMySql(z);
             case PgAtTimeZone z when StringArg(z.Zone)?.Equals("utc", StringComparison.OrdinalIgnoreCase) == true:
                 // SQLite keeps times as UTC text already.
                 return Unparen(z.Operand) is PgCall { Function.Last: "now" or "current_timestamp" or "transaction_timestamp" or "statement_timestamp" or "clock_timestamp" }
@@ -210,7 +241,12 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
                     return $"{Expr(c.Operand)} COLLATE {c.Collation.Trim('"').ToUpperInvariant()}";
                 }
 
-                if (!toSqlite && c.Collation.Trim('"').Equals("NOCASE", StringComparison.OrdinalIgnoreCase))
+                if (toMySql)
+                {
+                    return Expr(c.Operand) + Note($"COLLATE {c.Collation} was dropped (PostgreSQL collations have no {My} counterpart)");
+                }
+
+                if (toPg && c.Collation.Trim('"').Equals("NOCASE", StringComparison.OrdinalIgnoreCase))
                 {
                     return $"lower({Expr(c.Operand)})" + Note("COLLATE NOCASE became lower(): compare lower-cased text");
                 }
@@ -223,8 +259,9 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
 
     private string Quantified(PgQuantified q)
     {
-        if (!toSqlite)
+        if (toPg || (toMySql && q.Query is not null))
         {
+            // MySQL has op ANY / ALL (subquery), but no arrays.
             return $"{Expr(q.Left)} {q.Op} {q.Quantifier.ToUpperInvariant()} ({(q.Query is not null ? Query(q.Query) : Expr(q.Array!))})";
         }
 
@@ -242,11 +279,16 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
             }
         }
 
-        return Unsupported("ANY/ALL comparison has no SQLite counterpart", Show(q.Left) + $" {q.Op} {q.Quantifier}(...)", "true");
+        return Unsupported($"ANY/ALL comparison has no {(toMySql ? My : "SQLite")} counterpart", Show(q.Left) + $" {q.Op} {q.Quantifier}(...)", "true");
     }
 
     private string Like(PgLike l)
     {
+        if (toMySql)
+        {
+            return LikeToMySql(l);
+        }
+
         var not = l.Not ? "NOT " : string.Empty;
         var escape = l.Escape is null ? string.Empty : $" ESCAPE {Expr(l.Escape)}";
         switch (l.Op)
@@ -257,7 +299,7 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
                 return $"{Expr(l.Operand)} {not}LIKE {Expr(l.Pattern)}{escape}";
             case "like":
                 // SQLite's LIKE ignores ASCII case.
-                return $"{Expr(l.Operand)} {not}{(ctx.Source == Dialect.Sqlite ? "ILIKE" : "LIKE")} {Expr(l.Pattern)}{escape}";
+                return $"{Expr(l.Operand)} {not}{(ctx.Source == Dialect.Sqlite || (fromMySql && MySqlCaseInsensitive) ? "ILIKE" : "LIKE")} {Expr(l.Pattern)}{escape}";
             case "ilike":
                 return $"{Expr(l.Operand)} {not}ILIKE {Expr(l.Pattern)}{escape}";
             case "glob" when StringArg(l.Pattern) is { } glob && !glob.Contains('[', StringComparison.Ordinal):
@@ -269,7 +311,8 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
             case "similar" or "~" or "~*" when !toSqlite:
                 return $"{Expr(l.Operand)} {(l.Op == "similar" ? not + "SIMILAR TO" : (l.Not ? "!" : string.Empty) + l.Op)} {Expr(l.Pattern)}";
             case "regexp" when !toSqlite:
-                return $"{Expr(l.Operand)} {(l.Not ? "!" : string.Empty)}~ {Expr(l.Pattern)}";
+                // MySQL's REGEXP follows the collation: case-insensitive under the default ones.
+                return $"{Expr(l.Operand)} {(l.Not ? "!" : string.Empty)}{(fromMySql && MySqlCaseInsensitive ? "~*" : "~")} {Expr(l.Pattern)}";
             default:
                 return Unsupported($"{l.Op.ToUpperInvariant()} has no counterpart", $"{Show(l.Operand)} {l.Op} {Show(l.Pattern)}", "true");
         }
@@ -277,6 +320,16 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
 
     private string Binary(PgBinary b)
     {
+        if (toMySql)
+        {
+            return BinaryToMySql(b);
+        }
+
+        if (fromMySql && BinaryFromMySql(b) is { } fromMySqlBinary)
+        {
+            return fromMySqlBinary;
+        }
+
         if (toSqlite && b.Op is "+" or "-" && Interval(b.Right) is { } right)
         {
             return $"datetime({Expr(b.Left)}, {Modifiers(right, b.Op == "-")})";
@@ -453,6 +506,16 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
 
     private string Cast(PgCast c)
     {
+        if (toMySql)
+        {
+            return CastToMySql(c);
+        }
+
+        if (fromMySql)
+        {
+            return CastFromMySql(c);
+        }
+
         var type = c.Type.ToLowerInvariant();
         if (type is "regclass" or "regproc" or "regtype" or "oid" or "name" && c.Operand is PgLiteral)
         {
@@ -490,7 +553,12 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
 
     private string TypedLiteral(PgTypedLiteral t)
     {
-        if (!toSqlite)
+        if (toMySql)
+        {
+            return TypedLiteralToMySql(t);
+        }
+
+        if (toPg)
         {
             return $"{t.Type} {Lit(t.Value)}";
         }
@@ -518,10 +586,18 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
             }
 
             var schema = c.Function.Parts.Count > 1 ? c.Function.Parts[^2] : ctx.Schema.DefaultSchema;
+            if (toMySql)
+            {
+                return $"{ctx.Qualified(new Core.Conversion.PortableName(schema, c.Function.Last))}({string.Join(", ", args.Select(Expr))})";
+            }
+
             return $"{ctx.Quote(ctx.Names.Schema(schema))}.{ctx.Ident(c.Function.Last)}({string.Join(", ", args.Select(Expr))})";
         }
 
-        var result = toSqlite ? ToSqlite(name, args, c) : FromSqlite(name, args, c);
+        var result = toSqlite ? ToSqlite(name, args, c)
+            : toMySql ? ToMySql(name, args, c)
+            : fromMySql ? FromMySql(name, args, c)
+            : FromSqlite(name, args, c);
         return result + Over(c);
     }
 
@@ -623,7 +699,24 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
         var order = c.OrderBy.Count > 0 ? " " + OrderBy(c.OrderBy) : string.Empty;
         var filter = c.Filter is null ? string.Empty : $" FILTER (WHERE {Expr(c.Filter)})";
         var note = string.Empty;
-        if (toSqlite)
+        if (toMySql)
+        {
+            if (c.Filter is not null)
+            {
+                // MySQL has no FILTER. Aggregates skip NULLs, so a CASE without ELSE gives the same result.
+                var condition = Expr(c.Filter);
+                values[0] = c.StarArg ? $"CASE WHEN {condition} THEN 1 END" : $"CASE WHEN {condition} THEN {values[0]} END";
+                filter = string.Empty;
+            }
+
+            // MariaDB (10.5+) orders JSON_ARRAYAGG; MySQL orders no aggregate but GROUP_CONCAT.
+            if (order.Length > 0 && !(toMariaDb && name == "JSON_ARRAYAGG"))
+            {
+                order = string.Empty;
+                note = Note($"{My} has no ORDER BY inside {name}(); it was left out: the values are in no particular order");
+            }
+        }
+        else if (toSqlite)
         {
             if (c.Filter is not null)
             {
@@ -876,6 +969,11 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
     private string OrderTerm(PgOrder o)
     {
         var term = Expr(o.Expr) + (o.Descending ? " DESC" : string.Empty);
+        if (toMySql || fromMySql)
+        {
+            return MySqlOrderTerm(o, term);
+        }
+
         if (o.Nulls is null)
         {
             return term;
@@ -915,7 +1013,8 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
 
         if (q.Offset is not null)
         {
-            sb.Append(q.Limit is null && toSqlite ? " LIMIT -1" : string.Empty).Append(" OFFSET ").Append(Expr(q.Offset));
+            // SQLite and MySQL have no OFFSET without LIMIT.
+            sb.Append(q.Limit is null && toSqlite ? " LIMIT -1" : q.Limit is null && toMySql ? " LIMIT 18446744073709551615" : string.Empty).Append(" OFFSET ").Append(Expr(q.Offset));
         }
 
         if (q.LockingClause)
@@ -931,16 +1030,20 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
         PgSelectCore s => Select(s),
         PgSetOp op => $"{Body(op.Left)} {op.Op.ToUpperInvariant()}{(op.All ? " ALL" : string.Empty)} {Body(op.Right)}",
         PgNestedQuery n => toSqlite ? "SELECT * FROM (" + Query(n.Query) + ")" : "(" + Query(n.Query) + ")",
-        PgValuesBody v => "VALUES " + string.Join(", ", v.Rows.Select(r => "(" + string.Join(", ", r.Select(Expr)) + ")")),
+        PgValuesBody v => "VALUES " + ValuesRows(v.Rows),
         _ => Unsupported("query not translated", body.GetType().Name, "SELECT NULL"),
     };
+
+    /// <summary>The rows of a VALUES list: MySQL writes each as ROW(...); MariaDB, like PostgreSQL, as (...).</summary>
+    private string ValuesRows(IReadOnlyList<IReadOnlyList<PgExpr>> rows) =>
+        string.Join(", ", rows.Select(r => (toMySql && !toMariaDb ? "ROW(" : "(") + string.Join(", ", r.Select(Expr)) + ")"));
 
     private string Select(PgSelectCore s)
     {
         var sb = new StringBuilder("SELECT ");
         if (s.Distinct)
         {
-            if (s.DistinctOn is not null && toSqlite)
+            if (s.DistinctOn is not null && !toPg)
             {
                 sb.Append("DISTINCT ").Append(Note("DISTINCT ON is not supported: rewrite with ROW_NUMBER() OVER (PARTITION BY ...)").Trim()).Append(' ');
             }
@@ -974,6 +1077,13 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
         return sb.ToString();
     }
 
+    /// <summary>
+    /// A derived table with column names in MariaDB, whose older releases (10.11 among them) take no t(a, b) after a derived table: the
+    /// names go on a CTE inside it, (WITH t(a, b) AS (query) SELECT * FROM t) AS t.
+    /// </summary>
+    private string MariaDbColumnAliases(string alias, IReadOnlyList<string> columns, string query) =>
+        $"(WITH {ctx.Ident(alias)}({string.Join(", ", columns.Select(ctx.Ident))}) AS ({query}) SELECT * FROM {ctx.Ident(alias)}) AS {ctx.Ident(alias)}";
+
     private string Alias(string? alias, IReadOnlyList<string> columns) =>
         (alias is null ? string.Empty : " AS " + ctx.Ident(alias)) + (columns.Count == 0 ? string.Empty : "(" + string.Join(", ", columns.Select(ctx.Ident)) + ")");
 
@@ -982,29 +1092,51 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
         switch (f)
         {
             case PgTableRef t:
-                if (t.ColumnAliases.Count > 0 && toSqlite)
+                if (t.ColumnAliases.Count > 0 && !toPg)
                 {
-                    issues.Add($"column aliases on table {string.Join('.', t.Name.Parts)} are not supported in SQLite; they were dropped");
+                    issues.Add($"column aliases on table {string.Join('.', t.Name.Parts)} are not supported in {(toMySql ? My : "SQLite")}; they were dropped");
                 }
 
                 var table = Table(t.Name);
                 var alias = t.Alias ?? (t.Name.Parts.Count == 1 && TableReplacements.ContainsKey(t.Name.Last) ? t.Name.Last : null);
-                return table + (alias is null ? string.Empty : " AS " + ctx.Ident(alias)) + (toSqlite ? string.Empty : Alias(null, t.ColumnAliases));
+                return table + (alias is null ? string.Empty : " AS " + ctx.Ident(alias)) + (toPg ? Alias(null, t.ColumnAliases) : string.Empty);
             case PgSubqueryRef s:
-                if (s.Lateral && toSqlite)
+                if (s.Lateral && (toSqlite || toMariaDb))
                 {
-                    issues.Add("LATERAL is not supported in SQLite; rewrite as a correlated subquery");
+                    issues.Add($"LATERAL is not supported in {(toSqlite ? "SQLite" : "MariaDB")}; rewrite as a correlated subquery");
                 }
 
-                return $"{(s.Lateral && !toSqlite ? "LATERAL " : string.Empty)}({Query(s.Query)}){Alias(s.Alias, toSqlite ? [] : s.ColumnAliases)}";
+                if (toMariaDb && s.Alias is not null && s.ColumnAliases.Count > 0)
+                {
+                    return MariaDbColumnAliases(s.Alias, s.ColumnAliases, Query(s.Query));
+                }
+
+                return $"{(s.Lateral && !toSqlite && !toMariaDb ? "LATERAL " : string.Empty)}({Query(s.Query)}){Alias(s.Alias, toSqlite ? [] : s.ColumnAliases)}";
             case PgValuesRef v:
-                return $"(VALUES {string.Join(", ", v.Rows.Select(r => "(" + string.Join(", ", r.Select(Expr)) + ")"))}){Alias(v.Alias, toSqlite ? [] : v.ColumnAliases)}";
+                if (toMariaDb && v.Alias is not null && v.ColumnAliases.Count > 0)
+                {
+                    return MariaDbColumnAliases(v.Alias, v.ColumnAliases, $"VALUES {ValuesRows(v.Rows)}");
+                }
+
+                return $"(VALUES {ValuesRows(v.Rows)}){Alias(v.Alias, toSqlite ? [] : v.ColumnAliases)}";
             case PgFunctionRef fn:
-                if (toSqlite && fn.Call.Function.Last.Equals("generate_series", StringComparison.OrdinalIgnoreCase))
+                if ((toSqlite || toMySql) && fn.Call.Function.Last.Equals("generate_series", StringComparison.OrdinalIgnoreCase))
                 {
                     var column = fn.ColumnAliases.Count > 0 ? fn.ColumnAliases[0] : fn.Alias ?? "value";
                     var args = fn.Call.Args.Select(Expr).ToList();
+                    if (toMySql)
+                    {
+                        issues.Add(toMariaDb
+                            ? "generate_series() became a recursive CTE: MariaDB stops it after max_recursive_iterations rows"
+                            : "generate_series() became a recursive CTE: MySQL stops it after cte_max_recursion_depth (1000) rows unless that is raised");
+                    }
+
                     return $"(WITH RECURSIVE trek_series(value) AS (SELECT {args[0]} UNION ALL SELECT value + {(args.Count > 2 ? args[2] : "1")} FROM trek_series WHERE value + {(args.Count > 2 ? args[2] : "1")} <= {args[1]}) SELECT value AS {ctx.Ident(column)} FROM trek_series){Alias(fn.Alias ?? "generate_series", [])}";
+                }
+
+                if (toMySql)
+                {
+                    return Unsupported($"set-returning function in FROM has no {My} counterpart", Show(fn.Call), string.Empty);
                 }
 
                 return $"{(fn.Lateral && !toSqlite ? "LATERAL " : string.Empty)}{Call(fn.Call)}{(fn.Ordinality && !toSqlite ? " WITH ORDINALITY" : string.Empty)}{Alias(fn.Alias, toSqlite ? [] : fn.ColumnAliases)}";
@@ -1030,6 +1162,11 @@ internal sealed partial class SqlPrinter(ConversionContext ctx, List<string> iss
                 if (toSqlite && j.Kind == "full")
                 {
                     tail += Note("FULL JOIN needs SQLite 3.39, newer than sqlite.minVersion (3.26): rewrite it as a LEFT JOIN plus the unmatched rows of the other side (UNION ALL), or raise sqlite.minVersion");
+                }
+
+                if (toMySql && j.Kind == "full")
+                {
+                    tail += Note($"{My} has no FULL JOIN: rewrite it as a LEFT JOIN plus the unmatched rows of the other side (UNION ALL)");
                 }
 
                 return $"{From(j.Left)} {(j.Natural ? "NATURAL " : string.Empty)}{kind} {From(j.Right)}{tail}";

@@ -7,11 +7,12 @@ public enum Dialect
     PostgreSql,
     SqlServer,
     Sqlite,
+    MySql,
 }
 
 public sealed record ConversionOptions
 {
-    /// <summary>The provider id of the target ("postgresql" or "sqlserver").</summary>
+    /// <summary>The provider id of the target ("postgresql", "sqlserver", "sqlite", "mysql" or "mariadb").</summary>
     public required string TargetProvider { get; init; }
 
     /// <summary>Null = Lower when converting to PostgreSQL, Keep when converting to SQL Server.</summary>
@@ -35,14 +36,20 @@ public sealed class ConversionContext
         Schema = schema;
         Source = DialectOf(schema.SourceProvider);
         Target = DialectOf(options.TargetProvider);
-        if (Source == Target)
+        SourceProvider = ProviderIdOf(schema.SourceProvider);
+        TargetProvider = ProviderIdOf(options.TargetProvider);
+        SourceMariaDb = SourceProvider == MariaDbProvider;
+        TargetMariaDb = TargetProvider == MariaDbProvider;
+
+        // MySQL and MariaDB share a dialect but are different providers: either converts to the other.
+        if (SourceProvider == TargetProvider)
         {
-            throw new Core.MigrationException($"The database is already {options.TargetProvider}; convert to the other provider.");
+            throw new Core.MigrationException($"The database is already {DisplayOf(Target, TargetMariaDb)}; pass --to with a different provider.");
         }
 
         var style = options.Names ?? (Target == Dialect.PostgreSql ? NameStyle.Lower : NameStyle.Keep);
         Names = new NameMapper(schema.DefaultSchema, DefaultSchemaOf(Target), style);
-        CaseInsensitiveCollation = Target is Dialect.PostgreSql or Dialect.Sqlite && schema.CaseInsensitive && !options.CaseSensitive;
+        CaseInsensitiveCollation = Target is Dialect.PostgreSql or Dialect.Sqlite or Dialect.MySql && schema.CaseInsensitive && !options.CaseSensitive;
         enums = schema.Enums.ToDictionary(e => e.Name.Key, StringComparer.OrdinalIgnoreCase);
         domains = schema.Domains.ToDictionary(d => d.Name.Key, StringComparer.OrdinalIgnoreCase);
 
@@ -75,6 +82,13 @@ public sealed class ConversionContext
     {
         var t = sourceType.Trim().ToLowerInvariant();
         var name = t.Split('(')[0].Trim();
+        if (Source == Dialect.MySql)
+        {
+            return name is "bool" or "boolean" || t.StartsWith("tinyint(1)", StringComparison.Ordinal) ? ColumnKind.Boolean
+                : name is "char" or "varchar" or "tinytext" or "text" or "mediumtext" or "longtext" or "enum" or "set" ? ColumnKind.Text
+                : ColumnKind.Other;
+        }
+
         if (Source == Dialect.Sqlite)
         {
             return t.Contains("bool", StringComparison.Ordinal) ? ColumnKind.Boolean
@@ -107,6 +121,34 @@ public sealed class ConversionContext
 
     public Dialect Target { get; }
 
+    /// <summary>The source's provider id, normalized: "postgresql", "sqlserver", "sqlite", "mysql" or "mariadb".</summary>
+    public string SourceProvider { get; }
+
+    /// <summary>The target's provider id, normalized: "postgresql", "sqlserver", "sqlite", "mysql" or "mariadb".</summary>
+    public string TargetProvider { get; }
+
+    /// <summary>The source is MariaDB; <see cref="Source"/> is then <see cref="Dialect.MySql"/>.</summary>
+    public bool SourceMariaDb { get; }
+
+    /// <summary>The target is MariaDB; <see cref="Target"/> is then <see cref="Dialect.MySql"/>.</summary>
+    public bool TargetMariaDb { get; }
+
+    /// <summary>The source's name for people: "SQL Server", "PostgreSQL", "SQLite", "MySQL" or "MariaDB".</summary>
+    public string SourceDisplay => DisplayOf(Source, SourceMariaDb);
+
+    /// <summary>The target's name for people: "SQL Server", "PostgreSQL", "SQLite", "MySQL" or "MariaDB".</summary>
+    public string TargetDisplay => DisplayOf(Target, TargetMariaDb);
+
+    /// <summary>The provider id of MariaDB, a flavor of the MySQL dialect.</summary>
+    public const string MariaDbProvider = "mariadb";
+
+    /// <summary>
+    /// The target's utf8mb4 collation that is accent-sensitive and case-insensitive or case-sensitive: MariaDB (10.10+)
+    /// has the UCA 14.0.0 ones (utf8mb4_uca1400_as_ci), MySQL the UCA 9.0.0 ones (utf8mb4_0900_as_ci).
+    /// </summary>
+    public string MySqlCollation(bool caseInsensitive) =>
+        (TargetMariaDb ? "utf8mb4_uca1400_as_" : "utf8mb4_0900_as_") + (caseInsensitive ? "ci" : "cs");
+
     public NameMapper Names { get; }
 
     /// <summary>Text columns get the trek_ci collation on PostgreSQL.</summary>
@@ -128,45 +170,59 @@ public sealed class ConversionContext
     public static string DefaultSchemaOf(Dialect dialect) => dialect switch
     {
         Dialect.PostgreSql => "public",
-        Dialect.Sqlite => "main",
+        Dialect.Sqlite or Dialect.MySql => FlatSchema,
         _ => "dbo",
     };
 
+    /// <summary>The schema of every object in a target without schemas (SQLite; MySQL, where a schema is the database). Never written out.</summary>
+    public const string FlatSchema = "main";
+
+    /// <summary>The target has no schemas inside the database: names are flattened.</summary>
+    public bool FlatTarget => Target is Dialect.Sqlite or Dialect.MySql;
+
     /// <summary>
-    /// A table, view or other schema object's name in the target. SQLite has no schemas: objects outside the source's
-    /// default schema get the schema as a prefix (sales.Customer becomes sales_customer), so names never collide.
+    /// A table, view or other schema object's name in the target. SQLite has no schemas, and in MySQL a schema is the
+    /// database: objects outside the source's default schema get the schema as a prefix (sales.Customer becomes
+    /// sales_customer), so names never collide.
     /// </summary>
     public PortableName TargetName(PortableName source) => TargetName(source.Schema, source.Name);
 
     public PortableName TargetName(string schema, string name)
     {
-        if (Target != Dialect.Sqlite)
+        if (!FlatTarget)
         {
             return new PortableName(Names.Schema(schema), Names.Name(name));
         }
 
-        var flat = string.Equals(schema, Schema.DefaultSchema, StringComparison.OrdinalIgnoreCase) || string.Equals(schema, "main", StringComparison.OrdinalIgnoreCase)
+        var flat = string.Equals(schema, Schema.DefaultSchema, StringComparison.OrdinalIgnoreCase) || string.Equals(schema, FlatSchema, StringComparison.OrdinalIgnoreCase)
             ? Names.Name(name)
             : Names.Name(schema + "_" + name);
-        return new PortableName("main", flat);
+        return new PortableName(FlatSchema, flat);
     }
 
-    /// <summary>A schema-qualified name in the target, quoted as needed (SQLite: the bare name).</summary>
+    /// <summary>A schema-qualified name in the target, quoted as needed (SQLite and MySQL: the bare name).</summary>
     public string Qualified(PortableName name)
     {
         var target = TargetName(name);
-        return Target == Dialect.Sqlite ? Quote(target.Name) : $"{Quote(target.Schema)}.{Quote(target.Name)}";
+        return FlatTarget ? Quote(target.Name) : $"{Quote(target.Schema)}.{Quote(target.Name)}";
     }
 
-    public string QualifiedTarget(string schema, string name) => Target == Dialect.Sqlite ? Quote(name) : $"{Quote(schema)}.{Quote(name)}";
+    public string QualifiedTarget(string schema, string name) => FlatTarget ? Quote(name) : $"{Quote(schema)}.{Quote(name)}";
 
     /// <summary>A target identifier, quoted when the target dialect needs it.</summary>
     public string Quote(string name) => Target switch
     {
         Dialect.PostgreSql => Providers.PostgreSql.Scripting.Sql.Ident(name),
         Dialect.Sqlite => SqliteQuote(name),
+        Dialect.MySql => MySqlQuote(name),
         _ => TSqlQuote(name),
     };
+
+    /// <summary>MySQL: always backquoted (its reserved words change between releases).</summary>
+    public static string MySqlQuote(string name) => "`" + name.Replace("`", "``", StringComparison.Ordinal) + "`";
+
+    /// <summary>A MySQL string literal: backslash is an escape character in MySQL's default SQL mode.</summary>
+    public static string MySqlLiteral(string text) => "'" + text.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("'", "''", StringComparison.Ordinal) + "'";
 
     public static string SqliteQuote(string name) =>
         System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z_][A-Za-z0-9_]*$") && !SqliteReserved.Contains(name) ? name : "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
@@ -191,21 +247,42 @@ public sealed class ConversionContext
     public static string TSqlQuote(string name) =>
         System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z_@#][A-Za-z0-9_@#$]*$") && !TSqlReserved.Contains(name) ? name : Providers.SqlServer.Scripting.Sql.Quote(name);
 
-    public string Literal(string text) => Target == Dialect.SqlServer ? Providers.SqlServer.Scripting.Sql.Literal(text) : Providers.PostgreSql.Scripting.Sql.Literal(text);
+    public string Literal(string text) => Target switch
+    {
+        Dialect.SqlServer => Providers.SqlServer.Scripting.Sql.Literal(text),
+        Dialect.MySql => MySqlLiteral(text),
+        _ => Providers.PostgreSql.Scripting.Sql.Literal(text),
+    };
 
     public static Dialect DialectOf(string provider) => provider.ToLowerInvariant() switch
     {
         "postgresql" or "postgres" => Dialect.PostgreSql,
         "sqlserver" => Dialect.SqlServer,
         "sqlite" or "sqlite3" => Dialect.Sqlite,
-        _ => throw new Core.MigrationException($"trek convert works between sqlserver, postgresql and sqlite, not '{provider}'."),
+        "mysql" or MariaDbProvider => Dialect.MySql,
+        _ => throw new Core.MigrationException($"trek convert works between sqlserver, postgresql, mysql, mariadb and sqlite, not '{provider}'."),
     };
 
-    public static string ProviderOf(Dialect dialect) => dialect switch
+    /// <summary>A provider id or alias as its canonical id ("postgres" is "postgresql"); MariaDB's stays "mariadb".</summary>
+    public static string ProviderIdOf(string provider) =>
+        provider.Equals(MariaDbProvider, StringComparison.OrdinalIgnoreCase) ? MariaDbProvider : ProviderOf(DialectOf(provider));
+
+    /// <summary>The provider id of a dialect; <paramref name="mariaDb"/> picks MariaDB's for <see cref="Dialect.MySql"/>.</summary>
+    public static string ProviderOf(Dialect dialect, bool mariaDb = false) => dialect switch
     {
         Dialect.PostgreSql => "postgresql",
         Dialect.Sqlite => "sqlite",
+        Dialect.MySql => mariaDb ? MariaDbProvider : "mysql",
         _ => "sqlserver",
+    };
+
+    /// <summary>A dialect's name for people; <paramref name="mariaDb"/> picks "MariaDB" for <see cref="Dialect.MySql"/>.</summary>
+    public static string DisplayOf(Dialect dialect, bool mariaDb = false) => dialect switch
+    {
+        Dialect.SqlServer => "SQL Server",
+        Dialect.Sqlite => "SQLite",
+        Dialect.MySql => mariaDb ? "MariaDB" : "MySQL",
+        _ => "PostgreSQL",
     };
 
     private static readonly HashSet<string> TSqlReserved = new(StringComparer.OrdinalIgnoreCase)

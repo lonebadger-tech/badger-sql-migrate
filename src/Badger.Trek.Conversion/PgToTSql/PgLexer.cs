@@ -2,6 +2,14 @@ using System.Text;
 
 namespace Badger.Trek.Conversion.PgToTSql;
 
+/// <summary>The dialect <see cref="PgLexer"/> and <see cref="PgParser"/> read: PostgreSQL, or SQLite or MySQL when converting from them.</summary>
+internal enum ParseMode
+{
+    PostgreSql,
+    Sqlite,
+    MySql,
+}
+
 internal enum TokenKind
 {
     Word,
@@ -24,7 +32,7 @@ internal sealed record Token(TokenKind Kind, string Text, string Value, int Star
     public override string ToString() => Text;
 }
 
-/// <summary>Splits PostgreSQL / PL/pgSQL text into tokens (comments and whitespace dropped).</summary>
+/// <summary>Splits PostgreSQL / PL/pgSQL text, or SQLite or MySQL text, into tokens (comments and whitespace dropped).</summary>
 internal static class PgLexer
 {
     private static readonly string[] Operators =
@@ -33,9 +41,15 @@ internal static class PgLexer
         "<<", ">>", "?|", "?&", "|/", "@@", "-|-",
     ];
 
-    /// <param name="sqlite">Also read SQLite's [name] and `name` identifiers.</param>
-    public static List<Token> Tokenize(string text, bool sqlite = false)
+    /// <param name="mode">
+    /// SQLite also reads [name] and `name` identifiers. MySQL (its default SQL mode) reads `name` identifiers, strings
+    /// in single or double quotes with backslash escapes, # comments, &lt;=&gt;, x'..' / b'..' / 0x.. literals and
+    /// charset introducers (_utf8mb4'..'), which SHOW CREATE VIEW writes before every string.
+    /// </param>
+    public static List<Token> Tokenize(string text, ParseMode mode = ParseMode.PostgreSql)
     {
+        var sqlite = mode == ParseMode.Sqlite;
+        var mysql = mode == ParseMode.MySql;
         var tokens = new List<Token>();
         var i = 0;
         while (i < text.Length)
@@ -47,7 +61,8 @@ internal static class PgLexer
                 continue;
             }
 
-            if (c == '-' && At(text, i + 1) == '-')
+            // MySQL: -- starts a comment only before white space (1--1 is 1 minus -1), and # starts one too.
+            if ((c == '-' && At(text, i + 1) == '-' && (!mysql || At(text, i + 2) is '\0' or ' ' or '\t' or '\r' or '\n')) || (mysql && c == '#'))
             {
                 while (i < text.Length && text[i] != '\n')
                 {
@@ -82,7 +97,13 @@ internal static class PgLexer
             }
 
             var start = i;
-            if ((c is 'E' or 'e') && At(text, i + 1) == '\'')
+            if (mysql && MySqlToken(text, ref i) is { } mysqlToken)
+            {
+                tokens.Add(mysqlToken);
+                continue;
+            }
+
+            if (!mysql && (c is 'E' or 'e') && At(text, i + 1) == '\'')
             {
                 i++;
                 var value = ReadQuoted(text, ref i, '\'', escapes: true);
@@ -97,7 +118,7 @@ internal static class PgLexer
                 continue;
             }
 
-            if (sqlite && c == '`')
+            if ((sqlite || mysql) && c == '`')
             {
                 var value = ReadQuoted(text, ref i, '`', escapes: false);
                 tokens.Add(new Token(TokenKind.QuotedIdent, text[start..i], value, start, i));
@@ -120,7 +141,7 @@ internal static class PgLexer
                 continue;
             }
 
-            if (c == '$' && DollarTag(text, i) is { } tag)
+            if (!mysql && c == '$' && DollarTag(text, i) is { } tag)
             {
                 var close = text.IndexOf(tag, i + tag.Length, StringComparison.Ordinal);
                 var end = close < 0 ? text.Length : close + tag.Length;
@@ -130,7 +151,7 @@ internal static class PgLexer
                 continue;
             }
 
-            if (c == '$' && char.IsDigit(At(text, i + 1)))
+            if (!mysql && c == '$' && char.IsDigit(At(text, i + 1)))
             {
                 i++;
                 while (i < text.Length && char.IsDigit(text[i]))
@@ -191,6 +212,139 @@ internal static class PgLexer
     }
 
     private static char At(string text, int i) => i < text.Length ? text[i] : '\0';
+
+    /// <summary>
+    /// The MySQL-only token starting at i, or null: strings (backslash escapes, and "..." is a string in the default
+    /// SQL mode), x'..' / 0x.. hexadecimal literals (a String token whose Text keeps the x' prefix), b'..' / 0b.. bit
+    /// literals (a Number), N'..', charset introducers (_utf8mb4'..': dropped, the string is what matters), and &lt;=&gt;.
+    /// </summary>
+    private static Token? MySqlToken(string text, ref int i)
+    {
+        var start = i;
+        var c = text[i];
+        if (c is '\'' or '"')
+        {
+            var value = ReadMySqlString(text, ref i, c);
+            return new Token(TokenKind.String, text[start..i], value, start, i);
+        }
+
+        if ((c is 'N' or 'n') && At(text, i + 1) == '\'')
+        {
+            i++;
+            var value = ReadMySqlString(text, ref i, '\'');
+            return new Token(TokenKind.String, text[start..i], value, start, i);
+        }
+
+        if (c == '_' && (start == 0 || !(char.IsLetterOrDigit(text[start - 1]) || text[start - 1] is '_' or '$')))
+        {
+            var j = i + 1;
+            while (j < text.Length && (char.IsLetterOrDigit(text[j]) || text[j] == '_'))
+            {
+                j++;
+            }
+
+            if (j > i + 1 && At(text, j) == '\'')
+            {
+                i = j;
+                var value = ReadMySqlString(text, ref i, '\'');
+                return new Token(TokenKind.String, text[j..i], value, j, i);
+            }
+        }
+
+        if ((c is 'x' or 'X' or 'b' or 'B') && At(text, i + 1) == '\'')
+        {
+            var close = text.IndexOf('\'', i + 2);
+            var end = close < 0 ? text.Length : close + 1;
+            var digits = text[(i + 2)..(close < 0 ? text.Length : close)];
+            i = end;
+            return Prefixed(char.ToLowerInvariant(c), digits, start, end);
+        }
+
+        if (c == '0' && At(text, i + 1) is 'x' or 'b' && Uri.IsHexDigit(At(text, i + 2)))
+        {
+            var bits = At(text, i + 1) == 'b';
+            var j = i + 2;
+            while (j < text.Length && (bits ? text[j] is '0' or '1' : Uri.IsHexDigit(text[j])))
+            {
+                j++;
+            }
+
+            if (j < text.Length && (char.IsLetterOrDigit(text[j]) || text[j] == '_'))
+            {
+                return null;
+            }
+
+            i = j;
+            return Prefixed(bits ? 'b' : 'x', text[(start + 2)..j], start, j);
+        }
+
+        if (c == '<' && At(text, i + 1) == '=' && At(text, i + 2) == '>')
+        {
+            i += 3;
+            return new Token(TokenKind.Operator, "<=>", "<=>", start, i);
+        }
+
+        return null;
+    }
+
+    /// <summary>x'..' becomes a String token whose Text starts with x' (the parser makes it bytea); b'..' a decimal Number.</summary>
+    private static Token Prefixed(char prefix, string digits, int start, int end)
+    {
+        if (prefix == 'x')
+        {
+            return new Token(TokenKind.String, "x'" + digits + "'", digits, start, end);
+        }
+
+        ulong value = 0;
+        foreach (var d in digits)
+        {
+            value = (value << 1) | (d == '1' ? 1UL : 0UL);
+        }
+
+        var number = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return new Token(TokenKind.Number, number, number, start, end);
+    }
+
+    /// <summary>A MySQL string: doubled quotes and backslash escapes; \% and \_ keep their backslash (they are LIKE escapes).</summary>
+    private static string ReadMySqlString(string text, ref int i, char quote)
+    {
+        var sb = new StringBuilder();
+        i++;
+        while (i < text.Length)
+        {
+            var c = text[i];
+            if (c == '\\' && i + 1 < text.Length)
+            {
+                var n = text[i + 1];
+                if (n is '%' or '_')
+                {
+                    sb.Append('\\');
+                }
+
+                sb.Append(n switch { '0' => '\0', 'n' => '\n', 't' => '\t', 'r' => '\r', 'b' => '\b', 'Z' => '\u001a', _ => n });
+                i += 2;
+                continue;
+            }
+
+            if (c == quote)
+            {
+                if (At(text, i + 1) == quote)
+                {
+                    sb.Append(quote);
+                    i += 2;
+                    continue;
+                }
+
+                i++;
+                return sb.ToString();
+            }
+
+            sb.Append(c);
+            i++;
+        }
+
+        return sb.ToString();
+    }
 
     private static string? DollarTag(string text, int i)
     {

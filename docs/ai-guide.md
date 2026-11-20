@@ -7,7 +7,7 @@ by editing it later.
 ## The project
 
 ```
-trek.yaml                 provider (sqlserver, postgresql or sqlite), environments, variables
+trek.yaml                 provider (sqlserver, postgresql, mysql, mariadb or sqlite), environments, variables
 trek.plan                 every change, one per line, in deploy order
 changes/<name>/
   deploy.sql             makes the change
@@ -18,7 +18,7 @@ environments/<env>/      repeatables that run only in that environment (seed dat
 ```
 
 Read `trek.yaml` first to learn the provider: `provider: sqlserver` means T-SQL, `provider: postgresql` means
-PostgreSQL, `provider: sqlite` means SQLite. Never put connection strings, passwords or secrets in scripts.
+PostgreSQL, `provider: mysql` means MySQL, `provider: mariadb` means MariaDB, `provider: sqlite` means SQLite. Never put connection strings, passwords or secrets in scripts.
 
 Badger Trek was called Badger SQL Migrate (command `bsm`, NuGet `Badger.SqlMigrate`) up to 0.3.0. A folder with
 `bsm.yaml` and `bsm.plan` is an old project: don't run `trek init` over it. Tell the person it needs upgrading
@@ -66,8 +66,8 @@ once with SQL that trek prints. Never run that SQL yourself, and don't edit depl
 - **Irreversible changes:** when undoing really isn't possible (dropping data that can't be restored), use
   `trek add <name> --irreversible`. There is then no `revert.sql`. Prefer reversible designs: rename or copy
   before you drop.
-- **Don't use `USE` (SQL Server) or `\connect` (PostgreSQL).** trek deploys to the environment's database.
-- **Schema-qualify every object:** `dbo.Customer`, `public.customer`.
+- **Don't use `USE` (SQL Server, MySQL, MariaDB) or `\connect` (PostgreSQL).** trek deploys to the environment's database.
+- **Schema-qualify every object:** `dbo.Customer`, `public.customer` (MySQL, MariaDB and SQLite: don't; write `customer`).
 - **Data changes** belong in changes too, written to be correct on every environment's data. Use variables for
   values that differ between environments.
 
@@ -94,6 +94,8 @@ again:
 - SQL Server: `CREATE OR ALTER VIEW|PROCEDURE|FUNCTION|TRIGGER ...`
 - PostgreSQL: `CREATE OR REPLACE VIEW|FUNCTION|PROCEDURE ...`, and `DROP ... IF EXISTS` then `CREATE` for
   objects that have no `OR REPLACE`.
+- MySQL: `CREATE OR REPLACE VIEW ...`, and `DROP PROCEDURE|FUNCTION|TRIGGER IF EXISTS` then `CREATE`.
+- MariaDB: `CREATE OR REPLACE VIEW|PROCEDURE|FUNCTION|TRIGGER ...`.
 
 Name them by path, for example `repeatable/views/active_customer.sql`. trek applies them after the changes,
 whenever their text differs from what was last applied. When one repeatable uses another, declare it on the
@@ -185,6 +187,21 @@ DROP INDEX public.customer_email_key;
 ALTER TABLE public.customer DROP COLUMN email;
 ```
 
+## MySQL and MariaDB
+
+- Statements end with `;`. A procedure, function, trigger or event body with several statements goes between
+  `DELIMITER //` and `DELIMITER ;` lines, as in the `mysql` client; without them the body ends at its first `;`
+  (TREK005).
+- DDL commits as it runs and can't be rolled back: a change that fails part-way keeps what already ran. Keep each
+  change to one table change, use `IF EXISTS` / `IF NOT EXISTS`, and write a verify script.
+- A schema is a database, and trek works in the environment's database: don't qualify names with a database,
+  and don't `USE` another (TREK009). trek's own tables are `trek_*` in the same database.
+- verify.sql: a statement that fails when the change is missing, such as
+  `SELECT email FROM customer LIMIT 0;`
+- MariaDB has sequences (`CREATE SEQUENCE`, `NEXTVAL(seq)`), `RETURNING`, and `CREATE OR REPLACE` for stored
+  programs; MySQL has none of these. MySQL has functional indexes (`KEY ((lower(email)))`) and the `->>` JSON
+  operator; MariaDB has neither (index a generated column; use `JSON_VALUE`).
+
 ## SQLite
 
 - Statements end with `;`. Semicolons inside strings, comments and `CREATE TRIGGER ... BEGIN ... END;` bodies
@@ -230,9 +247,10 @@ ALTER TABLE customer DROP COLUMN email;
 | TREK002 | SQL Server | `USE` switches databases. Remove it. |
 | TREK003 | all | `BEGIN`/`COMMIT`/`ROLLBACK` in a transactional change. Remove it. |
 | TREK004 | SQL Server | `SYSTEM_VERSIONING = OFF` without turning it back on. Turn it back on in the same script. |
-| TREK005 | PostgreSQL, SQLite | A psql command trek can't run, or unbalanced `\if`/`\endif`; on SQLite, a sqlite3 dot-command (`.read`, `.mode`). Remove it. |
+| TREK005 | PostgreSQL, SQLite, MySQL, MariaDB | A psql command trek can't run, or unbalanced `\if`/`\endif`; on SQLite, a sqlite3 dot-command (`.read`, `.mode`); on MySQL and MariaDB, a client command (`source`) or a stored program body without `DELIMITER`. Remove it, or add the delimiter. |
 | TREK007 | PostgreSQL | An enum value added with `ADD VALUE` is used in the same change. Move that use to a later change. |
 | TREK008 | SQLite | SQL newer than `sqlite.minVersion` in trek.yaml (`RETURNING`, `DROP COLUMN`, `STRICT`, `->>` ...). Rewrite it for the older engine; raise `minVersion` only if the user says every program that opens the database has that SQLite. |
+| TREK009 | MySQL, MariaDB | `USE` switches databases, and would send the rest of the change and trek's journal entry there. Remove it. |
 
 ## Generating a change from a database (person-run)
 

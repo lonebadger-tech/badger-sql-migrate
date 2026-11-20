@@ -6,7 +6,7 @@
 
 Free, open-source, cross-platform (Windows, macOS, Linux) database migrations with **real up and down**, **named changes instead of version numbers**, and **SHA-256 hash certification** of everything that reaches a database.
 
-Providers: **SQL Server / Azure SQL**, **PostgreSQL** (`trek init --provider postgresql`), **MySQL** (`trek init --provider mysql`) and **SQLite** (`trek init --provider sqlite`). The engine is vendor-neutral: providers live in their own assemblies.
+Providers: **SQL Server / Azure SQL**, **PostgreSQL** (`trek init --provider postgresql`), **MySQL** (`trek init --provider mysql`), **MariaDB** (`trek init --provider mariadb`) and **SQLite** (`trek init --provider sqlite`). The engine is vendor-neutral: providers live in their own assemblies.
 
 - **Documentation:** [lonebadger.tech/badger-trek](https://lonebadger.tech/badger-trek/) (also as Markdown for AI assistants: [llms.txt](https://www.lonebadger.tech/llms.txt))
 - **Download:** [standalone binaries](https://lonebadger.tech/badger-trek/download/) or `dotnet tool install -g Badger.Trek`
@@ -99,7 +99,7 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 | `import flyway\|dbup\|grate\|sqitch <dir>` | Convert a Flyway, DbUp, grate/RoundhousE or Sqitch project into a new trek project: migrations, reverts, repeatables, variables, environments |
 | `import ef <project dir \| up.sql>` | Convert Entity Framework Core migrations: each migration's `Up()` and `Down()` as SQL from `dotnet ef migrations script` (trek runs it for a project folder) |
 | `import sqlproj <file.sqlproj>` | Convert an SSDT / SQL Database Project: one change per table, type or schema in dependency order, views/procedures/functions/triggers as repeatables, the post-deployment script and SqlCmdVariables |
-| `convert schema --out <dir>` / `convert data --target <dir>` | Convert a live database between SQL Server, PostgreSQL and SQLite, in any direction: a new project for the other provider (tables, keys, indexes; views, routines and triggers translated, with `CONVERSION.md` listing what to review), then copy the rows and compare counts |
+| `convert schema --to <provider> --out <dir>` / `convert data --target <dir>` | Convert a live database between SQL Server, PostgreSQL, MySQL, MariaDB and SQLite, in any direction: a new project for the `--to` provider (tables, keys, indexes; views, routines and triggers translated, with `CONVERSION.md` listing what to review), then copy the rows and compare counts |
 | `doctor` | Check config, Entra sign-in and connectivity; show resources |
 | `env list` / `env show` | Environments (with templates) / one environment fully merged, secrets masked |
 | `env status` / `env provision [--allow-destructive]` | Compare / create or rotate per-environment resources (Always Encrypted keys) |

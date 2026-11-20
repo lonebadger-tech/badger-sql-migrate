@@ -2,6 +2,7 @@ using Badger.Trek.Core.Configuration;
 using Badger.Trek.Core.Providers;
 using Badger.Trek.Providers.Testing;
 using MySqlConnector;
+using Testcontainers.MariaDb;
 using Testcontainers.MySql;
 
 namespace Badger.Trek.Providers.MySql.Tests;
@@ -14,6 +15,19 @@ namespace Badger.Trek.Providers.MySql.Tests;
 public sealed class MySqlFixture : IAsyncLifetime
 {
     private MySqlContainer? container;
+    private MariaDbContainer? mariaDb;
+
+    /// <summary>The image of the container: TREK_TEST_MYSQL_IMAGE, default mysql:8.4 (mariadb:* runs the MariaDB provider).</summary>
+    public static string Image { get; } = Environment.GetEnvironmentVariable("TREK_TEST_MYSQL_IMAGE") is { Length: > 0 } i ? i : "mysql:8.4";
+
+    /// <summary>MariaDB when the image is mariadb:*, or TREK_TEST_MYSQL_FLAVOR=mariadb for a TREK_TEST_MYSQL server.</summary>
+    public static MySqlFlavor Flavor { get; } =
+        Image.StartsWith("mariadb", StringComparison.OrdinalIgnoreCase) || string.Equals(Environment.GetEnvironmentVariable("TREK_TEST_MYSQL_FLAVOR"), "mariadb", StringComparison.OrdinalIgnoreCase)
+            ? MySqlFlavor.MariaDb
+            : MySqlFlavor.MySql;
+
+    /// <summary>MySQL, or MariaDB.</summary>
+    public static string Product => Flavor == MySqlFlavor.MariaDb ? "MariaDB" : "MySQL";
 
     public string? AdminConnectionString { get; private set; }
 
@@ -30,14 +44,21 @@ public sealed class MySqlFixture : IAsyncLifetime
 
         try
         {
-            var image = Environment.GetEnvironmentVariable("TREK_TEST_MYSQL_IMAGE") is { Length: > 0 } i ? i : "mysql:8.4";
-            container = new MySqlBuilder(image).WithUsername("root").WithPassword("trek-test").Build();
+            if (Flavor == MySqlFlavor.MariaDb)
+            {
+                mariaDb = new MariaDbBuilder(Image).WithUsername("root").WithPassword("trek-test").Build();
+                await mariaDb.StartAsync();
+                AdminConnectionString = mariaDb.GetConnectionString();
+                return;
+            }
+
+            container = new MySqlBuilder(Image).WithUsername("root").WithPassword("trek-test").Build();
             await container.StartAsync();
             AdminConnectionString = container.GetConnectionString();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            UnavailableReason = $"MySQL container could not start ({ex.GetType().Name}: {ex.Message.Split('\n')[0]}). Start Docker or set TREK_TEST_MYSQL.";
+            UnavailableReason = $"{Product} container could not start ({ex.GetType().Name}: {ex.Message.Split('\n')[0]}). Start Docker or set TREK_TEST_MYSQL.";
         }
     }
 
@@ -46,6 +67,11 @@ public sealed class MySqlFixture : IAsyncLifetime
         if (container is not null)
         {
             await container.DisposeAsync();
+        }
+
+        if (mariaDb is not null)
+        {
+            await mariaDb.DisposeAsync();
         }
     }
 
@@ -56,7 +82,7 @@ public sealed class MySqlFixture : IAsyncLifetime
         await using (var admin = new MySqlConnection(AdminConnectionString))
         {
             await admin.OpenAsync();
-            await using var create = new MySqlCommand($"CREATE DATABASE `{name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;", admin);
+            await using var create = new MySqlCommand($"CREATE DATABASE `{name}` CHARACTER SET utf8mb4 COLLATE {(Flavor == MySqlFlavor.MariaDb ? "utf8mb4_uca1400_ai_ci" : "utf8mb4_0900_ai_ci")};", admin);
             await create.ExecuteNonQueryAsync();
         }
 
@@ -93,7 +119,7 @@ public sealed class MySqlCollection : ICollectionFixture<MySqlFixture>
 [Collection("mysql")]
 public sealed class MySqlConformanceTests(MySqlFixture fixture) : ProviderConformanceTests
 {
-    protected override IDatabaseProvider Provider { get; } = new MySqlProvider();
+    protected override IDatabaseProvider Provider { get; } = new MySqlProvider(MySqlFixture.Flavor);
 
     protected override IConformanceDialect Dialect { get; } = new MyDialect();
 

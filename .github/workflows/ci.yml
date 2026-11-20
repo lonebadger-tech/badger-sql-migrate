@@ -33,7 +33,7 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet build -c Release
-      # SQLite tests (bundled engine) run everywhere. SQL Server (2022), PostgreSQL (18) and MySQL (8.4) database tests run where Docker is
+      # SQLite tests (bundled engine) run everywhere. SQL Server (2022), PostgreSQL (18), MySQL (8.4) and MariaDB (11.4) database tests run where Docker is
       # available (ubuntu) and skip elsewhere; the jobs below cover the other versions.
       - run: dotnet test -c Release --no-build
       - run: dotnet run -c Release --no-build --project src/Badger.Trek.Cli -- plan check -C samples/demo-db
@@ -100,7 +100,8 @@ jobs:
         if: always()
         run: dotnet test tests/Badger.Trek.Providers.Sqlite.Tests -c Release --no-build
 
-  # Every MySQL LTS release still supported (8.4, 9.7): the provider's conformance and feature tests against each.
+  # Every MySQL LTS release still supported (8.4, 9.7): the provider's conformance and feature tests against each,
+  # and trek convert to and from MySQL.
   mysql:
     strategy:
       fail-fast: false
@@ -115,6 +116,31 @@ jobs:
       - run: dotnet test tests/Badger.Trek.Providers.MySql.Tests -c Release
         env:
           TREK_TEST_MYSQL_IMAGE: mysql:${{ matrix.version }}
+      - if: always()
+        run: dotnet test tests/Badger.Trek.Conversion.IntegrationTests -c Release --filter "FullyQualifiedName~MySqlConversionTests"
+        env:
+          TREK_TEST_MYSQL_IMAGE: mysql:${{ matrix.version }}
+
+  # Every MariaDB LTS release still supported (10.11, 11.4, 11.8, 12.3): the MySQL provider's tests as provider
+  # 'mariadb' against each, and trek convert to and from MariaDB.
+  mariadb:
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['10.11', '11.4', '11.8', '12.3']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test tests/Badger.Trek.Providers.MySql.Tests -c Release
+        env:
+          TREK_TEST_MYSQL_IMAGE: mariadb:${{ matrix.version }}
+      - if: always()
+        run: dotnet test tests/Badger.Trek.Conversion.IntegrationTests -c Release --filter "FullyQualifiedName~MariaDbConversionTests"
+        env:
+          TREK_TEST_MARIADB_IMAGE: mariadb:${{ matrix.version }}
 
   # Every PostgreSQL major version still supported by the PostgreSQL project (5 years each): the provider's
   # conformance and feature tests against each.

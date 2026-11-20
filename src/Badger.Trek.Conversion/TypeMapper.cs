@@ -9,11 +9,14 @@ namespace Badger.Trek.Conversion;
 /// <param name="IsText">A character type (gets the case-insensitive collation on PostgreSQL).</param>
 public sealed record TypeMapping(string Type, string? Check = null, string? Note = null, bool IsText = false);
 
-/// <summary>Maps column types between PostgreSQL and SQL Server.</summary>
+/// <summary>Maps column types between PostgreSQL, SQL Server, SQLite and MySQL.</summary>
 public static partial class TypeMapper
 {
     public static TypeMapping Map(string sourceType, ConversionContext ctx) => (ctx.Source, ctx.Target) switch
     {
+        (Dialect.MySql, Dialect.MySql) => BetweenMySqlAndMariaDb(sourceType, ctx),
+        (Dialect.MySql, _) => FromMySql(sourceType, ctx),
+        (_, Dialect.MySql) => ToMySql(sourceType, ctx),
         (_, Dialect.Sqlite) => ToSqlite(sourceType, ctx),
         (Dialect.Sqlite, _) => FromSqlite(sourceType, ctx),
         (Dialect.PostgreSql, _) => PgToTSql(sourceType, ctx),

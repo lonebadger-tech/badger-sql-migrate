@@ -8,10 +8,11 @@ public sealed class MySqlSession : IDatabaseSession
     private readonly MySqlConnection connection;
     private MySqlTransaction? transaction;
 
-    public MySqlSession(MySqlConnection connection, string description)
+    public MySqlSession(MySqlConnection connection, string description, bool isMariaDb = false)
     {
         this.connection = connection;
         Description = description;
+        IsMariaDb = isMariaDb;
         connection.InfoMessage += (_, e) =>
         {
             foreach (var error in e.Errors)
@@ -27,7 +28,13 @@ public sealed class MySqlSession : IDatabaseSession
 
     public bool InTransaction => transaction is not null;
 
+    /// <summary>The server is MariaDB (provider 'mariadb'), whose catalog and SQL differ from MySQL's in places.</summary>
+    public bool IsMariaDb { get; }
+
     internal MySqlConnection Connection => connection;
+
+    /// <summary>The open transaction, which a command run on <see cref="Connection"/> must join.</summary>
+    internal MySqlTransaction? Transaction => transaction;
 
     public TimeSpan? CommandTimeout { get; set; }
 

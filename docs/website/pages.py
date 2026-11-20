@@ -39,7 +39,7 @@ def home():
   <img class="icon" src="{BASE}/icon.svg" alt="Badger Trek icon">
   <div>
     <h1>Badger Trek</h1>
-    <p class="lede">Database migrations for SQL Server, Azure SQL, PostgreSQL, MySQL and SQLite that you can prove. Free, cross-platform, with real up <em>and</em> down.</p>
+    <p class="lede">Database migrations for SQL Server, Azure SQL, PostgreSQL, MySQL, MariaDB and SQLite that you can prove. Free, cross-platform, with real up <em>and</em> down.</p>
     <div class="actions">
       <a class="button primary" href="{BASE}/download/">Download {VERSION}</a>
       <a class="button" href="{BASE}/docs/quick-start/">Quick start</a>
@@ -49,7 +49,7 @@ def home():
 </div>
 
 <div class="features">
-  <div><h3>SQL Server, PostgreSQL, MySQL and SQLite</h3><p>One tool for SQL Server 2019 and later and Azure SQL, PostgreSQL 15 to 18, MySQL 8.4 and 9.7, and SQLite 3.26 and later. SQLite has its engine built in: a database file, nothing to install. <a href="{BASE}/docs/sqlite/">SQLite</a> · <a href="{BASE}/docs/converting/">Convert between them</a></p></div>
+  <div><h3>SQL Server, PostgreSQL, MySQL, MariaDB and SQLite</h3><p>One tool for SQL Server 2019 and later and Azure SQL, PostgreSQL 15 to 18, MySQL 8.4 and 9.7, MariaDB 10.11 to 12.3, and SQLite 3.26 and later. SQLite has its engine built in: a database file, nothing to install. <a href="{BASE}/docs/sqlite/">SQLite</a> · <a href="{BASE}/docs/converting/">Convert between them</a></p></div>
   <div><h3>Named changes, no collisions</h3><p>Changes have names, not version numbers. The plan file merges with git's union driver, so two developers adding changes the same day never collide.</p></div>
   <div><h3>Hash-certified</h3><p>SHA-256 per change and a hash chain over the whole plan. Same head hash means byte-identical history on every machine and environment.</p></div>
   <div><h3>Real down, for free</h3><p>Revert scripts are first-class. They are stored in the database at deploy time, so rollback works from any branch, even after the change is gone.</p></div>
@@ -84,7 +84,7 @@ trek revert --to create-customer -e test''')}
 
 <p><a href="{BASE}/docs/">Documentation</a> · <a href="{BASE}/examples/">Example scripts</a> · <a href="{BASE}/download/">Download</a> · <a href="{BASE}/releases/">What's new</a> · <a href="https://github.com/lonebadger-tech/badger-trek">Source on GitHub</a></p>
 """
-    return Page("", "Badger Trek: hash-certified SQL Server, PostgreSQL, MySQL and SQLite migrations", "Free, cross-platform, hash-certified database migrations for SQL Server, Azure SQL, PostgreSQL, MySQL and SQLite with real up and down, named changes, environments, Entra ID and Always Encrypted.", body)
+    return Page("", "Badger Trek: hash-certified SQL Server, PostgreSQL, MySQL, MariaDB and SQLite migrations", "Free, cross-platform, hash-certified database migrations for SQL Server, Azure SQL, PostgreSQL, MySQL, MariaDB and SQLite with real up and down, named changes, environments, Entra ID and Always Encrypted.", body)
 
 
 # ---------------------------------------------------------------- download
@@ -180,6 +180,25 @@ def releases():
     body = f"""
 <section class="release" id="v{VERSION}">
   <h2>Version {VERSION} <span class="date">{RELEASE_DATE}</span></h2>
+  <h3>MySQL</h3>
+  <ul>
+    <li><code>trek init --provider mysql</code>, for MySQL 8.4 and 9.7, the LTS releases still supported. Deploy, revert, verify, repeatables, bundles, the schema fingerprint and <code>diff-schema</code> work as on the other databases. MySQL commits DDL as it runs, so changes run without a transaction and are recorded only when all of them ran. Scripts are split like the <code>mysql</code> client, with <code>DELIMITER</code> around stored program bodies. See <a href="{BASE}/docs/mysql/">MySQL</a></li>
+    <li><code>trek add --from-diff</code> and <code>diff-schema --script</code> write MySQL changes, with <code>ALTER TABLE</code> for tables and a shadow database on the same server</li>
+  </ul>
+  <h3>MariaDB</h3>
+  <ul>
+    <li><code>trek init --provider mariadb</code>, for MariaDB 10.11, 11.4, 11.8 and 12.3, the LTS releases still supported: the MySQL provider in MariaDB mode, with sequences in the fingerprint. A <code>mysql</code> environment that turns out to be MariaDB, or the other way round, stops with the provider to use. See <a href="{BASE}/docs/mariadb/">MariaDB</a></li>
+  </ul>
+  <h3>Converting</h3>
+  <ul>
+    <li><code>trek convert</code> moves MySQL and MariaDB databases to and from SQL Server, PostgreSQL, SQLite and each other: types, keys, indexes, views and data. Functions, procedures and triggers are written commented out for review, for now. See <a href="{BASE}/docs/converting/#mysql">Converting</a></li>
+    <li><code>trek convert schema</code> always needs <code>--to</code> (breaking): no pair of providers is a default any more</li>
+    <li>Fixed: converting into SQL Server with sequences no longer makes <code>trek verify</code> report drift; the target's default schema is no longer created or dropped; a view that calls a routine which could not be translated is commented out with it</li>
+  </ul>
+</section>
+
+<section class="release" id="v0.5.0">
+  <h2>Version 0.5.0 <span class="date">November 2026</span></h2>
   <h3>Supported database versions (breaking)</h3>
   <ul>
     <li>trek now supports, and tests, only database versions their vendor or distribution still supports: <strong>SQL Server 2019 or later</strong> (was 2016 SP1), <strong>PostgreSQL 15 or later</strong> (was 12; 12, 13 and 14 have reached their end of life), and SQLite 3.26 or later as before (RHEL 8 is supported until 2029). Azure SQL is unaffected</li>
@@ -223,7 +242,7 @@ def releases():
   </ul>
   <h3>Converting databases</h3>
   <ul>
-    <li><code>trek convert schema</code> turns a live SQL Server, PostgreSQL or SQLite database into a new trek project for another of them: types mapped, views, functions, procedures and triggers translated, and every uncertain spot marked for review and listed in <code>CONVERSION.md</code>. See <a href="{BASE}/docs/converting/">Converting databases</a></li>
+    <li><code>trek convert schema</code> turns a live SQL Server, PostgreSQL, MySQL, MariaDB or SQLite database into a new trek project for another of them: types mapped, views, functions, procedures and triggers translated, and every uncertain spot marked for review and listed in <code>CONVERSION.md</code>. See <a href="{BASE}/docs/converting/">Converting databases</a></li>
     <li><code>trek convert data</code> then copies the rows (bulk copy, <code>COPY</code> or prepared inserts) and compares row counts</li>
   </ul>
   <h3>AI assistants</h3>
@@ -368,7 +387,7 @@ def compare():
     table = "<table><thead>" + head + "</thead><tbody>" + "".join(
         "<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows) + "</tbody></table>"
     body = f"""
-<p>Every tool here is good at something. This is how Badger Trek's design relates to them, for SQL Server, Azure SQL, PostgreSQL, MySQL and SQLite. Feature sets change; check each project for its current state.</p>
+<p>Every tool here is good at something. This is how Badger Trek's design relates to them, for SQL Server, Azure SQL, PostgreSQL, MySQL, MariaDB and SQLite. Feature sets change; check each project for its current state.</p>
 {table}
 
 <h2>What Badger Trek keeps</h2>
@@ -392,7 +411,7 @@ def compare():
 <p>Coming from another tool? See <a href="{BASE}/docs/baseline/">Existing databases</a> for adopting a database that is already in production.</p>
 """
     return Page("compare/", "Badger Trek compared with Flyway, DbUp, grate, EF, SSDT, Sqitch and Liquibase",
-                "How Badger Trek compares with other database migration tools for SQL Server, PostgreSQL, MySQL and SQLite.", body,
+                "How Badger Trek compares with other database migration tools for SQL Server, PostgreSQL, MySQL, MariaDB and SQLite.", body,
                 heading="How it compares", lede="Flyway, DbUp, grate, EF Core migrations, SSDT, Sqitch and Liquibase.", wide=True)
 
 

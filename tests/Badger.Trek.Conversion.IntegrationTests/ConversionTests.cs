@@ -1,26 +1,36 @@
 using System.Text.RegularExpressions;
 using Badger.Trek.Cli;
 using Microsoft.Data.SqlClient;
+using MySqlConnector;
 using Npgsql;
 using Testcontainers.MsSql;
+using Testcontainers.MariaDb;
+using Testcontainers.MySql;
 using Testcontainers.PostgreSql;
 
 namespace Badger.Trek.Conversion.IntegrationTests;
 
 /// <summary>
 /// One PostgreSQL and one SQL Server for the run: TREK_TEST_POSTGRES / TREK_TEST_SQLSERVER (connection strings to
-/// existing servers) or Testcontainers. When either is unavailable the tests skip.
+/// existing servers) or Testcontainers. When either is unavailable the tests skip. MySQL (TREK_TEST_MYSQL, or a
+/// container from TREK_TEST_MYSQL_IMAGE, default mysql:8.4) is separate: when it cannot start only the MySQL tests skip.
 /// </summary>
 public sealed class Servers : IAsyncLifetime
 {
     private PostgreSqlContainer? postgres;
     private MsSqlContainer? sqlServer;
+    private MySqlContainer? mySql;
 
     public string? Postgres { get; private set; }
 
     public string? SqlServer { get; private set; }
 
     public string? UnavailableReason { get; private set; }
+
+    public string? MySql { get; private set; }
+
+    /// <summary>Why the MySQL tests skip: no PostgreSQL or SQL Server (the other side of most of them), or no MySQL.</summary>
+    public string? MySqlUnavailableReason { get; private set; }
 
     public async Task InitializeAsync()
     {
@@ -46,6 +56,80 @@ public sealed class Servers : IAsyncLifetime
         {
             UnavailableReason = $"database containers could not start ({ex.GetType().Name}: {ex.Message.Split('\n')[0]}). Start Docker or set TREK_TEST_POSTGRES and TREK_TEST_SQLSERVER.";
         }
+
+        MySqlUnavailableReason = UnavailableReason;
+        MariaDbUnavailableReason = UnavailableReason;
+        if (UnavailableReason is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            MySql = Environment.GetEnvironmentVariable("TREK_TEST_MYSQL");
+            if (string.IsNullOrWhiteSpace(MySql))
+            {
+                mySql = new MySqlBuilder(Environment.GetEnvironmentVariable("TREK_TEST_MYSQL_IMAGE") is { Length: > 0 } image ? image : "mysql:8.4")
+                    .WithUsername("root").WithPassword("trek-test").Build();
+                await mySql.StartAsync();
+                MySql = mySql.GetConnectionString();
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            MySqlUnavailableReason = $"MySQL could not start ({ex.GetType().Name}: {ex.Message.Split('\n')[0]}). Start Docker or set TREK_TEST_MYSQL.";
+        }
+
+        // MariaDB: TREK_TEST_MARIADB, or a container from TREK_TEST_MARIADB_IMAGE (default mariadb:11.4). Its tests
+        // also convert to and from MySQL, so they skip when MySQL is unavailable too.
+        MariaDbUnavailableReason = MySqlUnavailableReason;
+        if (MySqlUnavailableReason is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            MariaDb = Environment.GetEnvironmentVariable("TREK_TEST_MARIADB");
+            if (string.IsNullOrWhiteSpace(MariaDb))
+            {
+                mariaDb = new MariaDbBuilder(Environment.GetEnvironmentVariable("TREK_TEST_MARIADB_IMAGE") is { Length: > 0 } image ? image : "mariadb:11.4")
+                    .WithUsername("root").WithPassword("trek-test").Build();
+                await mariaDb.StartAsync();
+                MariaDb = mariaDb.GetConnectionString();
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            MariaDbUnavailableReason = $"MariaDB could not start ({ex.GetType().Name}: {ex.Message.Split('\n')[0]}). Start Docker or set TREK_TEST_MARIADB.";
+        }
+    }
+
+    public string? MariaDb { get; private set; }
+
+    /// <summary>Why the MariaDB tests skip: no PostgreSQL, SQL Server or MySQL (the other sides), or no MariaDB.</summary>
+    public string? MariaDbUnavailableReason { get; private set; }
+
+    private MariaDbContainer? mariaDb;
+
+    public async Task<string> CreateMariaDbAsync(string? script = null)
+    {
+        var name = "trek_conv_" + Guid.NewGuid().ToString("N")[..10];
+        await using (var admin = new MySqlConnection(MariaDb))
+        {
+            await admin.OpenAsync();
+            await new MySqlCommand($"CREATE DATABASE `{name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;", admin).ExecuteNonQueryAsync();
+        }
+
+        var cs = new MySqlConnectionStringBuilder(MariaDb!) { Database = name, Pooling = false }.ConnectionString;
+        if (script is not null)
+        {
+            await using var connection = new MySqlConnection(cs);
+            await connection.OpenAsync();
+            await new MySqlCommand(script, connection).ExecuteNonQueryAsync();
+        }
+
+        return cs;
     }
 
     public async Task DisposeAsync()
@@ -59,6 +143,36 @@ public sealed class Servers : IAsyncLifetime
         {
             await sqlServer.DisposeAsync();
         }
+
+        if (mySql is not null)
+        {
+            await mySql.DisposeAsync();
+        }
+
+        if (mariaDb is not null)
+        {
+            await mariaDb.DisposeAsync();
+        }
+    }
+
+    public async Task<string> CreateMySqlAsync(string? script = null)
+    {
+        var name = "trek_conv_" + Guid.NewGuid().ToString("N")[..10];
+        await using (var admin = new MySqlConnection(MySql))
+        {
+            await admin.OpenAsync();
+            await new MySqlCommand($"CREATE DATABASE `{name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;", admin).ExecuteNonQueryAsync();
+        }
+
+        var cs = new MySqlConnectionStringBuilder(MySql!) { Database = name, Pooling = false }.ConnectionString;
+        if (script is not null)
+        {
+            await using var connection = new MySqlConnection(cs);
+            await connection.OpenAsync();
+            await new MySqlCommand(script, connection).ExecuteNonQueryAsync();
+        }
+
+        return cs;
     }
 
     public async Task<string> CreatePostgresAsync(string? script = null)
@@ -140,13 +254,13 @@ public sealed class ConversionTests(Servers servers) : IDisposable
         File.WriteAllText(yaml, text);
     }
 
-    private async Task<string> ConvertAsync(string provider, string source, string target, string? names = null)
+    private async Task<string> ConvertAsync(string provider, string to, string source, string target, string? names = null)
     {
         Skip.If(servers.UnavailableReason is not null, servers.UnavailableReason);
         var project = Path.Combine(root, "converted");
         var empty = Path.Combine(root, "empty");
         Directory.CreateDirectory(empty);
-        Assert.Equal(0, await Commands.ConvertSchema(G(empty, source), project, null, provider, names, false, [], false, CancellationToken.None));
+        Assert.Equal(0, await Commands.ConvertSchema(G(empty, source), project, to, provider, names, false, [], false, CancellationToken.None));
         Assert.True(File.Exists(Path.Combine(project, "CONVERSION.md")));
         Target(project, target);
         Assert.Equal(0, Commands.PlanCheck(G(project)));
@@ -162,7 +276,7 @@ public sealed class ConversionTests(Servers servers) : IDisposable
         Skip.If(servers.UnavailableReason is not null, servers.UnavailableReason);
         var source = await servers.CreateSqlServerAsync(Sample("sqlserver.sql"));
         var target = await servers.CreatePostgresAsync();
-        await ConvertAsync("sqlserver", source, target, names: "snake");
+        await ConvertAsync("sqlserver", "postgresql", source, target, names: "snake");
 
         await using var pg = new NpgsqlConnection(target);
         await pg.OpenAsync();
@@ -197,7 +311,7 @@ public sealed class ConversionTests(Servers servers) : IDisposable
         Skip.If(servers.UnavailableReason is not null, servers.UnavailableReason);
         var source = await servers.CreatePostgresAsync(Sample("postgresql.sql"));
         var target = await servers.CreateSqlServerAsync();
-        await ConvertAsync("postgresql", source, target);
+        await ConvertAsync("postgresql", "sqlserver", source, target);
 
         await using var ss = new SqlConnection(target);
         await ss.OpenAsync();

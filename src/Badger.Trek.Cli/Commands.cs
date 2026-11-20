@@ -42,6 +42,7 @@ public static partial class Commands
         .Register(PostgreSqlProvider.ProviderId, () => new PostgreSqlProvider())
         .Register("postgres", () => new PostgreSqlProvider())
         .Register(MySqlProvider.ProviderId, () => new MySqlProvider())
+        .Register(MySqlProvider.MariaDbProviderId, () => new MySqlProvider(MySqlFlavor.MariaDb))
         .Register(SqliteProvider.ProviderId, SqliteOptions.SectionName, settings => new SqliteProvider(SqliteOptions.Parse(settings)))
         .Register("sqlite3", SqliteOptions.SectionName, settings => new SqliteProvider(SqliteOptions.Parse(settings)));
 
@@ -84,7 +85,7 @@ public static partial class Commands
         Directory.CreateDirectory(Path.Combine(dir, MigrationProject.RepeatableFolder));
         Directory.CreateDirectory(Path.Combine(dir, MigrationProject.EnvironmentsFolder));
 
-        WriteIfMissing(Path.Combine(dir, TrekConfig.FileName), provider.Id == PostgreSqlProvider.ProviderId ? PostgreSqlConfigTemplate : provider.Id == MySqlProvider.ProviderId ? MySqlConfigTemplate : provider.Id == SqliteProvider.ProviderId ? SqliteConfigTemplate : $$"""
+        WriteIfMissing(Path.Combine(dir, TrekConfig.FileName), provider.Id == PostgreSqlProvider.ProviderId ? PostgreSqlConfigTemplate : provider.Id == MySqlProvider.ProviderId ? MySqlConfigTemplate : provider.Id == MySqlProvider.MariaDbProviderId ? MariaDbConfigTemplate : provider.Id == SqliteProvider.ProviderId ? SqliteConfigTemplate : $$"""
             # Badger Trek configuration
             provider: {{provider.Id}}
             defaultEnvironment: local
@@ -241,6 +242,40 @@ public static partial class Commands
         #    connectionProperties:            # any MySqlConnector connection-string keyword
         #      Default Command Timeout: 120
 
+        """;
+
+    private const string MariaDbConfigTemplate = """
+        # Badger Trek configuration
+        provider: mariadb
+        defaultEnvironment: local
+
+        # Script variables, referenced as {Name} in scripts. Values are not part of change hashes.
+        # Environments can override them under their own 'variables:'.
+        variables: {}
+
+        # MariaDB commits DDL as it runs, so changes run without a transaction: a change that fails part-way keeps what
+        # it already did. Keep changes small, and give each a verify script.
+        environments:
+          local:
+            host: localhost
+            port: 3306
+            database: mydatabase               # trek deploys to this database and keeps its journal there (trek_* tables)
+            authentication: password
+            user: root
+            password: ${env:TREK_LOCAL_PASSWORD}
+            tls:
+              mode: optional                   # local development only
+
+        #  prod:
+        #    host: myapp-prod.example.com
+        #    database: mydatabase
+        #    authentication: password
+        #    user: deployer
+        #    password: ${env:TREK_PROD_PASSWORD}
+        #    tls: { mode: strict }
+        #    protected: true                  # deploy/revert require typing the environment name (or --yes)
+        #    allowRevert: false               # fix forward in production
+        #    ordering: strict                 # exact plan order; prod history is certified
         """;
 
     private const string SqliteConfigTemplate = """

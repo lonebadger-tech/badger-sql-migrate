@@ -35,8 +35,14 @@ public static class MySqlConnectionFactory
         AuthenticationKind.EntraAccessToken,
     };
 
-    public static IReadOnlyList<string> Validate(DeploymentEnvironment environment)
+    /// <summary>MariaDB has no managed service with Entra sign-in (Azure Database for MariaDB is retired): passwords only.</summary>
+    public static readonly IReadOnlySet<AuthenticationKind> SupportedMariaDb = new HashSet<AuthenticationKind> { AuthenticationKind.Password };
+
+    public static IReadOnlySet<AuthenticationKind> SupportedFor(MySqlFlavor flavor) => flavor == MySqlFlavor.MariaDb ? SupportedMariaDb : Supported;
+
+    public static IReadOnlyList<string> Validate(DeploymentEnvironment environment, MySqlFlavor flavor = MySqlFlavor.MySql)
     {
+        var product = flavor == MySqlFlavor.MariaDb ? "MariaDB" : "MySQL";
         var problems = new List<string>();
         var name = environment.Name;
         if (environment.ConnectionString is null && string.IsNullOrWhiteSpace(environment.Host))
@@ -58,7 +64,7 @@ public static class MySqlConnectionFactory
 
         if (ResolveDatabaseName(environment) is null or "")
         {
-            problems.Add($"environment '{name}': set 'database': trek deploys to one MySQL database (schema) and keeps its journal there.");
+            problems.Add($"environment '{name}': set 'database': trek deploys to one {product} database (schema) and keeps its journal there.");
         }
 
         foreach (var (key, value) in environment.ConnectionProperties)
@@ -73,9 +79,9 @@ public static class MySqlConnectionFactory
             }
         }
 
-        if (environment.Authentication is { } kind && !Supported.Contains(kind))
+        if (environment.Authentication is { } kind && !SupportedFor(flavor).Contains(kind))
         {
-            problems.Add($"environment '{name}': authentication '{kind}' is not available for MySQL. Use password, or an Entra token flow such as entraDefault (Azure Database for MySQL).");
+            problems.Add($"environment '{name}': authentication '{kind}' is not available for {product}. " + (flavor == MySqlFlavor.MariaDb ? "Use password." : "Use password, or an Entra token flow such as entraDefault (Azure Database for MySQL)."));
         }
 
         var tokenBased = environment.Authentication is { } k && k.ToString().StartsWith("Entra", StringComparison.Ordinal);
@@ -88,12 +94,12 @@ public static class MySqlConnectionFactory
 
         if (environment.Tls.HostNameInCertificate is not null)
         {
-            problems.Add($"environment '{name}': tls.hostNameInCertificate is not supported by MySQL; with an SSH tunnel use tls.mode 'mandatory' (encrypt without host-name check) or connect by the certificate's host name.");
+            problems.Add($"environment '{name}': tls.hostNameInCertificate is not supported by {product}; with an SSH tunnel use tls.mode 'mandatory' (encrypt without host-name check) or connect by the certificate's host name.");
         }
 
         foreach (var key in environment.ProviderSettings.Select(kv => kv.Key))
         {
-            problems.Add($"environment '{name}': unknown MySQL setting '{key}'.");
+            problems.Add($"environment '{name}': unknown {product} setting '{key}'.");
         }
 
         return problems;

@@ -6,7 +6,7 @@ namespace Badger.Trek.Providers.MySql.Tests;
 [Collection("mysql")]
 public sealed class MySqlFeatureTests(MySqlFixture fixture)
 {
-    private readonly MySqlProvider provider = new();
+    private readonly MySqlProvider provider = new(MySqlFixture.Flavor);
 
     private async Task<TestDatabase> RequireDatabaseAsync()
     {
@@ -96,7 +96,7 @@ public sealed class MySqlFeatureTests(MySqlFixture fixture)
         await using var session = await provider.OpenSessionAsync(db.Profile, SessionContext.Empty, CancellationToken.None);
         var facts = (await provider.DescribeAsync(session, CancellationToken.None)).ToDictionary(kv => kv.Key, kv => kv.Value);
 
-        Assert.StartsWith("MySQL ", facts["server"], StringComparison.Ordinal);
+        Assert.StartsWith(MySqlFixture.Product + " ", facts["server"], StringComparison.Ordinal);
         Assert.DoesNotContain("not supported", facts["server"], StringComparison.Ordinal);
         Assert.Equal(db.Name, facts["database"]);
     }
@@ -107,7 +107,7 @@ public sealed class MySqlFeatureTests(MySqlFixture fixture)
         var problems = provider.ValidateEnvironment(new Core.Configuration.DeploymentEnvironment { Name = "x", Host = "localhost", Authentication = Core.Configuration.AuthenticationKind.Password, User = "root" });
         Assert.Contains(problems, p => p.Contains("set 'database'", StringComparison.Ordinal));
         Assert.Contains(provider.ValidateEnvironment(new Core.Configuration.DeploymentEnvironment { Name = "x", Host = "h", Database = "d", Authentication = Core.Configuration.AuthenticationKind.Integrated }),
-            p => p.Contains("not available for MySQL", StringComparison.Ordinal));
+            p => p.Contains("not available for " + MySqlFixture.Product, StringComparison.Ordinal));
         Assert.Throws<MigrationException>(() => MySqlStateStore.Prefix("this_state_schema_name_is_far_too_long_for_mysql_tables"));
     }
 }

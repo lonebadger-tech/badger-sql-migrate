@@ -86,7 +86,14 @@ public sealed class SplitterAndLinterTests
     [InlineData("9.1.0", "Innovation release")]
     [InlineData("9.7.0", "")]
     [InlineData("26.7.0", "not tested")]
-    [InlineData("11.8.2-MariaDB", "MariaDB is not MySQL")]
+    [InlineData("10.6.21-MariaDB", "past its end of life")]
+    [InlineData("10.11.20-MariaDB-ubu2404", "")]
+    [InlineData("11.4.13-MariaDB", "")]
+    [InlineData("11.6.2-MariaDB", "short-term release")]
+    [InlineData("11.8.10-MariaDB-log", "")]
+    [InlineData("12.0.1-MariaDB", "short-term release")]
+    [InlineData("12.3.4-MariaDB", "")]
+    [InlineData("13.0.0-MariaDB", "not tested")]
     public void Doctor_notes_unsupported_versions(string version, string note)
     {
         var text = MySqlProvider.UnsupportedVersionNote(version);
