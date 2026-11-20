@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Builds the Badger SQL Migrate pages for lonebadger.tech/badger-sql-migrate/.
+"""Builds the Badger Trek pages for lonebadger.tech/badger-trek/.
 
 The site (badger-website repo, site/) is plain static HTML served by Azure Static Web Apps with a CSP that
 forbids inline styles and scripts, so this generator emits static pages that use /styles.css plus
-/badger-sql-migrate/docs.css, and highlights code at build time.
+/badger-trek/docs.css, and highlights code at build time.
 
 Usage:
   python3 docs/website/build.py <site-root>   e.g. ../badger-website/site
@@ -21,12 +21,12 @@ sys.path.insert(0, HERE)
 
 VERSION = "0.4.0"
 RELEASE_DATE = "November 2026"
-BASE = "/badger-sql-migrate"
+BASE = "/badger-trek"
 # Where release files are downloaded from: the public Azure blob container build/upload-release.sh fills.
-DOWNLOAD_BASE = f"https://lonebadgerdownloads.blob.core.windows.net/badger-sql-migrate/v{VERSION}"
-FOOTER = ("© 2026 Lone Badger Tech, LLC. Badger SQL Migrate is free software under the <a href='/badger-sql-migrate/license/'>MIT license</a>. "
+DOWNLOAD_BASE = f"https://lonebadgerdownloads.blob.core.windows.net/badger-trek/v{VERSION}"
+FOOTER = ("© 2026 Lone Badger Tech, LLC. Badger Trek is free software under the <a href='/badger-trek/license/'>MIT license</a>. "
           "Microsoft, SQL Server, Azure and Microsoft Entra are trademarks of the Microsoft group of companies; "
-          "other product names are trademarks of their respective owners. Badger SQL Migrate is not affiliated "
+          "other product names are trademarks of their respective owners. Badger Trek is not affiliated "
           "with or endorsed by Microsoft or the makers of the other tools mentioned.")
 
 # ---------------------------------------------------------------- code highlighting
@@ -54,7 +54,7 @@ YAML_TOKEN = re.compile(
     r"|(?P<k>^\s*-?\s*[\w .-]+?(?=:(\s|$)))",
     re.M,
 )
-SHELL_TOKEN = re.compile(r"(?P<c>#[^\n]*)|(?P<s>\"[^\"\n]*\"|'[^'\n]*')|(?P<k>^\s*(?:bsm|dotnet|tar|curl|xattr|shasum|sha256sum|Get-FileHash|kinit|az|chmod|sudo|mv|Expand-Archive|git)\b)", re.M)
+SHELL_TOKEN = re.compile(r"(?P<c>#[^\n]*)|(?P<s>\"[^\"\n]*\"|'[^'\n]*')|(?P<k>^\s*(?:trek|dotnet|tar|curl|xattr|shasum|sha256sum|Get-FileHash|kinit|az|chmod|sudo|mv|Expand-Archive|git)\b)", re.M)
 
 
 def highlight(lang, text):
@@ -191,7 +191,7 @@ def item_html(item_lines):
 # ---------------------------------------------------------------- layout
 
 PRODUCT_NAV = [
-    ("Badger SQL Migrate", f"{BASE}/"),
+    ("Badger Trek", f"{BASE}/"),
     ("Docs", f"{BASE}/docs/"),
     ("Examples", f"{BASE}/examples/"),
     ("Download", f"{BASE}/download/"),

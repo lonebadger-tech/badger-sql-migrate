@@ -1,54 +1,54 @@
-# Badger SQL Migrate
+# Badger Trek
 
-[![ci](https://github.com/lonebadger-tech/badger-sql-migrate/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/lonebadger-tech/badger-sql-migrate/actions/workflows/ci.yml)
-[![NuGet](https://img.shields.io/nuget/v/Badger.SqlMigrate.svg)](https://www.nuget.org/packages/Badger.SqlMigrate)
+[![ci](https://github.com/lonebadger-tech/badger-trek/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/lonebadger-tech/badger-trek/actions/workflows/ci.yml)
+[![NuGet](https://img.shields.io/nuget/v/Badger.Trek.svg)](https://www.nuget.org/packages/Badger.Trek)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Free, open-source, cross-platform (Windows, macOS, Linux) database migrations with **real up and down**, **named changes instead of version numbers**, and **SHA-256 hash certification** of everything that reaches a database.
 
-Providers: **SQL Server / Azure SQL**, **PostgreSQL** (`bsm init --provider postgresql`) and **SQLite** (`bsm init --provider sqlite`). The engine is vendor-neutral, so MySQL can be added as a provider without touching the engine or CLI.
+Providers: **SQL Server / Azure SQL**, **PostgreSQL** (`trek init --provider postgresql`) and **SQLite** (`trek init --provider sqlite`). The engine is vendor-neutral, so MySQL can be added as a provider without touching the engine or CLI.
 
-- **Documentation:** [lonebadger.tech/badger-sql-migrate](https://lonebadger.tech/badger-sql-migrate/) (also as Markdown for AI assistants: [llms.txt](https://www.lonebadger.tech/llms.txt))
-- **Download:** [standalone binaries](https://lonebadger.tech/badger-sql-migrate/download/) or `dotnet tool install -g Badger.SqlMigrate`
+- **Documentation:** [lonebadger.tech/badger-trek](https://lonebadger.tech/badger-trek/) (also as Markdown for AI assistants: [llms.txt](https://www.lonebadger.tech/llms.txt))
+- **Download:** [standalone binaries](https://lonebadger.tech/badger-trek/download/) or `dotnet tool install -g Badger.Trek`
 - **License:** [MIT](LICENSE). © Lone Badger Tech, LLC.
 
 ## Why another migration tool?
 
-| Problem in other tools | Badger SQL Migrate |
+| Problem in other tools | Badger Trek |
 |---|---|
 | Flyway charges for undo | `revert.sql` is first-class and free |
-| Two developers both create `V12__...sql` | Changes are **named**; `bsm.plan` is merged with git's union driver, so concurrent additions never conflict |
+| Two developers both create `V12__...sql` | Changes are **named**; `trek.plan` is merged with git's union driver, so concurrent additions never conflict |
 | Rollback depends on the scripts in your current checkout | Deploy, revert and verify scripts are **stored in the database** at deploy time; revert works from any branch or machine |
 | Weak checksums (CRC32) or none (DbUp) | SHA-256 per change plus a **Merkle chain** over the plan: equal head hash = identical history |
-| "Did someone hotfix prod?" | Schema fingerprint after every run; `bsm verify` reports drift |
+| "Did someone hotfix prod?" | Schema fingerprint after every run; `trek verify` reports drift |
 | Two pipelines deploying at once | Exclusive deploy lock (`sp_getapplock`) for the whole run |
 | sqlcmd/Perl/JVM installs | One .NET tool, no shelling out |
 
 ## Install
 
 ```bash
-dotnet tool install -g Badger.SqlMigrate
+dotnet tool install -g Badger.Trek
 ```
 
-No .NET SDK? Self-contained executables for Windows, macOS and Linux are on the [download page](https://lonebadger.tech/badger-sql-migrate/download/).
+No .NET SDK? Self-contained executables for Windows, macOS and Linux are on the [download page](https://lonebadger.tech/badger-trek/download/).
 
 ## Quick start
 
 ```bash
-bsm init -C db
-bsm add create-customer -C db
+trek init -C db
+trek add create-customer -C db
 # edit db/changes/create-customer/deploy.sql, revert.sql, verify.sql
-bsm plan check -C db
-bsm status -C db
-bsm deploy -C db
+trek plan check -C db
+trek status -C db
+trek deploy -C db
 ```
 
 A project looks like this:
 
 ```
 db/
-  bsm.yaml                 # provider, connection profiles, variables
-  bsm.plan                 # ordered list of changes: the single source of ordering
+  trek.yaml                 # provider, connection profiles, variables
+  trek.plan                 # ordered list of changes: the single source of ordering
   changes/
     create-customer/
       deploy.sql              # up
@@ -71,13 +71,13 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 
 - `[a b]` dependencies, `!notx` (no transaction), `!irreversible` (no revert), `# note`.
 - `@tag` lines tag the change above; use them as `--to @release-1.4`.
-- `bsm init` adds `bsm.plan merge=union` to `.gitattributes`. Run `bsm plan check` in CI to catch duplicate names or broken dependencies after a merge.
+- `trek init` adds `trek.plan merge=union` to `.gitattributes`. Run `trek plan check` in CI to catch duplicate names or broken dependencies after a merge.
 
 ### Commands
 
 | Command | What it does |
 |---|---|
-| `init` | Create `bsm.yaml`, `bsm.plan`, folders, `.gitattributes`, `AGENTS.md` |
+| `init` | Create `trek.yaml`, `trek.plan`, folders, `.gitattributes`, `AGENTS.md` |
 | `add <name> [-r dep] [--notx] [--irreversible]` | Scaffold a change and append it to the plan |
 | `add <name> --from-diff [--shadow-env env]` | Generate the change from schema edits made in your database (compared with a shadow database built from the plan) |
 | `tag <name>` | Tag the last change |
@@ -94,7 +94,7 @@ rebuild-fulltext !notx                   @2026-11-04T09:15Z bob   # runs outside
 | `verify` | Hash check, run verify scripts, detect schema drift |
 | `log` | Deploy/revert/failure history from the database |
 | `baseline --to x \| --from flyway\|dbup\|grate\|roundhouse\|sqitch\|sqlproj` | Adopt an existing database without running scripts (up to x, as far as the old tool's journal says, or everything a dacpac publish created) |
-| `import flyway\|dbup\|grate\|sqitch <dir>` | Convert a Flyway, DbUp, grate/RoundhousE or Sqitch project into a new bsm project: migrations, reverts, repeatables, variables, environments |
+| `import flyway\|dbup\|grate\|sqitch <dir>` | Convert a Flyway, DbUp, grate/RoundhousE or Sqitch project into a new trek project: migrations, reverts, repeatables, variables, environments |
 | `import sqlproj <file.sqlproj>` | Convert an SSDT / SQL Database Project: one change per table, type or schema in dependency order, views/procedures/functions/triggers as repeatables, the post-deployment script and SqlCmdVariables |
 | `convert schema --out <dir>` / `convert data --target <dir>` | Convert a live database between SQL Server, PostgreSQL and SQLite, in any direction: a new project for the other provider (tables, keys, indexes; views, routines and triggers translated, with `CONVERSION.md` listing what to review), then copy the rows and compare counts |
 | `doctor` | Check config, Entra sign-in and connectivity; show resources |
@@ -110,15 +110,15 @@ Global options: `-C <dir>`, `--bundle <file>`, `-e <environment>`, `--var name=v
 
 ### AI assistants
 
-`bsm init` writes an `AGENTS.md` that tells Claude, Copilot, Cursor and other assistants how to write changes bsm can certify, and `bsm ai-guide` prints the full guide ([docs/ai-guide.md](docs/ai-guide.md)). For assistants that support MCP, `bsm mcp -C db` exposes the same rules as tools, for example `claude mcp add bsm -- bsm mcp -C db`. The server only reads and writes project files: people still deploy.
+`trek init` writes an `AGENTS.md` that tells Claude, Copilot, Cursor and other assistants how to write changes trek can certify, and `trek ai-guide` prints the full guide ([docs/ai-guide.md](docs/ai-guide.md)). For assistants that support MCP, `trek mcp -C db` exposes the same rules as tools, for example `claude mcp add trek -- trek mcp -C db`. The server only reads and writes project files: people still deploy.
 
 ### System-versioned tables and partitions
 
-Write them in changes like any other schema. The schema fingerprint records system versioning (period columns, history table, retention) and partitioning (functions, boundaries, schemes, partitioned indexes); history tables SQL Server names itself fingerprint the same on every server. Lint rule BSM004 warns when a script turns `SYSTEM_VERSIONING` off without turning it back on. If a job maintains partitions, set `schemaFingerprint: { partitionBoundaries: ignore }` on that environment so its splits are not drift.
+Write them in changes like any other schema. The schema fingerprint records system versioning (period columns, history table, retention) and partitioning (functions, boundaries, schemes, partitioned indexes); history tables SQL Server names itself fingerprint the same on every server. Lint rule TREK004 warns when a script turns `SYSTEM_VERSIONING` off without turning it back on. If a job maintains partitions, set `schemaFingerprint: { partitionBoundaries: ignore }` on that environment so its splits are not drift.
 
 ## Configuration
 
-`bsm.yaml` holds the provider, shared variables and named **environments** (dev, test, prod...). Environments inherit from each other with `extends`; names starting with `_` are templates.
+`trek.yaml` holds the provider, shared variables and named **environments** (dev, test, prod...). Environments inherit from each other with `extends`; names starting with `_` are templates.
 
 ```yaml
 provider: sqlserver
@@ -163,7 +163,7 @@ Full reference: [docs/configuration.md](docs/configuration.md).
 
 ## How certification works
 
-See [docs/methodology.md](docs/methodology.md). In short: every change's script hash is SHA-256 over its normalized deploy/revert/verify scripts (BOM stripped, CRLF→LF, so Windows and macOS checkouts agree). Each change's chain id is SHA-256 of `(provider, name, scriptHash, parentChainId)`. A database that received exactly the plan, in order, reports the same head chain id as `bsm plan show`.
+See [docs/methodology.md](docs/methodology.md). In short: every change's script hash is SHA-256 over its normalized deploy/revert/verify scripts (BOM stripped, CRLF→LF, so Windows and macOS checkouts agree). Each change's chain id is SHA-256 of `(provider, name, scriptHash, parentChainId)`. A database that received exactly the plan, in order, reports the same head chain id as `trek plan show`.
 
 ## Building
 
@@ -180,7 +180,7 @@ The website pages are generated from `docs/website/` into the site repository:
 python3 docs/website/build.py ../badger-website/site
 ```
 
-The SQL Server conformance tests start SQL Server 2022 with Testcontainers (Docker required) or use `BSM_TEST_SQLSERVER=<connection string>`. They skip when neither is available.
+The SQL Server conformance tests start SQL Server 2022 with Testcontainers (Docker required) or use `TREK_TEST_SQLSERVER=<connection string>`. They skip when neither is available.
 
 Adding a database vendor: see [docs/writing-a-provider.md](docs/writing-a-provider.md).
 
@@ -188,11 +188,11 @@ Adding a database vendor: see [docs/writing-a-provider.md](docs/writing-a-provid
 
 | Path | Contents |
 |---|---|
-| `src/Badger.SqlMigrate.Core` | Plan, hashing and certification, preprocessor, engine. No database driver |
-| `src/Badger.SqlMigrate.Connectivity` | Entra ID tokens, SSH tunnels, secrets (vendor-neutral) |
-| `src/Badger.SqlMigrate.Providers.SqlServer` | The SQL Server / Azure SQL provider |
-| `src/Badger.SqlMigrate.Providers.PostgreSql` | The PostgreSQL provider (Npgsql) |
-| `src/Badger.SqlMigrate.Cli` | The `bsm` command and its MCP server (packaged as the `Badger.SqlMigrate` .NET tool) |
+| `src/Badger.Trek.Core` | Plan, hashing and certification, preprocessor, engine. No database driver |
+| `src/Badger.Trek.Connectivity` | Entra ID tokens, SSH tunnels, secrets (vendor-neutral) |
+| `src/Badger.Trek.Providers.SqlServer` | The SQL Server / Azure SQL provider |
+| `src/Badger.Trek.Providers.PostgreSql` | The PostgreSQL provider (Npgsql) |
+| `src/Badger.Trek.Cli` | The `trek` command and its MCP server (packaged as the `Badger.Trek` .NET tool) |
 | `tests/` | Unit tests, the shared provider conformance suite, architecture tests |
 | `samples/demo-db` | A runnable sample project |
 | `docs/` | Configuration reference, methodology, provider guide, and the website generator (`docs/website/`) |
@@ -204,4 +204,4 @@ Bug reports, ideas and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIB
 
 ## License
 
-[MIT](LICENSE) © Lone Badger Tech, LLC. Microsoft, SQL Server, Azure and Microsoft Entra are trademarks of the Microsoft group of companies; Badger SQL Migrate is not affiliated with or endorsed by Microsoft.
+[MIT](LICENSE) © Lone Badger Tech, LLC. Microsoft, SQL Server, Azure and Microsoft Entra are trademarks of the Microsoft group of companies; Badger Trek is not affiliated with or endorsed by Microsoft.

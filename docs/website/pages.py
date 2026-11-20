@@ -28,7 +28,7 @@ def license_page():
                 items[-1] += " " + line.strip()
         paragraphs.append("<p>" + "<br>".join(html.escape(i) for i in items) + "</p>")
     body = "\n".join(paragraphs)
-    return Page("license/", "Badger SQL Migrate license (MIT)", "Badger SQL Migrate is free software under the MIT license.", body, heading="License", lede="Badger SQL Migrate is open source under the MIT license.")
+    return Page("license/", "Badger Trek license (MIT)", "Badger Trek is free software under the MIT license.", body, heading="License", lede="Badger Trek is open source under the MIT license.")
 
 
 # ---------------------------------------------------------------- home
@@ -36,9 +36,9 @@ def license_page():
 def home():
     body = f"""
 <div class="hero">
-  <img class="icon" src="{BASE}/icon.svg" alt="Badger SQL Migrate icon">
+  <img class="icon" src="{BASE}/icon.svg" alt="Badger Trek icon">
   <div>
-    <h1>Badger SQL Migrate</h1>
+    <h1>Badger Trek</h1>
     <p class="lede">Database migrations for SQL Server, Azure SQL, PostgreSQL and SQLite that you can prove. Free, cross-platform, with real up <em>and</em> down.</p>
     <div class="actions">
       <a class="button primary" href="{BASE}/download/">Download {VERSION}</a>
@@ -54,17 +54,17 @@ def home():
   <div><h3>Real down, for free</h3><p>Revert scripts are first-class. They are stored in the database at deploy time, so rollback works from any branch, even after the change is gone.</p></div>
   <div><h3>Environments built in</h3><p>dev, test, prod with inheritance, protected environments, fix-forward production, and a database that remembers which environment owns it.</p></div>
   <div><h3>Every Entra ID flow</h3><p>Browser and device code with MFA (cached between runs), managed identity, service principals, workload identity, Azure CLI, pipelines, plus SQL and Windows auth.</p></div>
-  <div><h3>Always Encrypted keys</h3><p>Scripts use the same key names everywhere; each environment brings its own column master keys. Badger SQL Migrate provisions and rotates them.</p></div>
+  <div><h3>Always Encrypted keys</h3><p>Scripts use the same key names everywhere; each environment brings its own column master keys. Badger Trek provisions and rotates them.</p></div>
   <div><h3>Variables that render</h3><p><code>[calc_{{env}}]</code> becomes <code>[calc_test]</code> in test. Built-ins, nested variables, per-environment values, and a hash of the SQL that actually ran.</p></div>
   <div><h3>Safe by default</h3><p>A deploy lock for concurrent pipelines, transactional changes with verify scripts, a T-SQL linter, drift detection, and edited-after-deploy detection.</p></div>
   <div><h3>One binary, any OS</h3><p>Windows, macOS and Linux (x64 and Arm), or a .NET tool. No Java, no Perl, no sqlcmd. Connects through SSH bastions too.</p></div>
 </div>
 
 <h2>How it works</h2>
-<p>A project is a folder with a <code>bsm.plan</code> (the order), one folder per change with <code>deploy.sql</code>, <code>revert.sql</code> and an optional <code>verify.sql</code>, and a <code>bsm.yaml</code> describing your environments.</p>
+<p>A project is a folder with a <code>trek.plan</code> (the order), one folder per change with <code>deploy.sql</code>, <code>revert.sql</code> and an optional <code>verify.sql</code>, and a <code>trek.yaml</code> describing your environments.</p>
 {code('''db/
-  bsm.yaml              environments, authentication, variables, keys
-  bsm.plan              one change per line, in deploy order
+  trek.yaml              environments, authentication, variables, keys
+  trek.plan              one change per line, in deploy order
   changes/
     create-customer/
       deploy.sql           up
@@ -72,18 +72,18 @@ def home():
       verify.sql           proves the deploy worked (optional)
   repeatable/              views, procedures, functions: re-applied when changed
   environments/dev/        scripts that run only in dev (seed data)''')}
-{sh('''bsm add add-customer-email --requires create-customer
-bsm deploy -e test
-bsm status -e prod
-bsm revert --to create-customer -e test''')}
-<p>Every deploy records the script hashes, who ran it, where, and a hash chain that certifies the order. <code>bsm status</code> tells you when a database is <strong>certified</strong>: it received exactly the plan, in order, byte for byte.</p>
+{sh('''trek add add-customer-email --requires create-customer
+trek deploy -e test
+trek status -e prod
+trek revert --to create-customer -e test''')}
+<p>Every deploy records the script hashes, who ran it, where, and a hash chain that certifies the order. <code>trek status</code> tells you when a database is <strong>certified</strong>: it received exactly the plan, in order, byte for byte.</p>
 
 <h2>Why another migration tool?</h2>
-<p>Flyway charges for undo and collides when two branches pick the same version number. DbUp only goes up and ignores edited scripts. SSDT computes a different script on each machine. Sqitch has the right model but a Perl install and weak SQL Server support. Badger SQL Migrate keeps the best ideas of each and fixes the gaps. <a href="{BASE}/compare/">See the comparison →</a></p>
+<p>Flyway charges for undo and collides when two branches pick the same version number. DbUp only goes up and ignores edited scripts. SSDT computes a different script on each machine. Sqitch has the right model but a Perl install and weak SQL Server support. Badger Trek keeps the best ideas of each and fixes the gaps. <a href="{BASE}/compare/">See the comparison →</a></p>
 
-<p><a href="{BASE}/docs/">Documentation</a> · <a href="{BASE}/examples/">Example scripts</a> · <a href="{BASE}/download/">Download</a> · <a href="{BASE}/releases/">What's new</a> · <a href="https://github.com/lonebadger-tech/badger-sql-migrate">Source on GitHub</a></p>
+<p><a href="{BASE}/docs/">Documentation</a> · <a href="{BASE}/examples/">Example scripts</a> · <a href="{BASE}/download/">Download</a> · <a href="{BASE}/releases/">What's new</a> · <a href="https://github.com/lonebadger-tech/badger-trek">Source on GitHub</a></p>
 """
-    return Page("", "Badger SQL Migrate: hash-certified SQL Server, PostgreSQL and SQLite migrations", "Free, cross-platform, hash-certified database migrations for SQL Server, Azure SQL, PostgreSQL and SQLite with real up and down, named changes, environments, Entra ID and Always Encrypted.", body)
+    return Page("", "Badger Trek: hash-certified SQL Server, PostgreSQL and SQLite migrations", "Free, cross-platform, hash-certified database migrations for SQL Server, Azure SQL, PostgreSQL and SQLite with real up and down, named changes, environments, Entra ID and Always Encrypted.", body)
 
 
 # ---------------------------------------------------------------- download
@@ -107,11 +107,11 @@ def size(n):
 def download(artifacts):
     rows = []
     for label, rid, ext in DOWNLOADS:
-        name = f"badger-sql-migrate-{VERSION}-{rid}.{ext}"
+        name = f"badger-trek-{VERSION}-{rid}.{ext}"
         digest, n = artifacts.get(name, ("", 0))
         rows.append(f'<tr><td>{label}</td><td><a href="{DOWNLOAD_BASE}/{name}">{name}</a></td><td>{size(n)}</td>'
                     f'<td><code title="{digest}">{digest[:16]}{"…" if digest else ""}</code></td></tr>')
-    tool = f"Badger.SqlMigrate.{VERSION}.nupkg"
+    tool = f"Badger.Trek.{VERSION}.nupkg"
     tool_digest, tool_size = artifacts.get(tool, ("", 0))
     rows.append(f'<tr><td>.NET tool package</td><td><a href="{DOWNLOAD_BASE}/{tool}">{tool}</a></td><td>{size(tool_size)}</td>'
                 f'<td><code title="{tool_digest}">{tool_digest[:16]}{"…" if tool_digest else ""}</code></td></tr>')
@@ -121,15 +121,15 @@ def download(artifacts):
 
 <h2>.NET tool</h2>
 <p>If you have the .NET 10 SDK, this is the easiest way to install and update:</p>
-{sh('''dotnet tool install --global Badger.SqlMigrate
-bsm --version''')}
-<p>Update with <code>dotnet tool update --global Badger.SqlMigrate</code>. To pin a version for a repository, use a local tool manifest:</p>
+{sh('''dotnet tool install --global Badger.Trek
+trek --version''')}
+<p>Update with <code>dotnet tool update --global Badger.Trek</code>. To pin a version for a repository, use a local tool manifest:</p>
 {sh(f'''dotnet new tool-manifest
-dotnet tool install Badger.SqlMigrate --version {VERSION}
-dotnet bsm status''')}
+dotnet tool install Badger.Trek --version {VERSION}
+dotnet trek status''')}
 
 <h2>Standalone binaries</h2>
-<p>Self-contained single-file executables: nothing else to install. Each archive contains <code>bsm</code> (or <code>bsm.exe</code>), the license and the readme.</p>
+<p>Self-contained single-file executables: nothing else to install. Each archive contains <code>trek</code> (or <code>trek.exe</code>), the license and the readme.</p>
 <table class="downloads">
 <thead><tr><th>Platform</th><th>File</th><th>Size</th><th>SHA-256</th></tr></thead>
 <tbody>{''.join(rows)}</tbody>
@@ -137,40 +137,40 @@ dotnet bsm status''')}
 <p>All hashes: <a href="{DOWNLOAD_BASE}/SHA256SUMS">SHA256SUMS</a>. Hover a hash for the full value.</p>
 
 <h3>macOS</h3>
-{sh(f'''curl -LO {DOWNLOAD_BASE}/badger-sql-migrate-{VERSION}-osx-arm64.tar.gz
-tar -xzf badger-sql-migrate-{VERSION}-osx-arm64.tar.gz
-xattr -d com.apple.quarantine bsm   # downloaded with a browser? clear Gatekeeper's quarantine flag
-sudo mv bsm /usr/local/bin/
-bsm --version''')}
+{sh(f'''curl -LO {DOWNLOAD_BASE}/badger-trek-{VERSION}-osx-arm64.tar.gz
+tar -xzf badger-trek-{VERSION}-osx-arm64.tar.gz
+xattr -d com.apple.quarantine trek   # downloaded with a browser? clear Gatekeeper's quarantine flag
+sudo mv trek /usr/local/bin/
+trek --version''')}
 <p class="note">The macOS binaries are signed ad hoc but not notarized, so a copy downloaded with a browser needs the <code>xattr</code> line above (or right-click › Open once). The .NET tool has no such step.</p>
 
 <h3>Linux</h3>
-{sh(f'''curl -LO {DOWNLOAD_BASE}/badger-sql-migrate-{VERSION}-linux-x64.tar.gz
-tar -xzf badger-sql-migrate-{VERSION}-linux-x64.tar.gz
-sudo mv bsm /usr/local/bin/''')}
+{sh(f'''curl -LO {DOWNLOAD_BASE}/badger-trek-{VERSION}-linux-x64.tar.gz
+tar -xzf badger-trek-{VERSION}-linux-x64.tar.gz
+sudo mv trek /usr/local/bin/''')}
 <p>Use the <code>linux-musl-x64</code> build on Alpine. Integrated (Kerberos) authentication needs the system's GSSAPI library (<code>libgssapi-krb5-2</code> on Debian/Ubuntu, <code>krb5-libs</code> on RHEL, <code>krb5</code> on Alpine).</p>
 
 <h3>Windows</h3>
-{code(f'''Invoke-WebRequest {DOWNLOAD_BASE}/badger-sql-migrate-{VERSION}-win-x64.zip -OutFile bsm.zip
-Expand-Archive bsm.zip -DestinationPath "$env:LOCALAPPDATA\\bsm"
-# add %LOCALAPPDATA%\\bsm to PATH, then:
-bsm --version''', "powershell")}
+{code(f'''Invoke-WebRequest {DOWNLOAD_BASE}/badger-trek-{VERSION}-win-x64.zip -OutFile trek.zip
+Expand-Archive trek.zip -DestinationPath "$env:LOCALAPPDATA\\trek"
+# add %LOCALAPPDATA%\\trek to PATH, then:
+trek --version''', "powershell")}
 
 <h3>Verify a download</h3>
 <p>A migration tool that certifies hashes should be verifiable itself:</p>
 {sh(f'''curl -LO {DOWNLOAD_BASE}/SHA256SUMS
 shasum -a 256 --check --ignore-missing SHA256SUMS      # macOS
 sha256sum --check --ignore-missing SHA256SUMS          # Linux''')}
-{code(f'''(Get-FileHash badger-sql-migrate-{VERSION}-win-x64.zip -Algorithm SHA256).Hash   # Windows: compare with SHA256SUMS''', "powershell")}
+{code(f'''(Get-FileHash badger-trek-{VERSION}-win-x64.zip -Algorithm SHA256).Hash   # Windows: compare with SHA256SUMS''', "powershell")}
 
 <h2>Build from source</h2>
-{sh('''git clone https://github.com/lonebadger-tech/badger-sql-migrate
-cd badger-sql-migrate
+{sh('''git clone https://github.com/lonebadger-tech/badger-trek
+cd badger-trek
 dotnet test                 # SQL Server tests use Docker (Testcontainers) and skip without it
 build/publish.sh            # all of the files above, into ./artifacts''')}
 <p>Next: <a href="{BASE}/docs/quick-start/">Quick start</a>.</p>
 """
-    return Page("download/", "Download Badger SQL Migrate", "Download Badger SQL Migrate for Windows, macOS and Linux, or install it as a .NET tool.", body, heading="Download", wide=True)
+    return Page("download/", "Download Badger Trek", "Download Badger Trek for Windows, macOS and Linux, or install it as a .NET tool.", body, heading="Download", wide=True)
 
 
 # ---------------------------------------------------------------- releases
@@ -181,9 +181,9 @@ def releases():
   <h2>Version {VERSION} <span class="date">{RELEASE_DATE}</span></h2>
   <h3>AI assistants</h3>
   <ul>
-    <li><code>bsm mcp</code> is a Model Context Protocol server for Claude Code, Claude Desktop, VS Code, Cursor and other MCP clients: tools to add changes with their scripts, set <code>!notx</code>, rework, write repeatables, run <code>plan check</code> with lint codes, lint SQL and render scripts. It reads and writes project files only and never connects to a database</li>
-    <li>A guide for AI assistants (<code>bsm ai-guide</code>, and the <a href="{BASE}/docs/ai/">AI assistants</a> page): how to write deploy, revert and verify scripts that bsm certifies, for SQL Server and PostgreSQL</li>
-    <li><code>bsm init</code> and <code>bsm import</code> write an <code>AGENTS.md</code> into new projects (<code>--no-agents-file</code> to skip)</li>
+    <li><code>trek mcp</code> is a Model Context Protocol server for Claude Code, Claude Desktop, VS Code, Cursor and other MCP clients: tools to add changes with their scripts, set <code>!notx</code>, rework, write repeatables, run <code>plan check</code> with lint codes, lint SQL and render scripts. It reads and writes project files only and never connects to a database</li>
+    <li>A guide for AI assistants (<code>trek ai-guide</code>, and the <a href="{BASE}/docs/ai/">AI assistants</a> page): how to write deploy, revert and verify scripts that trek certifies, for SQL Server and PostgreSQL</li>
+    <li><code>trek init</code> and <code>trek import</code> write an <code>AGENTS.md</code> into new projects (<code>--no-agents-file</code> to skip)</li>
     <li><code>--json</code> output for <code>add</code>, <code>rework</code>, <code>tag</code>, <code>init</code> and <code>render</code>; <code>plan check --json</code> lists each lint finding with its code, file and line</li>
     <li><code>vars</code> and <code>render</code> no longer need the environment's password or other sign-in secrets</li>
   </ul>
@@ -193,9 +193,9 @@ def releases():
   </ul>
   <h3>SQL projects (SSDT)</h3>
   <ul>
-    <li><code>bsm import sqlproj</code> converts classic and SDK-style <code>.sqlproj</code> projects: one change per table, type, schema and other object, in dependency order with <code>[requires]</code> and generated reverts; views, procedures, functions and triggers become CREATE OR ALTER repeatables; the post-deployment script (with <code>:r</code> includes) and SqlCmdVariables come along; foreign-key cycles are split into later changes</li>
-    <li><code>bsm baseline --from sqlproj</code> adopts databases published from the dacpac without running anything (the post-deployment and permission scripts run once on the next deploy, since the database may have older versions); environments at different versions are adopted oldest first, capturing each one's lead with <code>bsm add --from-diff</code></li>
-    <li>Every <code>bsm baseline</code> on SQL Server records the repeatables whose live definition already matches the script and lists the ones that differ, so the first deploy re-applies only those</li>
+    <li><code>trek import sqlproj</code> converts classic and SDK-style <code>.sqlproj</code> projects: one change per table, type, schema and other object, in dependency order with <code>[requires]</code> and generated reverts; views, procedures, functions and triggers become CREATE OR ALTER repeatables; the post-deployment script (with <code>:r</code> includes) and SqlCmdVariables come along; foreign-key cycles are split into later changes</li>
+    <li><code>trek baseline --from sqlproj</code> adopts databases published from the dacpac without running anything (the post-deployment and permission scripts run once on the next deploy, since the database may have older versions); environments at different versions are adopted oldest first, capturing each one's lead with <code>trek add --from-diff</code></li>
+    <li>Every <code>trek baseline</code> on SQL Server records the repeatables whose live definition already matches the script and lists the ones that differ, so the first deploy re-applies only those</li>
   </ul>
 </section>
 
@@ -203,14 +203,14 @@ def releases():
   <h2>Version 0.3.0 <span class="date">November 2026</span></h2>
   <h3>PostgreSQL</h3>
   <ul>
-    <li>A PostgreSQL provider, tested on PostgreSQL 12 through 18: <code>bsm init --provider postgresql</code></li>
+    <li>A PostgreSQL provider, tested on PostgreSQL 12 through 18: <code>trek init --provider postgresql</code></li>
     <li>Everything SQL Server has: certified plans, revert from stored scripts, environments, variables, bundles, <code>diff-schema</code>, rework, repair and imports</li>
     <li>Statement splitting that understands dollar-quoted bodies; <code>CREATE INDEX CONCURRENTLY</code> and friends run in <code>!notx</code> changes</li>
     <li>Password, Kerberos and Entra ID sign-in (Azure Database for PostgreSQL), TLS modes, SSH tunnels, any Npgsql setting</li>
     <li>A schema fingerprint over PostgreSQL's catalog, from tables, constraints and functions to grants, comments, policies, publications and foreign servers; partitions and privileges can be left out per environment</li>
-    <li><code>bsm add --from-diff</code> and <code>diff-schema --script</code> generate PostgreSQL DDL: tables, partitions, columns and renames, constraints, indexes, views, functions, triggers, policies, types, sequences, comments and grants, ordered by PostgreSQL's dependency catalog; what PostgreSQL cannot change in place is reported, not guessed</li>
+    <li><code>trek add --from-diff</code> and <code>diff-schema --script</code> generate PostgreSQL DDL: tables, partitions, columns and renames, constraints, indexes, views, functions, triggers, policies, types, sequences, comments and grants, ordered by PostgreSQL's dependency catalog; what PostgreSQL cannot change in place is reported, not guessed</li>
     <li>psql scripts run as they are: <code>\\i</code>/<code>\\ir</code> includes and <code>\\copy … from 'file'</code> become part of the change (hashed, stored, bundled); <code>\\set</code> and <code>:'variables'</code>, <code>\\if</code>, <code>\\echo</code>, <code>COPY … FROM STDIN</code> data and <code>\\gexec</code> work without psql</li>
-    <li><code>bsm baseline --from sqitch</code> adopts PostgreSQL databases Sqitch deployed, checking its script hashes; imports take <code>--provider postgresql</code></li>
+    <li><code>trek baseline --from sqitch</code> adopts PostgreSQL databases Sqitch deployed, checking its script hashes; imports take <code>--provider postgresql</code></li>
   </ul>
 </section>
 
@@ -218,33 +218,33 @@ def releases():
   <h2>Version 0.2.0 <span class="date">November 2026</span></h2>
   <h3>Fixing deployed changes</h3>
   <ul>
-    <li><code>bsm rework</code> adds a change that supersedes a deployed one, with a revert that restores the previous version</li>
-    <li><code>bsm repair</code> accepts harmless edits to deployed changes, such as a fixed revert script, without running SQL, and re-certifies the journal</li>
-    <li><code>bsm revert --repeatable</code> puts a view, procedure or function back to its previous definition</li>
+    <li><code>trek rework</code> adds a change that supersedes a deployed one, with a revert that restores the previous version</li>
+    <li><code>trek repair</code> accepts harmless edits to deployed changes, such as a fixed revert script, without running SQL, and re-certifies the journal</li>
+    <li><code>trek revert --repeatable</code> puts a view, procedure or function back to its previous definition</li>
   </ul>
   <h3>Build once, deploy everywhere</h3>
   <ul>
-    <li><code>bsm bundle create</code> packs the plan, scripts and configuration into one byte-reproducible file with SHA-256 hashes</li>
+    <li><code>trek bundle create</code> packs the plan, scripts and configuration into one byte-reproducible file with SHA-256 hashes</li>
     <li><code>--bundle</code> runs any command from a bundle after checking every hash and the plan head</li>
   </ul>
   <h3>Schema drift</h3>
   <ul>
-    <li><code>bsm diff-schema</code> lists the objects changed since the last deploy, or the differences between two environments, with line diffs for modules</li>
+    <li><code>trek diff-schema</code> lists the objects changed since the last deploy, or the differences between two environments, with line diffs for modules</li>
   </ul>
   <h3>Generating changes</h3>
   <ul>
-    <li><code>bsm add &lt;name&gt; --from-diff</code> turns schema edits made in your own database into a change: it builds a shadow database from the plan, compares, and writes <code>deploy.sql</code> and <code>revert.sql</code></li>
+    <li><code>trek add &lt;name&gt; --from-diff</code> turns schema edits made in your own database into a change: it builds a shadow database from the plan, compares, and writes <code>deploy.sql</code> and <code>revert.sql</code></li>
     <li>Tables, columns, renames, keys, indexes, constraints, views, procedures, functions, triggers, types, sequences, synonyms, temporal tables and partitions; risky edits are reported, not guessed</li>
-    <li><code>bsm diff-schema --against env --script file</code> writes T-SQL between any two databases</li>
+    <li><code>trek diff-schema --against env --script file</code> writes T-SQL between any two databases</li>
     <li>No extra components: everything comes from SQL Server's catalog views</li>
   </ul>
   <h3>Moving from other tools</h3>
   <ul>
-    <li><code>bsm import flyway</code> converts versioned, undo and repeatable migrations, placeholders (including Flyway's built-ins), per-script settings and environments from <code>flyway.toml</code> or <code>flyway.conf</code></li>
-    <li><code>bsm import dbup</code> converts scripts in DbUp's order, <code>$variables$</code> and run-always scripts</li>
-    <li><code>bsm import grate</code> converts grate and RoundhousE folders in grate's run order, <code>{{{{tokens}}}}</code> and <code>*.ENV.*</code> scripts</li>
-    <li><code>bsm import sqitch</code> converts Sqitch plans with dependencies, tags and reworked changes</li>
-    <li><code>bsm baseline --from flyway|dbup|grate|roundhouse</code> adopts a database from the old tool's journal, checking Flyway's checksums and grate's hashes, and records the repeatables it already applied</li>
+    <li><code>trek import flyway</code> converts versioned, undo and repeatable migrations, placeholders (including Flyway's built-ins), per-script settings and environments from <code>flyway.toml</code> or <code>flyway.conf</code></li>
+    <li><code>trek import dbup</code> converts scripts in DbUp's order, <code>$variables$</code> and run-always scripts</li>
+    <li><code>trek import grate</code> converts grate and RoundhousE folders in grate's run order, <code>{{{{tokens}}}}</code> and <code>*.ENV.*</code> scripts</li>
+    <li><code>trek import sqitch</code> converts Sqitch plans with dependencies, tags and reworked changes</li>
+    <li><code>trek baseline --from flyway|dbup|grate|roundhouse</code> adopts a database from the old tool's journal, checking Flyway's checksums and grate's hashes, and records the repeatables it already applied</li>
     <li>Imports mark scripts that cannot run in a transaction <code>!notx</code></li>
   </ul>
   <h3>System-versioned tables and partitions</h3>
@@ -252,7 +252,7 @@ def releases():
     <li>The schema fingerprint records system versioning (period columns, history table, retention) and partitioning (functions, boundaries, schemes, partitioned tables and indexes)</li>
     <li>History tables named by SQL Server fingerprint the same on every server</li>
     <li><code>schemaFingerprint.partitionBoundaries: ignore</code> for partitions maintained by a sliding-window job</li>
-    <li>Lint rule BSM004: system versioning switched off and not back on</li>
+    <li>Lint rule TREK004: system versioning switched off and not back on</li>
     <li>Databases with these features deployed by 0.1 get a warning instead of a drift error until their next deploy</li>
   </ul>
 </section>
@@ -262,7 +262,7 @@ def releases():
   <p>The first release.</p>
   <h3>Migrations</h3>
   <ul>
-    <li>Named changes ordered by <code>bsm.plan</code>, with dependencies, tags, <code>!notx</code> and <code>!irreversible</code>; merges cleanly with git's union driver</li>
+    <li>Named changes ordered by <code>trek.plan</code>, with dependencies, tags, <code>!notx</code> and <code>!irreversible</code>; merges cleanly with git's union driver</li>
     <li>Deploy, revert and verify scripts; each change, its verify script and its journal row commit in one transaction</li>
     <li>Revert runs the scripts stored in the database at deploy time; <code>--to</code>, <code>--last</code>, <code>--all</code> and <code>rebase</code></li>
     <li>Repeatable scripts (views, procedures, functions) with dependency ordering, and environment-only scripts</li>
@@ -289,7 +289,7 @@ def releases():
   </ul>
 </section>
 """
-    return Page("releases/", "Badger SQL Migrate version history", "What's new in each version of Badger SQL Migrate.", body, heading="What's new in Badger SQL Migrate")
+    return Page("releases/", "Badger Trek version history", "What's new in each version of Badger Trek.", body, heading="What's new in Badger Trek")
 
 
 # ---------------------------------------------------------------- compare
@@ -312,14 +312,14 @@ def compare():
         ("Repeatable scripts (views, procs)", y, y, n, y, n, y, n, y),
         ("No runtime to install", y + " single binary", n + " JVM", "library", ".NET tool", ".NET", "SqlPackage", n + " Perl", n + " JVM"),
     ]
-    head = "<tr><th></th><th>Badger SQL Migrate</th><th>Flyway</th><th>DbUp</th><th>grate</th><th>EF Core</th><th>SSDT / dacpac</th><th>Sqitch</th><th>Liquibase</th></tr>"
+    head = "<tr><th></th><th>Badger Trek</th><th>Flyway</th><th>DbUp</th><th>grate</th><th>EF Core</th><th>SSDT / dacpac</th><th>Sqitch</th><th>Liquibase</th></tr>"
     table = "<table><thead>" + head + "</thead><tbody>" + "".join(
         "<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows) + "</tbody></table>"
     body = f"""
-<p>Every tool here is good at something. This is how Badger SQL Migrate's design relates to them, for SQL Server, Azure SQL and PostgreSQL. Feature sets change; check each project for its current state.</p>
+<p>Every tool here is good at something. This is how Badger Trek's design relates to them, for SQL Server, Azure SQL and PostgreSQL. Feature sets change; check each project for its current state.</p>
 {table}
 
-<h2>What Badger SQL Migrate keeps</h2>
+<h2>What Badger Trek keeps</h2>
 <ul>
   <li><strong>From Flyway:</strong> validate, repair, baseline and repeatable scripts; a simple mental model.</li>
   <li><strong>From Sqitch:</strong> named changes, a plan file, explicit dependencies, deploy/revert/verify triplets and a hash chain.</li>
@@ -330,7 +330,7 @@ def compare():
 
 <h2>What it fixes</h2>
 <ul>
-  <li><strong>Version collisions.</strong> Changes are named; order lives in a line-based plan merged by git's union driver. <code>bsm plan check</code> catches the rare real conflict (two changes with the same name).</li>
+  <li><strong>Version collisions.</strong> Changes are named; order lives in a line-based plan merged by git's union driver. <code>trek plan check</code> catches the rare real conflict (two changes with the same name).</li>
   <li><strong>Paid or lossy down.</strong> Revert scripts are written by you, required by default, free, and stored with the deploy.</li>
   <li><strong>Weak checksums.</strong> SHA-256 over normalized content (CRLF and BOM differences do not matter, everything else does) plus a chain over the order.</li>
   <li><strong>Rollback depending on your checkout.</strong> The database holds the revert script it will need.</li>
@@ -339,8 +339,8 @@ def compare():
 </ul>
 <p>Coming from another tool? See <a href="{BASE}/docs/baseline/">Existing databases</a> for adopting a database that is already in production.</p>
 """
-    return Page("compare/", "Badger SQL Migrate compared with Flyway, DbUp, grate, EF, SSDT, Sqitch and Liquibase",
-                "How Badger SQL Migrate compares with other database migration tools for SQL Server and PostgreSQL.", body,
+    return Page("compare/", "Badger Trek compared with Flyway, DbUp, grate, EF, SSDT, Sqitch and Liquibase",
+                "How Badger Trek compares with other database migration tools for SQL Server and PostgreSQL.", body,
                 heading="How it compares", lede="Flyway, DbUp, grate, EF Core migrations, SSDT, Sqitch and Liquibase.", wide=True)
 
 
@@ -366,7 +366,7 @@ CREATE UNIQUE INDEX UX_Customer_Email ON dbo.Customer (Email) WHERE Email IS NOT
     THROW 50000, N'dbo.Customer was not created', 1;
 IF INDEXPROPERTY(OBJECT_ID(N'dbo.Customer'), N'UX_Customer_Email', 'IsUnique') <> 1
     THROW 50000, N'UX_Customer_Email is missing or not unique', 1;''', "changes/create-customer/verify.sql"),
-       sh('''bsm add create-customer --note "customer table"'''))
+       sh('''trek add create-customer --note "customer table"'''))
 
     ex("add-column", "Add a NOT NULL column to a table with data", "<p>Add it nullable, backfill, then tighten. Batches separated by <code>GO</code> run in order inside the change's transaction. Name constraints explicitly: system-generated names differ between servers.</p>",
        sql('''ALTER TABLE dbo.Customer ADD Status tinyint NULL;
@@ -379,7 +379,7 @@ ALTER TABLE dbo.Customer ADD CONSTRAINT CK_Customer_Status CHECK (Status IN (1, 
        sql('''ALTER TABLE dbo.Customer DROP CONSTRAINT CK_Customer_Status;
 ALTER TABLE dbo.Customer DROP CONSTRAINT DF_Customer_Status;
 ALTER TABLE dbo.Customer DROP COLUMN Status;''', "changes/add-customer-status/revert.sql"),
-       code('''add-customer-status [create-customer] @2026-11-04T09:02Z alice''', "", "bsm.plan (line added by bsm add -r create-customer)"))
+       code('''add-customer-status [create-customer] @2026-11-04T09:02Z alice''', "", "trek.plan (line added by trek add -r create-customer)"))
 
     ex("rename", "Rename a column", "<p>Renames are reversible when you write both directions.</p>",
        sql('''EXEC sp_rename N'dbo.Customer.Email', N'EmailAddress', N'COLUMN';''', "changes/rename-customer-email/deploy.sql"),
@@ -402,10 +402,10 @@ END''', "changes/split-customer-name/deploy.sql"),
        sql('''UPDATE dbo.Customer SET Name = CONCAT_WS(N' ', FirstName, NULLIF(LastName, N''));
 ALTER TABLE dbo.Customer DROP COLUMN FirstName, LastName;''', "changes/split-customer-name/revert.sql"))
 
-    ex("irreversible", "An irreversible change", "<p>Some changes cannot be undone, such as dropping data you no longer keep. Mark them <code>!irreversible</code>: no <code>revert.sql</code> is needed and <code>bsm revert</code> stops with a clear message instead of guessing. Archiving first is good manners.</p>",
+    ex("irreversible", "An irreversible change", "<p>Some changes cannot be undone, such as dropping data you no longer keep. Mark them <code>!irreversible</code>: no <code>revert.sql</code> is needed and <code>trek revert</code> stops with a clear message instead of guessing. Archiving first is good manners.</p>",
        sql('''SELECT * INTO archive.LegacyOrder_20261103 FROM dbo.LegacyOrder;
 DROP TABLE dbo.LegacyOrder;''', "changes/drop-legacy-orders/deploy.sql"),
-       sh('''bsm add drop-legacy-orders --irreversible'''))
+       sh('''trek add drop-legacy-orders --irreversible'''))
 
     ex("notx", "Statements that cannot run in a transaction", "<p>SQL Server refuses some statements inside a transaction (<code>ALTER DATABASE</code>, full-text DDL, <code>RECONFIGURE</code>, resumable index operations). The linter catches them; mark the change <code>!notx</code> and make the script safe to re-run, because a failure halfway leaves partial work.</p>",
        sql('''IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = N'ftCatalog')
@@ -418,9 +418,9 @@ IF NOT EXISTS (SELECT 1 FROM sys.fulltext_indexes WHERE object_id = OBJECT_ID(N'
 GO
 IF EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = N'ftCatalog')
     DROP FULLTEXT CATALOG ftCatalog;''', "changes/product-fulltext/revert.sql"),
-       code('''product-fulltext [create-product] !notx''', "", "bsm.plan"))
+       code('''product-fulltext [create-product] !notx''', "", "trek.plan"))
 
-    ex("temporal", "A system-versioned (temporal) table", "<p>Name the history table so it is the same on every server and the revert can drop it. To change the table later, switch versioning off, change both tables and switch it on again in one change (lint rule BSM004 catches a missing ON).</p>",
+    ex("temporal", "A system-versioned (temporal) table", "<p>Name the history table so it is the same on every server and the revert can drop it. To change the table later, switch versioning off, change both tables and switch it on again in one change (lint rule TREK004 catches a missing ON).</p>",
        sql('''CREATE TABLE dbo.Price (
     Id int NOT NULL CONSTRAINT PK_Price PRIMARY KEY,
     ProductId int NOT NULL,
@@ -453,15 +453,15 @@ environments:
     variables:
       OrderFilegroup: "[FG_Orders]"
     schemaFingerprint:
-      partitionBoundaries: ignore      # a job splits new partitions every month''', "bsm.yaml"))
+      partitionBoundaries: ignore      # a job splits new partitions every month''', "trek.yaml"))
 
-    ex("repeatable", "Views, procedures and functions (repeatables)", "<p>Programmable objects live in <code>repeatable/</code> and use <code>CREATE OR ALTER</code>. Badger SQL Migrate re-applies one only when its hash changes, after all changes, in dependency order. Declare dependencies with a header.</p>",
+    ex("repeatable", "Views, procedures and functions (repeatables)", "<p>Programmable objects live in <code>repeatable/</code> and use <code>CREATE OR ALTER</code>. Badger Trek re-applies one only when its hash changes, after all changes, in dependency order. Declare dependencies with a header.</p>",
        sql('''CREATE OR ALTER VIEW dbo.vActiveCustomer
 AS
 SELECT Id, Name, EmailAddress
 FROM dbo.Customer
 WHERE Status = 1;''', "repeatable/views/vActiveCustomer.sql"),
-       sql('''-- bsm:requires views/vActiveCustomer.sql
+       sql('''-- trek:requires views/vActiveCustomer.sql
 CREATE OR ALTER PROCEDURE dbo.usp_FindCustomer
     @search nvarchar(200)
 AS
@@ -474,7 +474,7 @@ BEGIN
 END''', "repeatable/procedures/usp_FindCustomer.sql"))
 
     ex("seed", "Seed data for one environment", "<p>Scripts under <code>environments/&lt;name&gt;/</code> run only in that environment, after the shared repeatables. Write them idempotently; they re-run when they change.</p>",
-       sql('''-- bsm:requires views/vActiveCustomer.sql
+       sql('''-- trek:requires views/vActiveCustomer.sql
 MERGE dbo.Customer AS t
 USING (VALUES
     (N'Ada Lovelace', N'ada@example.com', 1),
@@ -484,7 +484,7 @@ USING (VALUES
 WHEN NOT MATCHED THEN
     INSERT (Name, EmailAddress, Status) VALUES (s.Name, s.EmailAddress, s.Status);''', "environments/dev/seed-customers.sql"))
 
-    ex("variables", "Environment-specific names with variables", "<p>The same script targets <code>calc_test</code> in test and <code>calc_prod</code> in prod. Built-ins like <code>{env}</code> and <code>{db}</code> are always available; your own variables live in <code>bsm.yaml</code>.</p>",
+    ex("variables", "Environment-specific names with variables", "<p>The same script targets <code>calc_test</code> in test and <code>calc_prod</code> in prod. Built-ins like <code>{env}</code> and <code>{db}</code> are always available; your own variables live in <code>trek.yaml</code>.</p>",
        yaml('''variables:
   schemas:
     calc: calc_{env}
@@ -496,7 +496,7 @@ environments:
     database: AppProd
     variables:
       AppRole: app_reader_prod
-      linkedServer: REPORTING01''', "bsm.yaml"),
+      linkedServer: REPORTING01''', "trek.yaml"),
        sql('''CREATE SCHEMA [{schemas.calc}];
 GO
 CREATE TABLE [{schemas.calc}].[table1] (
@@ -506,9 +506,9 @@ CREATE TABLE [{schemas.calc}].[table1] (
 GO
 CREATE ROLE [{AppRole}];
 GRANT SELECT ON SCHEMA::[{schemas.calc}] TO [{AppRole}];
-PRINT 'deployed {change} to {env} ({db}) with bsm {bsm.version}';''', "changes/create-calc-schema/deploy.sql"),
-       sh('''bsm render create-calc-schema -e prod    # prints the exact SQL prod will receive
-bsm vars -e prod                          # every variable, its value and where it came from'''),
+PRINT 'deployed {change} to {env} ({db}) with trek {trek.version}';''', "changes/create-calc-schema/deploy.sql"),
+       sh('''trek render create-calc-schema -e prod    # prints the exact SQL prod will receive
+trek vars -e prod                          # every variable, its value and where it came from'''),
        sql('''CREATE SCHEMA [calc_prod];
 GO
 CREATE TABLE [calc_prod].[table1] (
@@ -518,7 +518,7 @@ CREATE TABLE [calc_prod].[table1] (
 GO
 CREATE ROLE [app_reader_prod];
 GRANT SELECT ON SCHEMA::[calc_prod] TO [app_reader_prod];
-PRINT 'deployed create-calc-schema to prod (AppProd) with bsm 0.1.0';''', "output of bsm render -e prod"))
+PRINT 'deployed create-calc-schema to prod (AppProd) with trek 0.1.0';''', "output of trek render -e prod"))
 
     ex("security", "Logins, users and grants that differ per environment", "<p>Principals usually differ per environment. Keep the shape in the change and the names in variables. Secrets come from the environment, never from the file.</p>",
        yaml('''environments:
@@ -527,7 +527,7 @@ PRINT 'deployed create-calc-schema to prod (AppProd) with bsm 0.1.0';''', "outpu
       apiIdentity: myapp-api-prod          # Entra managed identity name
   test:
     variables:
-      apiIdentity: myapp-api-test''', "bsm.yaml"),
+      apiIdentity: myapp-api-test''', "trek.yaml"),
        sql('''CREATE USER [{apiIdentity}] FROM EXTERNAL PROVIDER;
 ALTER ROLE db_datareader ADD MEMBER [{apiIdentity}];
 GRANT EXECUTE ON SCHEMA::dbo TO [{apiIdentity}];''', "changes/grant-api-identity/deploy.sql"),
@@ -535,7 +535,7 @@ GRANT EXECUTE ON SCHEMA::dbo TO [{apiIdentity}];''', "changes/grant-api-identity
 ALTER ROLE db_datareader DROP MEMBER [{apiIdentity}];
 DROP USER [{apiIdentity}];''', "changes/grant-api-identity/revert.sql"))
 
-    ex("always-encrypted", "An Always Encrypted column", "<p>The change names a column encryption key; each environment decides which column master key protects it. Badger SQL Migrate creates the keys before the change runs.</p>",
+    ex("always-encrypted", "An Always Encrypted column", "<p>The change names a column encryption key; each environment decides which column master key protects it. Badger Trek creates the keys before the change runs.</p>",
        yaml('''environments:
   test:
     alwaysEncrypted:
@@ -548,17 +548,17 @@ DROP USER [{apiIdentity}];''', "changes/grant-api-identity/revert.sql"))
       columnMasterKeys:
         CMK_Prod_2026: { keyStore: AZURE_KEY_VAULT, keyPath: "https://myapp-prod-kv.vault.azure.net/keys/cmk/9f8e7d" }
       columnEncryptionKeys:
-        CEK_Customer: { columnMasterKey: CMK_Prod_2026 }''', "bsm.yaml"),
+        CEK_Customer: { columnMasterKey: CMK_Prod_2026 }''', "trek.yaml"),
        sql('''ALTER TABLE dbo.Customer ADD TaxId char(11) COLLATE Latin1_General_BIN2
     ENCRYPTED WITH (
         COLUMN_ENCRYPTION_KEY = CEK_Customer,
         ENCRYPTION_TYPE = Deterministic,
         ALGORITHM = 'AEAD_AES_256_CBC_HMAC_SHA_256') NULL;''', "changes/add-customer-taxid/deploy.sql"),
        sql('''ALTER TABLE dbo.Customer DROP COLUMN TaxId;''', "changes/add-customer-taxid/revert.sql"),
-       sh('''bsm env status -e prod      # keys: in sync, to create, to rotate, conflicting
-bsm deploy -e prod           # creates CMK_Prod_2026 and CEK_Customer, then runs the change'''))
+       sh('''trek env status -e prod      # keys: in sync, to create, to rotate, conflicting
+trek deploy -e prod           # creates CMK_Prod_2026 and CEK_Customer, then runs the change'''))
 
-    ex("config", "A complete bsm.yaml", "<p>A realistic configuration: a local container, Azure test and production, a template for shared settings, and production rules.</p>",
+    ex("config", "A complete trek.yaml", "<p>A realistic configuration: a local container, Azure test and production, a template for shared settings, and production rules.</p>",
        yaml('''provider: sqlserver
 defaultEnvironment: local
 
@@ -586,7 +586,7 @@ environments:
     database: App
     authentication: password
     user: sa
-    password: ${env:BSM_LOCAL_PASSWORD}
+    password: ${env:TREK_LOCAL_PASSWORD}
     tls: { mode: mandatory, trustServerCertificate: true }
 
   test:
@@ -605,10 +605,10 @@ environments:
     variables:
       AppRole: app_reader_prod
     connectionProperties:
-      Command Timeout: 600''', "bsm.yaml"))
+      Command Timeout: 600''', "trek.yaml"))
 
-    ex("plan", "A plan after two developers merged", "<p>Alice and Bob each appended a line on their branches. Git's union merge driver (set up by <code>bsm init</code>) kept both lines without a conflict.</p>",
-       code('''# Badger SQL Migrate plan: one change per line, in deploy order.
+    ex("plan", "A plan after two developers merged", "<p>Alice and Bob each appended a line on their branches. Git's union merge driver (set up by <code>trek init</code>) kept both lines without a conflict.</p>",
+       code('''# Badger Trek plan: one change per line, in deploy order.
 
 create-customer                                  @2026-11-03T14:10Z brock  # customer table
 add-customer-status [create-customer]            @2026-11-03T16:42Z brock
@@ -616,8 +616,8 @@ add-customer-status [create-customer]            @2026-11-03T16:42Z brock
 rename-customer-email [create-customer]          @2026-11-04T09:02Z alice
 add-order-table [create-customer]                @2026-11-04T09:15Z bob
 product-fulltext [create-product] !notx          @2026-11-05T11:30Z bob
-drop-legacy-orders !irreversible                 @2026-11-06T08:00Z alice''', "", "bsm.plan"),
-       sh('''bsm plan check     # unique names, dependencies, folders, lint, variables in every environment'''))
+drop-legacy-orders !irreversible                 @2026-11-06T08:00Z alice''', "", "trek.plan"),
+       sh('''trek plan check     # unique names, dependencies, folders, lint, variables in every environment'''))
 
     ex("github-actions", "GitHub Actions", "<p>Check on every pull request; deploy to test on merge; deploy to production with workload identity federation (no secrets).</p>",
        yaml('''name: database
@@ -637,8 +637,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: 10.0.x }
-      - run: dotnet tool install --global Badger.SqlMigrate
-      - run: bsm plan check -C db
+      - run: dotnet tool install --global Badger.Trek
+      - run: trek plan check -C db
 
   deploy:
     if: github.ref == 'refs/heads/main'
@@ -649,25 +649,25 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: 10.0.x }
-      - run: dotnet tool install --global Badger.SqlMigrate
+      - run: dotnet tool install --global Badger.Trek
       - uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           allow-no-subscriptions: true
-      - run: bsm deploy -C db -e test --json
-      - run: bsm deploy -C db -e prod --yes --json
-      - run: bsm verify -C db -e prod''', ".github/workflows/database.yml"),
+      - run: trek deploy -C db -e test --json
+      - run: trek deploy -C db -e prod --yes --json
+      - run: trek verify -C db -e prod''', ".github/workflows/database.yml"),
        yaml('''  prod:
     extends: _azure
-    authentication: entraAzureCli      # uses the azure/login session above''', "bsm.yaml (prod for this pipeline)"))
+    authentication: entraAzureCli      # uses the azure/login session above''', "trek.yaml (prod for this pipeline)"))
 
     ex("azure-pipelines", "Azure Pipelines", "<p>With a workload-identity service connection, use <code>entraAzurePipelines</code>, or run inside an AzureCLI task with <code>entraAzureCli</code>.</p>",
        yaml('''steps:
   - task: UseDotNet@2
     inputs: { packageType: sdk, version: 10.0.x }
-  - script: dotnet tool install --global Badger.SqlMigrate
-  - script: bsm deploy -C db -e prod --yes
+  - script: dotnet tool install --global Badger.Trek
+  - script: trek deploy -C db -e prod --yes
     env:
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)''', "azure-pipelines.yml"),
        yaml('''  prod:
@@ -677,9 +677,9 @@ jobs:
       tenantId: 7f3c1e2a-0000-0000-0000-000000000000
       clientId: 0a1b2c3d-0000-0000-0000-000000000000
       serviceConnectionId: 5e6f7a8b-0000-0000-0000-000000000000
-      systemAccessToken: ${env:SYSTEM_ACCESSTOKEN}''', "bsm.yaml"))
+      systemAccessToken: ${env:SYSTEM_ACCESSTOKEN}''', "trek.yaml"))
 
     toc = '<div class="toc"><strong>Examples</strong><ul>' + "".join(f'<li><a href="#{a}">{t}</a></li>' for a, t, _ in sections) + "</ul></div>"
-    body = toc + "".join(s for _, _, s in sections) + f'<p>A runnable sample project is in the repository under <a href="https://github.com/lonebadger-tech/badger-sql-migrate/tree/dev/samples/demo-db">samples/demo-db</a>. For every option, see the <a href="{BASE}/docs/">documentation</a>.</p>'
-    return Page("examples/", "Badger SQL Migrate examples", "Example migration scripts, plans and configuration for Badger SQL Migrate.", body,
+    body = toc + "".join(s for _, _, s in sections) + f'<p>A runnable sample project is in the repository under <a href="https://github.com/lonebadger-tech/badger-trek/tree/dev/samples/demo-db">samples/demo-db</a>. For every option, see the <a href="{BASE}/docs/">documentation</a>.</p>'
+    return Page("examples/", "Badger Trek examples", "Example migration scripts, plans and configuration for Badger Trek.", body,
                 heading="Examples", lede="Copy-ready scripts for common SQL Server changes, plus configuration and CI pipelines.", wide=True)

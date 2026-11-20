@@ -1,0 +1,48 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Badger.Trek.Core\Badger.Trek.Core.csproj" />
+    <ProjectReference Include="..\Badger.Trek.Connectivity\Badger.Trek.Connectivity.csproj" />
+    <ProjectReference Include="..\Badger.Trek.Conversion\Badger.Trek.Conversion.csproj" />
+    <ProjectReference Include="..\Badger.Trek.Providers.PostgreSql\Badger.Trek.Providers.PostgreSql.csproj" />
+    <ProjectReference Include="..\Badger.Trek.Providers.Sqlite\Badger.Trek.Providers.Sqlite.csproj" />
+    <ProjectReference Include="..\Badger.Trek.Providers.SqlServer\Badger.Trek.Providers.SqlServer.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The package page shows docs/nuget/README.md: written for users, unlike the repository README. -->
+    <None Include="..\..\docs\nuget\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\docs\nuget\icon.png" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.0.14" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    <!-- MCP server for 'trek mcp' (MIT). Core only: stdio without the hosting stack. -->
+    <PackageReference Include="ModelContextProtocol.Core" Version="2.3.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 'trek ai-guide', the MCP guide tool and AGENTS.md for new projects. -->
+    <EmbeddedResource Include="..\..\docs\ai-guide.md" LogicalName="Badger.Trek.Cli.ai-guide.md" />
+    <EmbeddedResource Include="Resources\AGENTS.md" LogicalName="Badger.Trek.Cli.AGENTS.md" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>trek</AssemblyName>
+    <RootNamespace>Badger.Trek.Cli</RootNamespace>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>trek</ToolCommandName>
+    <PackageId>Badger.Trek</PackageId>
+    <Description>Badger Trek: free, cross-platform, hash-certified database migrations for SQL Server, Azure SQL, PostgreSQL and SQLite, with real up and down, named changes, environments, Entra ID and Always Encrypted.</Description>
+    <PackageTags>sql-server;azure-sql;postgresql;sqlite;migrations;database;schema;devops;cli;entra-id;always-encrypted</PackageTags>
+    <PackageProjectUrl>https://lonebadger.tech/badger-trek/</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReleaseNotes>https://lonebadger.tech/badger-trek/releases/</PackageReleaseNotes>
+    <RepositoryUrl>https://github.com/lonebadger-tech/badger-trek</RepositoryUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+  </PropertyGroup>
+
+</Project>

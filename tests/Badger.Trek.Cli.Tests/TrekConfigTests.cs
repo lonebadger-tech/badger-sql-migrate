@@ -1,0 +1,236 @@
+using Badger.Trek.Cli;
+using Badger.Trek.Core;
+using Badger.Trek.Core.Configuration;
+using Badger.Trek.Core.Preprocessing;
+using Badger.Trek.Core.Providers;
+
+namespace Badger.Trek.Cli.Tests;
+
+public sealed class TrekConfigTests : IDisposable
+{
+    private readonly string dir = Path.Combine(Path.GetTempPath(), "trek-config", Guid.NewGuid().ToString("N"));
+
+    public TrekConfigTests() => Directory.CreateDirectory(dir);
+
+    public void Dispose() => Directory.Delete(dir, true);
+
+    private TrekConfig Load(string yaml)
+    {
+        File.WriteAllText(Path.Combine(dir, TrekConfig.FileName), yaml);
+        return TrekConfig.Load(dir);
+    }
+
+    private const string Sample = """
+        provider: sqlserver
+        defaultEnvironment: dev
+        preprocessor: { unknown: keep, sqlcmdSyntax: false }
+        variables:
+          AppRole: app_user
+          schemas:                       # block style: braces are fine unquoted
+            calc: calc_{env}
+          quoted: { stage: "stage_{env}" }   # inline maps need quotes around {..}
+        environments:
+          _azure:
+            database: App
+            authentication: entraInteractive
+            tls: { mode: strict }
+            entra: { tenantId: tenant-1, tokenCache: persistent }
+            connectionProperties: { Connect Retry Count: 3, Command Timeout: 60 }
+          dev:
+            extends: _azure
+            host: dev.database.windows.net
+            entra: { loginHint: dev@contoso.com }
+            variables: { AppRole: dev_role }
+          prod:
+            extends: _azure
+            description: Production
+            host: prod.database.windows.net
+            protected: true
+            allowRevert: false
+            ordering: strict
+            password: ${env:TREK_TEST_UNSET_SECRET}
+            connectionProperties: { Command Timeout: 300 }
+            alwaysEncrypted:
+              columnMasterKeys:
+                CMK_Prod: { keyStore: AZURE_KEY_VAULT, keyPath: "https://kv/keys/cmk/1" }
+              columnEncryptionKeys:
+                CEK_Customer: { columnMasterKey: CMK_Prod }
+        """;
+
+    [Fact]
+    public void Connection_string_override_replaces_the_environments_server_and_sign_in()
+    {
+        var config = Load("""
+            provider: sqlserver
+            environments:
+              local:
+                host: localhost
+                database: App
+                authentication: password
+                user: sa
+                password: ${env:TREK_TEST_UNSET_SECRET}
+            """);
+        var env = config.ResolveEnvironment("local", "Server=other;Database=Db;User Id=u;Password=p");
+        Assert.Equal("Server=other;Database=Db;User Id=u;Password=p", env.ConnectionString);
+        Assert.Null(env.User);
+        Assert.Null(env.Password);
+        Assert.Null(env.Authentication);
+        Assert.Null(env.Host);
+    }
+
+    [Fact]
+    public void A_sql_login_override_signs_in_with_its_own_credentials_when_the_environment_says_integrated()
+    {
+        // Dogfooding finding 17: with 0.3.0 the environment's 'authentication: integrated' won over the override's
+        // User ID/Password ("Cannot generate SSPI context" on Azure SQL), and its tls settings won over Encrypt.
+        var config = Load("""
+            provider: sqlserver
+            environments:
+              dev:
+                authentication: integrated
+                tls: { mode: mandatory, trustServerCertificate: true }
+            """);
+        var env = config.ResolveEnvironment("dev", "Server=tcp:example.database.windows.net,1433;Database=rn_dev;User ID=deployer;Password=p;Encrypt=True;TrustServerCertificate=False");
+        Assert.Null(env.Authentication);
+
+        var (connection, _, _) = Providers.SqlServer.SqlServerConnectionFactory.Create(env, SessionContext.Empty);
+        using (connection)
+        {
+            var built = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connection.ConnectionString);
+            Assert.False(built.IntegratedSecurity);
+            Assert.Equal("deployer", built.UserID);
+            Assert.Equal("tcp:example.database.windows.net,1433", built.DataSource);
+            Assert.Equal("rn_dev", built.InitialCatalog);
+            Assert.Equal(Microsoft.Data.SqlClient.SqlConnectionEncryptOption.Mandatory, built.Encrypt);
+            Assert.False(built.TrustServerCertificate);
+        }
+    }
+
+    [Fact]
+    public void Extends_deep_merges_and_children_win()
+    {
+        var dev = Load(Sample).ResolveEnvironment("dev", null);
+
+        Assert.Equal("dev.database.windows.net", dev.Host);
+        Assert.Equal("App", dev.Database);
+        Assert.Equal(AuthenticationKind.EntraInteractive, dev.Authentication);
+        Assert.Equal(TlsMode.Strict, dev.Tls.Mode);
+        Assert.Equal("tenant-1", dev.Entra.TenantId);
+        Assert.Equal("dev@contoso.com", dev.Entra.LoginHint);
+        Assert.Equal("3", dev.ConnectionProperties["Connect Retry Count"]);
+        Assert.Equal("dev_role", dev.Variables["AppRole"]);
+        Assert.Equal("calc_{env}", dev.Variables["schemas.calc"]);
+        Assert.False(dev.Protected);
+        Assert.Empty(dev.ProviderSettings);
+    }
+
+    [Fact]
+    public void Production_policies_and_provider_settings()
+    {
+        Environment.SetEnvironmentVariable("TREK_TEST_UNSET_SECRET", "s3cret");
+        try
+        {
+            var prod = Load(Sample).ResolveEnvironment("prod", null);
+            Assert.True(prod.Protected);
+            Assert.False(prod.AllowRevert);
+            Assert.Equal(OrderingPolicy.Strict, prod.Ordering);
+            Assert.Equal("300", prod.ConnectionProperties["Command Timeout"]);
+            Assert.Equal("3", prod.ConnectionProperties["Connect Retry Count"]);
+            Assert.Equal("s3cret", prod.Password);
+            Assert.Equal("https://kv/keys/cmk/1", prod.ProviderSettings["alwaysEncrypted"]!["columnMasterKeys"]!["CMK_Prod"]!["keyPath"]!.ToString());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("TREK_TEST_UNSET_SECRET", null);
+        }
+    }
+
+    [Fact]
+    public void Secrets_are_resolved_only_for_the_selected_environment()
+    {
+        var config = Load(Sample);
+        _ = config.ResolveEnvironment("dev", null);
+        var ex = Assert.Throws<MigrationException>(() => config.ResolveEnvironment("prod", null));
+        Assert.Contains("TREK_TEST_UNSET_SECRET", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Templates_and_defaults()
+    {
+        var config = Load(Sample);
+        Assert.Equal(["dev", "prod"], config.DeployableEnvironments);
+        Assert.Equal("dev", config.SelectEnvironmentName(null));
+        Assert.Throws<MigrationException>(() => config.SelectEnvironmentName("_azure"));
+        Assert.Throws<MigrationException>(() => config.SelectEnvironmentName("staging"));
+    }
+
+    [Fact]
+    public void Preprocessor_options_and_variable_names()
+    {
+        var config = Load(Sample);
+        Assert.Equal(UnknownVariablePolicy.Keep, config.Preprocessor.Unknown);
+        Assert.False(config.Preprocessor.SqlCmdSyntax);
+        Assert.Contains("quoted.stage", config.VariableNames("prod"));
+        Assert.Equal("stage_{env}", config.ResolveEnvironment("dev", null).Variables["quoted.stage"]);
+        Assert.Equal("app_user", config.Variables["AppRole"]);
+    }
+
+    [Fact]
+    public void Typos_in_known_blocks_are_rejected()
+    {
+        var config = Load("""
+            environments:
+              dev:
+                host: x
+                entra: { tennantId: abc }
+            """);
+        var ex = Assert.Throws<MigrationException>(() => config.ResolveEnvironment("dev", null));
+        Assert.Contains("tennantId", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Quoted_scalars_stay_strings_and_plain_ones_are_typed()
+    {
+        var env = Load("""
+            environments:
+              dev:
+                host: x
+                port: 1444
+                protected: "true"
+            """);
+        var ex = Assert.Throws<MigrationException>(() => env.ResolveEnvironment("dev", null));
+        Assert.Contains("protected", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1444, Load("environments: { dev: { host: x, port: 1444 } }").ResolveEnvironment("dev", null).Port);
+    }
+
+    [Fact]
+    public void Extends_cycles_and_old_profiles_key_are_reported()
+    {
+        Assert.Contains("cycle", Assert.Throws<MigrationException>(() => Load("environments: { a: { extends: b }, b: { extends: a } }").ResolveEnvironment("a", null)).Message, StringComparison.Ordinal);
+        Assert.Contains("renamed to 'environments'", Assert.Throws<MigrationException>(() => Load("profiles: {}")).Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("", "3.26")]
+    [InlineData("sqlite: { minVersion: \"3.35\" }", "3.35")]
+    [InlineData("sqlite:\n  minVersion: 3.45", "3.45")]
+    [InlineData("sqlite: { minVersion: \"3.30.1\" }", "3.30")]
+    public void The_sqlite_block_sets_the_oldest_engine_scripts_must_run_on(string block, string expected)
+    {
+        var config = Load("provider: sqlite\n" + block + "\nenvironments:\n  dev: { database: app.db }\n");
+        var provider = Assert.IsType<Badger.Trek.Providers.Sqlite.SqliteProvider>(config.CreateProvider());
+        Assert.Equal(Version.Parse(expected), provider.Options.MinVersion);
+    }
+
+    [Theory]
+    [InlineData("provider: sqlite\nsqlite: { minVersion: 3.3 }", "in quotes")]
+    [InlineData("provider: sqlite\nsqlite: { minVersion: \"3.20\" }", "older than the oldest SQLite trek supports (3.26)")]
+    [InlineData("provider: sqlite\nsqlite: { minVersion: \"latest\" }", "not a SQLite 3 version")]
+    [InlineData("provider: sqlite\nsqlite: { maxVersion: \"3.40\" }", "unknown setting 'sqlite.maxVersion'")]
+    [InlineData("provider: sqlserver\nsqlite: { minVersion: \"3.35\" }", "apply only to provider: sqlite")]
+    public void Sqlite_settings_mistakes_are_explained(string yaml, string message)
+    {
+        var ex = Assert.Throws<MigrationException>(() => Load(yaml + "\nenvironments:\n  dev: { database: app.db }\n").CreateProvider());
+        Assert.Contains(message, ex.Message, StringComparison.Ordinal);
+    }
+}

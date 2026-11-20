@@ -12,6 +12,6 @@ cd "$root"
 version="${1:-$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)}"
 
 rm -rf artifacts && mkdir artifacts
-gh release download "v$version" --repo lonebadger-tech/badger-sql-migrate --dir artifacts
+gh release download "v$version" --repo lonebadger-tech/badger-trek --dir artifacts
 (cd artifacts && shasum -a 256 --check --quiet SHA256SUMS)
 build/upload-release.sh "$version"

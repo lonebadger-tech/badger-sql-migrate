@@ -4,12 +4,12 @@ labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: Don't include passwords, tokens or keys. Security problems go through [SECURITY.md](https://github.com/lonebadger-tech/badger-sql-migrate/blob/dev/SECURITY.md), not an issue.
+      value: Don't include passwords, tokens or keys. Security problems go through [SECURITY.md](https://github.com/lonebadger-tech/badger-trek/blob/dev/SECURITY.md), not an issue.
   - type: input
     id: version
     attributes:
       label: Version
-      description: Output of `bsm --version`.
+      description: Output of `trek --version`.
     validations:
       required: true
   - type: dropdown
@@ -37,5 +37,5 @@ body:
     id: output
     attributes:
       label: Output
-      description: The command's output with `-v`, and `bsm doctor` if it's about connecting.
+      description: The command's output with `-v`, and `trek doctor` if it's about connecting.
       render: text

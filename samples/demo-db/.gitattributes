@@ -1,2 +1,2 @@
-bsm.plan merge=union
+trek.plan merge=union
 *.sql text eol=lf

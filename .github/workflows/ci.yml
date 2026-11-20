@@ -36,7 +36,7 @@ jobs:
       # SQLite tests (bundled engine) run everywhere. SQL Server (2022) and PostgreSQL (18) database tests run where Docker is
       # available (ubuntu) and skip elsewhere; the jobs below cover the other versions.
       - run: dotnet test -c Release --no-build
-      - run: dotnet run -c Release --no-build --project src/Badger.SqlMigrate.Cli -- plan check -C samples/demo-db
+      - run: dotnet run -c Release --no-build --project src/Badger.Trek.Cli -- plan check -C samples/demo-db
 
   # Every supported SQL Server version with a Linux container image: the provider's tests against each.
   sqlserver:
@@ -50,9 +50,9 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - run: dotnet test tests/Badger.SqlMigrate.Providers.SqlServer.Tests -c Release
+      - run: dotnet test tests/Badger.Trek.Providers.SqlServer.Tests -c Release
         env:
-          BSM_TEST_SQLSERVER_IMAGE: mcr.microsoft.com/mssql/server:${{ matrix.version }}-latest
+          TREK_TEST_SQLSERVER_IMAGE: mcr.microsoft.com/mssql/server:${{ matrix.version }}-latest
 
   # SQL Server 2016 SP1, the oldest supported version, has no Linux image: LocalDB on Windows.
   sqlserver-2016:
@@ -75,14 +75,14 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "SqlLocalDB.msi exited with $($p.ExitCode)" }
           $sqllocaldb = 'C:\Program Files\Microsoft SQL Server\130\Tools\Binn\SqlLocalDB.exe'
           & $sqllocaldb versions
-          & $sqllocaldb create bsm2016 13.0 -s
+          & $sqllocaldb create trek2016 13.0 -s
           if ($LASTEXITCODE -ne 0) { throw 'could not create the LocalDB 2016 instance' }
-      - run: dotnet test tests/Badger.SqlMigrate.Providers.SqlServer.Tests -c Release
+      - run: dotnet test tests/Badger.Trek.Providers.SqlServer.Tests -c Release
         env:
-          BSM_TEST_SQLSERVER: Server=(localdb)\bsm2016;Integrated Security=true;TrustServerCertificate=true
+          TREK_TEST_SQLSERVER: Server=(localdb)\trek2016;Integrated Security=true;TrustServerCertificate=true
 
-  # The build jobs test SQLite with the engine bsm ships. Other programs open the same files with the SQLite their
-  # Linux distribution ships, back to 3.26 (RHEL 8, the oldest bsm supports): the provider's tests against each of those.
+  # The build jobs test SQLite with the engine trek ships. Other programs open the same files with the SQLite their
+  # Linux distribution ships, back to 3.26 (RHEL 8, the oldest trek supports): the provider's tests against each of those.
   sqlite:
     name: sqlite (${{ matrix.version }}, ${{ matrix.distro }})
     strategy:
@@ -109,16 +109,16 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      # BSM_TEST_SQLITE_VERSION makes the run fail if the tests did not get the distribution's library.
-      - run: dotnet test tests/Badger.SqlMigrate.Providers.Sqlite.Tests -c Release
+      # TREK_TEST_SQLITE_VERSION makes the run fail if the tests did not get the distribution's library.
+      - run: dotnet test tests/Badger.Trek.Providers.Sqlite.Tests -c Release
         env:
-          BSM_SQLITE_LIBRARY: ${{ matrix.library }}
-          BSM_TEST_SQLITE_VERSION: ${{ matrix.version }}
-      # Without BSM_SQLITE_LIBRARY bsm picks the engine itself: the built-in one, or the system's where the built-in one
+          TREK_SQLITE_LIBRARY: ${{ matrix.library }}
+          TREK_TEST_SQLITE_VERSION: ${{ matrix.version }}
+      # Without TREK_SQLITE_LIBRARY trek picks the engine itself: the built-in one, or the system's where the built-in one
       # cannot load (it needs glibc 2.33; AlmaLinux 8 has 2.28).
-      - name: Test the engine bsm picks on this distribution
+      - name: Test the engine trek picks on this distribution
         if: always()
-        run: dotnet test tests/Badger.SqlMigrate.Providers.Sqlite.Tests -c Release --no-build
+        run: dotnet test tests/Badger.Trek.Providers.Sqlite.Tests -c Release --no-build
 
   # Every supported PostgreSQL major version: the provider's conformance and feature tests against each.
   postgresql:
@@ -132,6 +132,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - run: dotnet test tests/Badger.SqlMigrate.Providers.PostgreSql.Tests -c Release
+      - run: dotnet test tests/Badger.Trek.Providers.PostgreSql.Tests -c Release
         env:
-          BSM_TEST_POSTGRES_IMAGE: postgres:${{ matrix.version }}
+          TREK_TEST_POSTGRES_IMAGE: postgres:${{ matrix.version }}

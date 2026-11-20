@@ -1,14 +1,14 @@
-# Writing Badger SQL Migrate changes: a guide for AI tools
+# Writing Badger Trek changes: a guide for AI tools
 
-This guide is for AI coding assistants (and people) writing database changes in a Badger SQL Migrate (`bsm`)
-project. Follow it exactly: bsm certifies every change by hash, so a mistake in a deployed change can't be fixed
+This guide is for AI coding assistants (and people) writing database changes in a Badger Trek (`trek`)
+project. Follow it exactly: trek certifies every change by hash, so a mistake in a deployed change can't be fixed
 by editing it later.
 
 ## The project
 
 ```
-bsm.yaml                 provider (sqlserver, postgresql or sqlite), environments, variables
-bsm.plan                 every change, one per line, in deploy order
+trek.yaml                 provider (sqlserver, postgresql or sqlite), environments, variables
+trek.plan                 every change, one per line, in deploy order
 changes/<name>/
   deploy.sql             makes the change
   revert.sql             undoes exactly what deploy.sql did
@@ -17,7 +17,7 @@ repeatable/              views, procedures, functions, triggers: re-applied when
 environments/<env>/      repeatables that run only in that environment (seed data, test users)
 ```
 
-Read `bsm.yaml` first to learn the provider: `provider: sqlserver` means T-SQL, `provider: postgresql` means
+Read `trek.yaml` first to learn the provider: `provider: sqlserver` means T-SQL, `provider: postgresql` means
 PostgreSQL, `provider: sqlite` means SQLite. Never put connection strings, passwords or secrets in scripts.
 
 ## Adding a change
@@ -25,13 +25,13 @@ PostgreSQL, `provider: sqlite` means SQLite. Never put connection strings, passw
 1. Create the change with the CLI (or the `add_change` MCP tool). Don't write plan lines by hand:
 
    ```
-   bsm add add-customer-email --requires create-customer --note "email for receipts"
+   trek add add-customer-email --requires create-customer --note "email for receipts"
    ```
 
-   This creates `changes/add-customer-email/` with the three scripts and appends a line to `bsm.plan`.
+   This creates `changes/add-customer-email/` with the three scripts and appends a line to `trek.plan`.
 2. Write `deploy.sql`, `revert.sql` and, when useful, `verify.sql`.
-3. Run `bsm plan check` (or the `check` MCP tool) and fix every error and warning it reports.
-4. Stop there. A person deploys with `bsm deploy`. Don't run `deploy`, `revert`, `rebase`, `repair` or
+3. Run `trek plan check` (or the `check` MCP tool) and fix every error and warning it reports.
+4. Stop there. A person deploys with `trek deploy`. Don't run `deploy`, `revert`, `rebase`, `repair` or
    `baseline` unless the user asked you to, and never against an environment other than their local one.
 
 ### Names and dependencies
@@ -53,14 +53,14 @@ PostgreSQL, `provider: sqlite` means SQLite. Never put connection strings, passw
 - **A change runs in one transaction.** Don't write `BEGIN TRANSACTION`, `COMMIT` or `ROLLBACK`. A failure
   rolls back the whole change, so scripts don't need cleanup code.
 - **Statements that can't run in a transaction need `--notx`.** Examples: `CREATE INDEX CONCURRENTLY`,
-  `ALTER DATABASE`, full-text indexes. Create the change with `bsm add <name> --notx` and write the scripts so
+  `ALTER DATABASE`, full-text indexes. Create the change with `trek add <name> --notx` and write the scripts so
   they can be run again (`IF NOT EXISTS` in deploy, `IF EXISTS` in revert), because a failure part way leaves
-  partial work. The linter (BSM001) tells you when this is needed; with the MCP server, set it with
+  partial work. The linter (TREK001) tells you when this is needed; with the MCP server, set it with
   `update_change` (`notx: true`).
 - **Irreversible changes:** when undoing really isn't possible (dropping data that can't be restored), use
-  `bsm add <name> --irreversible`. There is then no `revert.sql`. Prefer reversible designs: rename or copy
+  `trek add <name> --irreversible`. There is then no `revert.sql`. Prefer reversible designs: rename or copy
   before you drop.
-- **Don't use `USE` (SQL Server) or `\connect` (PostgreSQL).** bsm deploys to the environment's database.
+- **Don't use `USE` (SQL Server) or `\connect` (PostgreSQL).** trek deploys to the environment's database.
 - **Schema-qualify every object:** `dbo.Customer`, `public.customer`.
 - **Data changes** belong in changes too, written to be correct on every environment's data. Use variables for
   values that differ between environments.
@@ -71,13 +71,13 @@ Once a change is deployed anywhere, its scripts are frozen: if a single characte
 matches and every deploy stops. To change what a deployed change did:
 
 - **New behaviour** (another column, a new procedure body): add a new change. For a definition that can be run
-  again, `bsm rework <name>` adds `<name>-v2`, whose deploy script starts as a copy to edit and whose revert
+  again, `trek rework <name>` adds `<name>-v2`, whose deploy script starts as a copy to edit and whose revert
   restores the old version.
 - **A harmless fix** to a deployed change's `revert.sql`, `verify.sql` or comments: edit it, then a person
-  runs `bsm repair <name>` in each environment. Don't use repair to change what deploy does.
+  runs `trek repair <name>` in each environment. Don't use repair to change what deploy does.
 
 You can't see which changes are deployed from the files alone. When unsure, ask the user, or have them run
-`bsm status`. Changes that are new in the current branch and not yet in the main branch are usually safe to
+`trek status`. Changes that are new in the current branch and not yet in the main branch are usually safe to
 edit.
 
 ## Repeatables
@@ -89,12 +89,12 @@ again:
 - PostgreSQL: `CREATE OR REPLACE VIEW|FUNCTION|PROCEDURE ...`, and `DROP ... IF EXISTS` then `CREATE` for
   objects that have no `OR REPLACE`.
 
-Name them by path, for example `repeatable/views/active_customer.sql`. bsm applies them after the changes,
+Name them by path, for example `repeatable/views/active_customer.sql`. trek applies them after the changes,
 whenever their text differs from what was last applied. When one repeatable uses another, declare it on the
 first line:
 
 ```
--- bsm:requires views/active_customer.sql functions/full_name.sql
+-- trek:requires views/active_customer.sql functions/full_name.sql
 ```
 
 List columns explicitly in views (no `SELECT *`): a view that selects every column depends on all of them,
@@ -108,10 +108,10 @@ they can run again (`MERGE`, `INSERT ... ON CONFLICT DO NOTHING`, `IF NOT EXISTS
 
 ## Variables
 
-Scripts are preprocessed before they run. `{name}` and `$(name)` are replaced with variables from `bsm.yaml` or
+Scripts are preprocessed before they run. `{name}` and `$(name)` are replaced with variables from `trek.yaml` or
 built-ins such as `{env}` (environment name) and `{db}` (database name). Use them for names and values that
 differ between environments. An unknown variable is an error; write `{{name}}` for literal braces. JSON
-(`'{"a":1}'`), format strings (`'{0}'`) and ODBC escapes are left alone. `bsm render <change> -e <env>` shows
+(`'{"a":1}'`), format strings (`'{0}'`) and ODBC escapes are left alone. `trek render <change> -e <env>` shows
 the exact SQL an environment will receive.
 
 ## SQL Server
@@ -121,7 +121,7 @@ the exact SQL an environment will receive.
 - Guard objects that may exist with `IF OBJECT_ID(N'dbo.Customer', N'U') IS NULL` or `DROP ... IF EXISTS`.
 - verify.sql: `IF COL_LENGTH('dbo.Customer', 'Email') IS NULL THROW 50000, 'Customer.Email is missing', 1;`
 - Temporal tables: when you set `SYSTEM_VERSIONING = OFF` to alter a table, turn it back on in the same script
-  (BSM004).
+  (TREK004).
 
 Example change `add-customer-email`:
 
@@ -147,10 +147,10 @@ IF COL_LENGTH('dbo.Customer', 'Email') IS NULL
 
 ## Converted projects
 
-A project written by `bsm convert schema` has `CONVERSION.md` at its root and `convert.json` next to `bsm.yaml`. Scripts
-marked `/* REVIEW bsm convert: ... */` were translated from the other database and need a person's judgement: resolve
+A project written by `trek convert schema` has `CONVERSION.md` at its root and `convert.json` next to `trek.yaml`. Scripts
+marked `/* REVIEW trek convert: ... */` were translated from the other database and need a person's judgement: resolve
 the issue the comment describes, then delete the comment (and its line in the file's header). Don't edit
-`convert.json`: `bsm convert data` uses it to map names the way the schema was converted.
+`convert.json`: `trek convert data` uses it to map names the way the schema was converted.
 
 ## PostgreSQL
 
@@ -160,9 +160,9 @@ the issue the comment describes, then delete the comment (and its line in the fi
 - verify.sql: a `DO` block that raises:
   `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customer' AND column_name = 'email') THEN RAISE EXCEPTION 'customer.email is missing'; END IF; END $$;`
 - `ALTER TYPE ... ADD VALUE`: the new enum value can't be used until the change commits, so use it in a later
-  change (BSM007).
+  change (TREK007).
 - psql meta-commands work: `\i`, `\ir`, `\set`, `:'var'`, `\if`/`\endif`, `\copy ... from 'file.csv'`,
-  `\gexec`. These are refused (BSM005): `\connect`, `\gset`, `\copy ... to`, `\o`, `\!`, `\prompt`, and
+  `\gexec`. These are refused (TREK005): `\connect`, `\gset`, `\copy ... to`, `\o`, `\!`, `\prompt`, and
   backquoted shell commands.
 
 Example change `add-customer-email`:
@@ -183,20 +183,20 @@ ALTER TABLE public.customer DROP COLUMN email;
 
 - Statements end with `;`. Semicolons inside strings, comments and `CREATE TRIGGER ... BEGIN ... END;` bodies
   don't split statements.
-- There are no schemas: write `customer`, or `main.customer`. bsm's own tables are `bsm_*` in the same file.
+- There are no schemas: write `customer`, or `main.customer`. trek's own tables are `trek_*` in the same file.
 - `ALTER TABLE` can only rename a table or column, add a column (nullable, or `NOT NULL` with a constant
-  default) and, from SQLite 3.35, drop a simple column. `sqlite.minVersion` in bsm.yaml (default "3.26") is the
-  oldest SQLite that opens the database: use only SQL it understands (lint warns, BSM008), so below 3.35 drop a
+  default) and, from SQLite 3.35, drop a simple column. `sqlite.minVersion` in trek.yaml (default "3.26") is the
+  oldest SQLite that opens the database: use only SQL it understands (lint warns, TREK008), so below 3.35 drop a
   column by rebuilding the table. For anything else (type, constraint, primary key, foreign key changes)
   rebuild the table: create `new_<table>`, copy the rows, drop the old table, rename, and re-create its
   indexes, triggers and the views that use it. If other tables have foreign keys to it, the change must be
   `!notx` and wrap the rebuild in `PRAGMA foreign_keys = OFF; BEGIN; ... COMMIT; PRAGMA foreign_keys = ON;`
-  (`PRAGMA foreign_keys` does nothing inside bsm's transaction, BSM001).
+  (`PRAGMA foreign_keys` does nothing inside trek's transaction, TREK001).
 - Repeatables: there is no `CREATE OR REPLACE`; write `DROP VIEW IF EXISTS v;` then `CREATE VIEW v ...`
   (and the same for triggers).
 - verify.sql: select from what must exist; SQLite raises "no such table/column" when it doesn't:
   `SELECT email FROM customer LIMIT 0;`
-- sqlite3 dot-commands (`.read`, `.mode`, `.import`) are not SQL and are refused (BSM005). `VACUUM`,
+- sqlite3 dot-commands (`.read`, `.mode`, `.import`) are not SQL and are refused (TREK005). `VACUUM`,
   `ATTACH` and `PRAGMA journal_mode` need `!notx`.
 
 Example change `add-customer-email`:
@@ -215,22 +215,22 @@ ALTER TABLE customer DROP COLUMN email;
 
 ## Linter codes
 
-`bsm plan check` reports these. Errors must be fixed; fix warnings unless the user says otherwise.
+`trek plan check` reports these. Errors must be fixed; fix warnings unless the user says otherwise.
 
 | Code | Provider | Meaning and fix |
 |---|---|---|
-| BSM000 | SQL Server | The script didn't parse, so lint was skipped. Check the syntax. |
-| BSM001 | all | A statement can't run in a transaction. Mark the change `!notx` (`update_change` with `notx: true`, or `--notx` on `bsm add`) and make it re-runnable. |
-| BSM002 | SQL Server | `USE` switches databases. Remove it. |
-| BSM003 | all | `BEGIN`/`COMMIT`/`ROLLBACK` in a transactional change. Remove it. |
-| BSM004 | SQL Server | `SYSTEM_VERSIONING = OFF` without turning it back on. Turn it back on in the same script. |
-| BSM005 | PostgreSQL, SQLite | A psql command bsm can't run, or unbalanced `\if`/`\endif`; on SQLite, a sqlite3 dot-command (`.read`, `.mode`). Remove it. |
-| BSM007 | PostgreSQL | An enum value added with `ADD VALUE` is used in the same change. Move that use to a later change. |
-| BSM008 | SQLite | SQL newer than `sqlite.minVersion` in bsm.yaml (`RETURNING`, `DROP COLUMN`, `STRICT`, `->>` ...). Rewrite it for the older engine; raise `minVersion` only if the user says every program that opens the database has that SQLite. |
+| TREK000 | SQL Server | The script didn't parse, so lint was skipped. Check the syntax. |
+| TREK001 | all | A statement can't run in a transaction. Mark the change `!notx` (`update_change` with `notx: true`, or `--notx` on `trek add`) and make it re-runnable. |
+| TREK002 | SQL Server | `USE` switches databases. Remove it. |
+| TREK003 | all | `BEGIN`/`COMMIT`/`ROLLBACK` in a transactional change. Remove it. |
+| TREK004 | SQL Server | `SYSTEM_VERSIONING = OFF` without turning it back on. Turn it back on in the same script. |
+| TREK005 | PostgreSQL, SQLite | A psql command trek can't run, or unbalanced `\if`/`\endif`; on SQLite, a sqlite3 dot-command (`.read`, `.mode`). Remove it. |
+| TREK007 | PostgreSQL | An enum value added with `ADD VALUE` is used in the same change. Move that use to a later change. |
+| TREK008 | SQLite | SQL newer than `sqlite.minVersion` in trek.yaml (`RETURNING`, `DROP COLUMN`, `STRICT`, `->>` ...). Rewrite it for the older engine; raise `minVersion` only if the user says every program that opens the database has that SQLite. |
 
 ## Generating a change from a database (person-run)
 
-When a person has already made schema edits in their local database, `bsm add <name> --from-diff` writes
+When a person has already made schema edits in their local database, `trek add <name> --from-diff` writes
 `deploy.sql` and `revert.sql` by comparing that database with the plan. Review the output: it is a starting
 point, and data migrations still need writing by hand.
 
@@ -238,17 +238,17 @@ point, and data migrations still need writing by hand.
 
 | Command | Needs a database | Use |
 |---|---|---|
-| `bsm plan check --json` | no | Errors and lint findings for the whole project |
-| `bsm plan show --json` | no | Every change with its dependencies, flags and tags |
-| `bsm render <change> [--kind revert] -e <env>` | no | The SQL an environment will receive |
-| `bsm ai-guide` | no | This guide, matching the installed version |
-| `bsm status -e <env> --json` | yes | What is deployed (ask the user before connecting) |
+| `trek plan check --json` | no | Errors and lint findings for the whole project |
+| `trek plan show --json` | no | Every change with its dependencies, flags and tags |
+| `trek render <change> [--kind revert] -e <env>` | no | The SQL an environment will receive |
+| `trek ai-guide` | no | This guide, matching the installed version |
+| `trek status -e <env> --json` | yes | What is deployed (ask the user before connecting) |
 
 `--json` prints machine-readable output on stdout; warnings and errors go to stderr. Exit code 0 means
 success.
 
 ## MCP server
 
-`bsm mcp -C <project folder>` runs a Model Context Protocol server over stdio with the tools `project_info`,
+`trek mcp -C <project folder>` runs a Model Context Protocol server over stdio with the tools `project_info`,
 `plan_show`, `read_change`, `add_change`, `write_change_script`, `update_change`, `rework_change`,
 `write_repeatable`, `check`, `lint_sql`, `render` and `guide`. It only reads and writes project files; it never connects to a database.
