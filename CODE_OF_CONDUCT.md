@@ -1,6 +1,6 @@
 # Code of conduct
 
-Badger SQL Migrate is a place to build a good tool together. Everyone taking part (in issues, pull requests, discussions and anywhere else on behalf of the project) is expected to:
+Badger Trek is a place to build a good tool together. Everyone taking part (in issues, pull requests, discussions and anywhere else on behalf of the project) is expected to:
 
 - be respectful and assume good intent, including when you disagree;
 - keep feedback about the work, never about the person;

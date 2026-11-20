@@ -1,4 +1,4 @@
-/* Badger SQL Migrate pages. Extends /styles.css (shared site styles). */
+/* Badger Trek pages. Extends /styles.css (shared site styles). */
 .wide main, .wide header, .wide footer { max-width: 1080px; }
 .hero img.icon { width: 112px; height: 112px; border-radius: 24px; box-shadow: 0 6px 20px rgba(0,0,0,.2); }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0 0; }

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 'trek convert': translates schemas and code between providers. It bridges two dialects, so it references both
+       provider assemblies; drivers stay inside the providers (data moves through IDataTransfer). -->
+  <ItemGroup>
+    <ProjectReference Include="..\Badger.Trek.Core\Badger.Trek.Core.csproj" />
+    <ProjectReference Include="..\Badger.Trek.Providers.PostgreSql\Badger.Trek.Providers.PostgreSql.csproj" />
+    <ProjectReference Include="..\Badger.Trek.Providers.SqlServer\Badger.Trek.Providers.SqlServer.csproj" />
+    <ProjectReference Include="..\Badger.Trek.Providers.Sqlite\Badger.Trek.Providers.Sqlite.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.140.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Badger.Trek.Conversion.Tests" />
+  </ItemGroup>
+
+</Project>

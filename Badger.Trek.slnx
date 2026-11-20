@@ -1,0 +1,22 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Badger.Trek.Cli/Badger.Trek.Cli.csproj" />
+    <Project Path="src/Badger.Trek.Connectivity/Badger.Trek.Connectivity.csproj" />
+    <Project Path="src/Badger.Trek.Conversion/Badger.Trek.Conversion.csproj" />
+    <Project Path="src/Badger.Trek.Core/Badger.Trek.Core.csproj" />
+    <Project Path="src/Badger.Trek.Providers.PostgreSql/Badger.Trek.Providers.PostgreSql.csproj" />
+    <Project Path="src/Badger.Trek.Providers.Sqlite/Badger.Trek.Providers.Sqlite.csproj" />
+    <Project Path="src/Badger.Trek.Providers.SqlServer/Badger.Trek.Providers.SqlServer.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Badger.Trek.ArchitectureTests/Badger.Trek.ArchitectureTests.csproj" />
+    <Project Path="tests/Badger.Trek.Cli.Tests/Badger.Trek.Cli.Tests.csproj" />
+    <Project Path="tests/Badger.Trek.Conversion.IntegrationTests/Badger.Trek.Conversion.IntegrationTests.csproj" />
+    <Project Path="tests/Badger.Trek.Conversion.Tests/Badger.Trek.Conversion.Tests.csproj" />
+    <Project Path="tests/Badger.Trek.Core.Tests/Badger.Trek.Core.Tests.csproj" />
+    <Project Path="tests/Badger.Trek.Providers.PostgreSql.Tests/Badger.Trek.Providers.PostgreSql.Tests.csproj" />
+    <Project Path="tests/Badger.Trek.Providers.Sqlite.Tests/Badger.Trek.Providers.Sqlite.Tests.csproj" />
+    <Project Path="tests/Badger.Trek.Providers.SqlServer.Tests/Badger.Trek.Providers.SqlServer.Tests.csproj" />
+    <Project Path="tests/Badger.Trek.Providers.Testing/Badger.Trek.Providers.Testing.csproj" />
+  </Folder>
+</Solution>

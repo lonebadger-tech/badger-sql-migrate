@@ -1,4 +1,4 @@
-"""The documentation section: /badger-sql-migrate/docs/..."""
+"""The documentation section: /badger-trek/docs/..."""
 from build import BASE, REPO, VERSION, Page, code, markdown, sh, sql, yaml
 
 SIDEBAR = [
@@ -47,7 +47,7 @@ SIDEBAR = [
 
 
 def doc(path, title, lede, body, description=None):
-    return Page(path, f"{title} · Badger SQL Migrate", description or lede, body, sidebar=SIDEBAR, heading=title, lede=lede)
+    return Page(path, f"{title} · Badger Trek", description or lede, body, sidebar=SIDEBAR, heading=title, lede=lede)
 
 
 def link(path, label):
@@ -63,13 +63,13 @@ def pages():
 # ---------------------------------------------------------------- get started
 
 def overview():
-    return doc("docs/", "Documentation", "Everything about Badger SQL Migrate, from the first change to production pipelines.", f"""
-<p>Badger SQL Migrate deploys hand-written SQL changes to SQL Server, Azure SQL, PostgreSQL and SQLite, in an order you control, and proves afterwards that every database received exactly what you intended. It is a single command-line tool, <code>bsm</code>, for Windows, macOS and Linux.</p>
+    return doc("docs/", "Documentation", "Everything about Badger Trek, from the first change to production pipelines.", f"""
+<p>Badger Trek deploys hand-written SQL changes to SQL Server, Azure SQL, PostgreSQL and SQLite, in an order you control, and proves afterwards that every database received exactly what you intended. It is a single command-line tool, <code>trek</code>, for Windows, macOS and Linux.</p>
 
 <h2>Five ideas</h2>
 <ol>
   <li><strong>Changes have names.</strong> A change is a folder (<code>changes/add-customer-email/</code>) with a <code>deploy.sql</code>, a <code>revert.sql</code> and an optional <code>verify.sql</code>. No version numbers to collide.</li>
-  <li><strong>The plan decides the order.</strong> <code>bsm.plan</code> lists changes one per line. Git merges it without conflicts. {link("docs/plan/", "The plan")}</li>
+  <li><strong>The plan decides the order.</strong> <code>trek.plan</code> lists changes one per line. Git merges it without conflicts. {link("docs/plan/", "The plan")}</li>
   <li><strong>Everything is hashed.</strong> Each change has a SHA-256 hash, and each position in the plan a chain hash over everything before it. Identical head hash, identical history. {link("docs/certification/", "Hash certification")}</li>
   <li><strong>Down is real.</strong> The database stores the revert script at deploy time and uses it to roll back. {link("docs/revert/", "Revert")}</li>
   <li><strong>Environments hold the differences.</strong> Servers, identities, variables and encryption keys differ per environment; change scripts do not. {link("docs/environments/", "Environments")}</li>
@@ -84,27 +84,27 @@ def overview():
 </ul>
 
 <h2>Supported databases</h2>
-<p>SQL Server 2016 SP1 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance; features that need a newer server, such as history retention for temporal tables (2017) or Always Encrypted with secure enclaves (2019), need it only where you use them. PostgreSQL 12 and later. SQLite 3.26 and later: bsm runs the engine built into it, and the scripts it generates also run on the older SQLite that other programs open your database with ({link("docs/sqlite/#versions", "SQLite versions")}). The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
+<p>SQL Server 2016 SP1 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance; features that need a newer server, such as history retention for temporal tables (2017) or Always Encrypted with secure enclaves (2019), need it only where you use them. PostgreSQL 12 and later. SQLite 3.26 and later: trek runs the engine built into it, and the scripts it generates also run on the older SQLite that other programs open your database with ({link("docs/sqlite/#versions", "SQLite versions")}). The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
 """)
 
 
 def install():
     return doc("docs/install/", "Install", "A .NET tool, or a single executable for your platform.", f"""
 <h2>.NET tool</h2>
-{sh('''dotnet tool install --global Badger.SqlMigrate
-bsm --version''')}
-<p>Requires the .NET 10 SDK. Pin a version per repository with a local tool manifest (<code>dotnet new tool-manifest</code>, then <code>dotnet tool install Badger.SqlMigrate</code>) and run it as <code>dotnet bsm</code>. (Pass options after the command: <code>dotnet bsm add --help</code>. <code>dotnet tool run bsm add --help</code> shows dotnet's own help instead.) <code>dotnet bsm</code> is found only in the folder that holds <code>.config/dotnet-tools.json</code> and the folders below it: elsewhere dotnet says <em>"dotnet-bsm does not exist"</em>. Create the manifest at the repository root, or run <code>dotnet bsm</code> from below the folder that has it.</p>
+{sh('''dotnet tool install --global Badger.Trek
+trek --version''')}
+<p>Requires the .NET 10 SDK. Pin a version per repository with a local tool manifest (<code>dotnet new tool-manifest</code>, then <code>dotnet tool install Badger.Trek</code>) and run it as <code>dotnet trek</code>. (Pass options after the command: <code>dotnet trek add --help</code>. <code>dotnet tool run trek add --help</code> shows dotnet's own help instead.) <code>dotnet trek</code> is found only in the folder that holds <code>.config/dotnet-tools.json</code> and the folders below it: elsewhere dotnet says <em>"dotnet-trek does not exist"</em>. Create the manifest at the repository root, or run <code>dotnet trek</code> from below the folder that has it.</p>
 
 <h2>Standalone executable</h2>
-<p>{link("download/", "Download")} the archive for your platform and put <code>bsm</code> on your <code>PATH</code>. The executables are self-contained: no .NET runtime needed. Builds exist for Windows (x64, Arm64), macOS (Apple silicon, Intel) and Linux (x64, Arm64, Alpine x64), plus a portable build for any OS with the .NET 10 runtime.</p>
+<p>{link("download/", "Download")} the archive for your platform and put <code>trek</code> on your <code>PATH</code>. The executables are self-contained: no .NET runtime needed. Builds exist for Windows (x64, Arm64), macOS (Apple silicon, Intel) and Linux (x64, Arm64, Alpine x64), plus a portable build for any OS with the .NET 10 runtime.</p>
 
 <h2>Check it works</h2>
-{sh('''bsm --help
-bsm doctor -C path/to/project -e dev     # configuration, sign-in, connection, journal''')}
+{sh('''trek --help
+trek doctor -C path/to/project -e dev     # configuration, sign-in, connection, journal''')}
 
 <h2>Platform notes</h2>
 <ul>
-  <li><strong>macOS:</strong> binaries are signed ad hoc but not notarized; clear the quarantine flag once with <code>xattr -d com.apple.quarantine bsm</code>.</li>
+  <li><strong>macOS:</strong> binaries are signed ad hoc but not notarized; clear the quarantine flag once with <code>xattr -d com.apple.quarantine trek</code>.</li>
   <li><strong>Linux:</strong> Kerberos (integrated) authentication needs the system GSSAPI library. Entra interactive sign-in caches tokens with libsecret; without it, use device code or set <code>entra.allowUnencryptedTokenCache</code>.</li>
   <li><strong>Windows:</strong> Windows authentication uses SSPI; the Windows certificate store, CNG and CSP key stores for Always Encrypted are available.</li>
 </ul>
@@ -115,15 +115,15 @@ def quick_start():
     return doc("docs/quick-start/", "Quick start", "From an empty folder to a certified database in ten minutes.", f"""
 <p>You need a SQL Server you can reach. A local container works:</p>
 {sh('''docker run -d --name sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="Your_str0ng_password" -p 1433:1433 mcr.microsoft.com/mssql/server:2022-latest
-export BSM_LOCAL_PASSWORD="Your_str0ng_password"''')}
+export TREK_LOCAL_PASSWORD="Your_str0ng_password"''')}
 
 <h2>1. Create a project</h2>
-{sh('''bsm init -C db
+{sh('''trek init -C db
 cd db''')}
-<p>This writes <code>bsm.yaml</code>, an empty <code>bsm.plan</code>, the <code>changes/</code>, <code>repeatable/</code> and <code>environments/</code> folders, and a <code>.gitattributes</code> rule that lets git merge the plan. Edit the <code>local</code> environment in <code>bsm.yaml</code> so <code>database:</code> names a database that exists.</p>
+<p>This writes <code>trek.yaml</code>, an empty <code>trek.plan</code>, the <code>changes/</code>, <code>repeatable/</code> and <code>environments/</code> folders, and a <code>.gitattributes</code> rule that lets git merge the plan. Edit the <code>local</code> environment in <code>trek.yaml</code> so <code>database:</code> names a database that exists.</p>
 
 <h2>2. Add a change</h2>
-{sh('''bsm add create-customer''')}
+{sh('''trek add create-customer''')}
 {sql('''CREATE TABLE dbo.Customer (
     Id int IDENTITY NOT NULL CONSTRAINT PK_Customer PRIMARY KEY,
     Name nvarchar(200) NOT NULL
@@ -132,13 +132,13 @@ cd db''')}
 {sql('''IF OBJECT_ID(N'dbo.Customer', N'U') IS NULL THROW 50000, N'Customer missing', 1;''', "changes/create-customer/verify.sql")}
 
 <h2>3. Check, then deploy</h2>
-{sh('''bsm plan check          # no database needed: plan, folders, lint, variables
-bsm doctor              # can we sign in and connect?
-bsm deploy --dry-run
-bsm deploy''')}
+{sh('''trek plan check          # no database needed: plan, folders, lint, variables
+trek doctor              # can we sign in and connect?
+trek deploy --dry-run
+trek deploy''')}
 
 <h2>4. Look at the result</h2>
-{sh('''bsm status''')}
+{sh('''trek status''')}
 {code('''environment    local
 target         sqlserver://localhost:1433/App
   + create-customer                          2026-11-03 18:03Z you
@@ -148,28 +148,28 @@ plan head      0e21ef9c72f3
 up to date and certified: database history is identical to the plan.''')}
 
 <h2>5. Change your mind</h2>
-{sh('''bsm add add-customer-email --requires create-customer
+{sh('''trek add add-customer-email --requires create-customer
 # write deploy.sql / revert.sql
-bsm deploy
-bsm revert --last 1        # runs the revert.sql stored at deploy time
-bsm deploy                 # and forward again
-bsm log                    # who did what, when, from where''')}
+trek deploy
+trek revert --last 1        # runs the revert.sql stored at deploy time
+trek deploy                 # and forward again
+trek log                    # who did what, when, from where''')}
 
 <h2>Next</h2>
 <ul>
   <li>Add a test and a production environment: {link("docs/environments/", "Environments")}.</li>
   <li>Sign in with Entra ID: {link("docs/authentication/", "Authentication")}.</li>
-  <li>Commit <code>db/</code> to git and add <code>bsm plan check</code> to CI: {link("docs/ci-cd/", "CI/CD")}.</li>
+  <li>Commit <code>db/</code> to git and add <code>trek plan check</code> to CI: {link("docs/ci-cd/", "CI/CD")}.</li>
 </ul>
 """)
 
 
 def project():
-    return doc("docs/project/", "Project layout", "Files bsm reads, and what each is for.", f"""
+    return doc("docs/project/", "Project layout", "Files trek reads, and what each is for.", f"""
 {code('''db/
-  bsm.yaml                   provider, environments, variables, preprocessor settings
-  bsm.plan                   ordered list of changes and tags
-  .gitattributes                bsm.plan merge=union, *.sql text eol=lf
+  trek.yaml                   provider, environments, variables, preprocessor settings
+  trek.plan                   ordered list of changes and tags
+  .gitattributes                trek.plan merge=union, *.sql text eol=lf
   changes/
     <change-name>/
       deploy.sql                required
@@ -183,14 +183,14 @@ def project():
       seed.sql''')}
 <p>Pass the project folder with <code>-C</code> / <code>--project</code> (default: the current folder).</p>
 
-<h2>Rules bsm checks</h2>
+<h2>Rules trek checks</h2>
 <ul>
   <li>Every change in the plan has a folder with <code>deploy.sql</code>, and every folder in <code>changes/</code> is in the plan.</li>
   <li>Change names use letters, digits, <code>-</code>, <code>_</code> and <code>.</code>, starting with a letter or digit. Names are case-sensitive.</li>
   <li>A missing <code>revert.sql</code> is an error unless the plan marks the change <code>!irreversible</code>.</li>
   <li>Scripts are read as UTF-8. A byte-order mark and Windows line endings are ignored for hashing.</li>
 </ul>
-<p><code>bsm plan check</code> reports all of these without a database. Put it in a pre-commit hook and in CI.</p>
+<p><code>trek plan check</code> reports all of these without a database. Put it in a pre-commit hook and in CI.</p>
 """)
 
 
@@ -199,52 +199,52 @@ def project():
 def ai():
     with open(f"{REPO}/docs/ai-guide.md", encoding="utf-8") as f:
         guide = markdown(f.read())
-    return doc("docs/ai/", "AI assistants", "Let Claude, Copilot, Cursor and other AI tools write changes that bsm can certify.", f"""
-<p>AI coding assistants write good SQL, but they don't know bsm's rules: named changes in the plan, a revert for every deploy, one transaction per change, and never editing what has been deployed. bsm gives them those rules three ways. Use any or all of them.</p>
+    return doc("docs/ai/", "AI assistants", "Let Claude, Copilot, Cursor and other AI tools write changes that trek can certify.", f"""
+<p>AI coding assistants write good SQL, but they don't know trek's rules: named changes in the plan, a revert for every deploy, one transaction per change, and never editing what has been deployed. trek gives them those rules three ways. Use any or all of them.</p>
 
 <h2 id="agents-md">AGENTS.md in every project</h2>
-<p><code>bsm init</code> and <code>bsm import</code> write an <code>AGENTS.md</code> into the project folder: a short version of the rules, filled in for the project's database. Claude Code, Copilot, Cursor, Codex and most other assistants read <code>AGENTS.md</code> on their own. Pass <code>--no-agents-file</code> to skip it, and keep or edit it like any other file: bsm never overwrites one that exists. Older projects can get one by running <code>bsm init</code> again in the folder; it only creates files that are missing.</p>
+<p><code>trek init</code> and <code>trek import</code> write an <code>AGENTS.md</code> into the project folder: a short version of the rules, filled in for the project's database. Claude Code, Copilot, Cursor, Codex and most other assistants read <code>AGENTS.md</code> on their own. Pass <code>--no-agents-file</code> to skip it, and keep or edit it like any other file: trek never overwrites one that exists. Older projects can get one by running <code>trek init</code> again in the folder; it only creates files that are missing.</p>
 
 <h2 id="guide">The full guide</h2>
-{sh('''bsm ai-guide > docs/bsm-ai-guide.md   # the guide for the installed version''')}
-<p><code>bsm ai-guide</code> prints the guide below as Markdown, matching the installed version, for assistants that can't browse. Every page of this site is also available as Markdown (add <code>index.md</code> to its address), and <a href="/llms.txt">llms.txt</a> lists them all.</p>
+{sh('''trek ai-guide > docs/trek-ai-guide.md   # the guide for the installed version''')}
+<p><code>trek ai-guide</code> prints the guide below as Markdown, matching the installed version, for assistants that can't browse. Every page of this site is also available as Markdown (add <code>index.md</code> to its address), and <a href="/llms.txt">llms.txt</a> lists them all.</p>
 
 <h2 id="mcp">The MCP server</h2>
-<p><code>bsm mcp</code> runs a <a href="https://modelcontextprotocol.io">Model Context Protocol</a> server over stdio for one project folder. Assistants that support MCP then add changes, write scripts and run the checks through tools instead of guessing at file formats and command output:</p>
+<p><code>trek mcp</code> runs a <a href="https://modelcontextprotocol.io">Model Context Protocol</a> server over stdio for one project folder. Assistants that support MCP then add changes, write scripts and run the checks through tools instead of guessing at file formats and command output:</p>
 <table>
 <tr><th>Tool</th><th>Does</th></tr>
 <tr><td><code>project_info</code></td><td>The database dialect, environments, variable names and plan size</td></tr>
 <tr><td><code>plan_show</code>, <code>read_change</code></td><td>The plan, and a change's scripts</td></tr>
-<tr><td><code>add_change</code></td><td>Add a change with its deploy, revert and verify scripts in one call, like <code>bsm add</code></td></tr>
+<tr><td><code>add_change</code></td><td>Add a change with its deploy, revert and verify scripts in one call, like <code>trek add</code></td></tr>
 <tr><td><code>write_change_script</code>, <code>update_change</code></td><td>Edit a change that hasn't been deployed: a script, or its <code>!notx</code>, <code>!irreversible</code>, requires and note</td></tr>
-<tr><td><code>rework_change</code></td><td>Supersede a deployed change, like <code>bsm rework</code></td></tr>
+<tr><td><code>rework_change</code></td><td>Supersede a deployed change, like <code>trek rework</code></td></tr>
 <tr><td><code>write_repeatable</code></td><td>Create or replace a view, procedure, function or environment script</td></tr>
 <tr><td><code>check</code>, <code>lint_sql</code></td><td><code>plan check</code> with each lint finding's code, file and line; lint SQL before writing it</td></tr>
 <tr><td><code>render</code></td><td>A script with an environment's variables filled in</td></tr>
-<tr><td><code>guide</code></td><td>The guide below (also a resource, <code>bsm://guide</code>, and a <code>write-migration</code> prompt)</td></tr>
+<tr><td><code>guide</code></td><td>The guide below (also a resource, <code>trek://guide</code>, and a <code>write-migration</code> prompt)</td></tr>
 </table>
-<p>The server reads and writes files in the project folder only. It never connects to a database and never needs a password, so an assistant can draft changes but a person deploys them with <code>bsm deploy</code>.</p>
+<p>The server reads and writes files in the project folder only. It never connects to a database and never needs a password, so an assistant can draft changes but a person deploys them with <code>trek deploy</code>.</p>
 <p>Claude Code, from the repository root:</p>
-{sh('''claude mcp add bsm -- bsm mcp -C db''')}
+{sh('''claude mcp add trek -- trek mcp -C db''')}
 <p>Claude Desktop (<code>claude_desktop_config.json</code>), Cursor (<code>.cursor/mcp.json</code>) and other clients that use the same format:</p>
 {code('''{{
   "mcpServers": {{
-    "bsm": {{ "command": "bsm", "args": ["mcp", "-C", "/path/to/repo/db"] }}
+    "trek": {{ "command": "trek", "args": ["mcp", "-C", "/path/to/repo/db"] }}
   }}
 }}''', "json")}
 <p>VS Code (<code>.vscode/mcp.json</code>):</p>
 {code('''{{
   "servers": {{
-    "bsm": {{ "type": "stdio", "command": "bsm", "args": ["mcp", "-C", "${{workspaceFolder}}/db"] }}
+    "trek": {{ "type": "stdio", "command": "trek", "args": ["mcp", "-C", "${{workspaceFolder}}/db"] }}
   }}
 }}''', "json")}
-<p>Installed as a .NET tool, <code>bsm</code> is on the path; with the downloaded executable, give its full path as <code>command</code>.</p>
+<p>Installed as a .NET tool, <code>trek</code> is on the path; with the downloaded executable, give its full path as <code>command</code>.</p>
 
 <h2 id="review">Review what the assistant wrote</h2>
 <ul>
-  <li>Read every <code>revert.sql</code>: it must undo the deploy exactly. Try it locally with <code>bsm deploy</code>, <code>bsm revert --last 1</code>, <code>bsm deploy</code>, then <code>bsm verify</code>.</li>
-  <li>Run <code>bsm plan check</code> in CI so lint errors and undefined variables never merge.</li>
-  <li>Check that the assistant didn't edit a change that is already deployed: <code>bsm status</code> flags it as <em>edited after deploy</em>.</li>
+  <li>Read every <code>revert.sql</code>: it must undo the deploy exactly. Try it locally with <code>trek deploy</code>, <code>trek revert --last 1</code>, <code>trek deploy</code>, then <code>trek verify</code>.</li>
+  <li>Run <code>trek plan check</code> in CI so lint errors and undefined variables never merge.</li>
+  <li>Check that the assistant didn't edit a change that is already deployed: <code>trek status</code> flags it as <em>edited after deploy</em>.</li>
 </ul>
 
 <hr>
@@ -253,13 +253,13 @@ def ai():
 
 
 def plan():
-    return doc("docs/plan/", "The plan", "bsm.plan is the single source of deploy order.", f"""
+    return doc("docs/plan/", "The plan", "trek.plan is the single source of deploy order.", f"""
 {code('''# comments start with #
 create-customer                                 @2026-11-03T14:10Z brock  # a note
 add-customer-email [create-customer]            @2026-11-04T09:02Z alice
 rebuild-fulltext [create-product] !notx         @2026-11-04T09:15Z bob
 drop-legacy !irreversible                       @2026-11-05T08:00Z alice
-@release-1.4''', "", "bsm.plan")}
+@release-1.4''', "", "trek.plan")}
 
 <h2>Line syntax</h2>
 <table>
@@ -272,15 +272,15 @@ drop-legacy !irreversible                       @2026-11-05T08:00Z alice
 <tr><td><code># note</code></td><td>A note. Not hashed.</td></tr>
 <tr><td><code>@tag</code> (own line)</td><td>Tags the change above it. Use as <code>--to @tag</code>.</td></tr>
 </table>
-<p><code>bsm add</code> and <code>bsm tag</code> write these lines for you. The name, dependencies and flags are part of the change's hash; notes, authors and timestamps are not.</p>
+<p><code>trek add</code> and <code>trek tag</code> write these lines for you. The name, dependencies and flags are part of the change's hash; notes, authors and timestamps are not.</p>
 
 <h2>Why one change per line</h2>
-<p>When two developers each append a change on their branches, git's <code>union</code> merge driver keeps both lines instead of reporting a conflict. <code>bsm init</code> adds the rule to <code>.gitattributes</code>:</p>
-{code('''bsm.plan merge=union''', "", ".gitattributes")}
-<p>Run <code>bsm plan check</code> after merging. It catches the cases a union merge cannot judge: the same name added twice, a dependency on a change that was removed, or a folder without a plan line. See {link("docs/teamwork/", "Teams and ordering")}.</p>
+<p>When two developers each append a change on their branches, git's <code>union</code> merge driver keeps both lines instead of reporting a conflict. <code>trek init</code> adds the rule to <code>.gitattributes</code>:</p>
+{code('''trek.plan merge=union''', "", ".gitattributes")}
+<p>Run <code>trek plan check</code> after merging. It catches the cases a union merge cannot judge: the same name added twice, a dependency on a change that was removed, or a folder without a plan line. See {link("docs/teamwork/", "Teams and ordering")}.</p>
 
 <h2>Targets</h2>
-<p><code>--to</code> accepts a change name or a tag: <code>bsm deploy --to @release-1.4</code> deploys up to and including the tagged change.</p>
+<p><code>--to</code> accepts a change name or a tag: <code>trek deploy --to @release-1.4</code> deploys up to and including the tagged change.</p>
 """)
 
 
@@ -289,9 +289,9 @@ def changes():
 <h2>The three scripts</h2>
 <table>
 <tr><th>Script</th><th>Runs</th><th>Purpose</th></tr>
-<tr><td><code>deploy.sql</code></td><td><code>bsm deploy</code></td><td>Make the change.</td></tr>
-<tr><td><code>revert.sql</code></td><td><code>bsm revert</code>, <code>rebase</code></td><td>Undo exactly what deploy did.</td></tr>
-<tr><td><code>verify.sql</code></td><td>After deploy, and in <code>bsm verify</code></td><td>Raise an error if the change is not in effect.</td></tr>
+<tr><td><code>deploy.sql</code></td><td><code>trek deploy</code></td><td>Make the change.</td></tr>
+<tr><td><code>revert.sql</code></td><td><code>trek revert</code>, <code>rebase</code></td><td>Undo exactly what deploy did.</td></tr>
+<tr><td><code>verify.sql</code></td><td>After deploy, and in <code>trek verify</code></td><td>Raise an error if the change is not in effect.</td></tr>
 </table>
 
 <h2>Batches</h2>
@@ -305,11 +305,11 @@ def changes():
 <p>On SQL Server, scripts are parsed with Microsoft's T-SQL parser before anything runs ({link("docs/postgresql/#linter", "PostgreSQL's checks")} are on its own page). <code>plan check</code> and <code>deploy</code> report:</p>
 <table>
 <tr><th>Code</th><th>Severity</th><th>Finding</th></tr>
-<tr><td><code>BSM001</code></td><td>Error</td><td>Statement cannot run in a transaction (ALTER/CREATE/DROP DATABASE, BACKUP, RESTORE, full-text catalog and index DDL, RECONFIGURE, resumable online index) and the change is not <code>!notx</code>.</td></tr>
-<tr><td><code>BSM002</code></td><td>Error</td><td><code>USE</code>: bsm deploys to the environment's database; switching databases inside a script breaks that.</td></tr>
-<tr><td><code>BSM003</code></td><td>Warning</td><td>Explicit <code>BEGIN TRANSACTION</code> inside a transactional change. A <code>ROLLBACK</code> there would abort bsm's transaction.</td></tr>
-<tr><td><code>BSM004</code></td><td>Warning</td><td><code>SYSTEM_VERSIONING = OFF</code> for a table that the same script neither turns back on nor drops, so it would stop recording history.</td></tr>
-<tr><td><code>BSM000</code></td><td>Warning</td><td>The script did not parse; lint skipped (SQL Server may still accept it).</td></tr>
+<tr><td><code>TREK001</code></td><td>Error</td><td>Statement cannot run in a transaction (ALTER/CREATE/DROP DATABASE, BACKUP, RESTORE, full-text catalog and index DDL, RECONFIGURE, resumable online index) and the change is not <code>!notx</code>.</td></tr>
+<tr><td><code>TREK002</code></td><td>Error</td><td><code>USE</code>: trek deploys to the environment's database; switching databases inside a script breaks that.</td></tr>
+<tr><td><code>TREK003</code></td><td>Warning</td><td>Explicit <code>BEGIN TRANSACTION</code> inside a transactional change. A <code>ROLLBACK</code> there would abort trek's transaction.</td></tr>
+<tr><td><code>TREK004</code></td><td>Warning</td><td><code>SYSTEM_VERSIONING = OFF</code> for a table that the same script neither turns back on nor drops, so it would stop recording history.</td></tr>
+<tr><td><code>TREK000</code></td><td>Warning</td><td>The script did not parse; lint skipped (SQL Server may still accept it).</td></tr>
 </table>
 
 <h2>Immutability</h2>
@@ -321,19 +321,19 @@ def changes():
 
 
 def certification():
-    return doc("docs/certification/", "Hash certification", "How bsm proves two databases got identical changes in the same order.", f"""
+    return doc("docs/certification/", "Hash certification", "How trek proves two databases got identical changes in the same order.", f"""
 <h2>Script hash</h2>
 <p>Each change's script hash is SHA-256 over its name, dependencies, flags, and the text of deploy, revert and verify, each part length-prefixed so text cannot move between scripts without changing the hash. Before hashing, a UTF-8 byte-order mark is removed and CRLF/CR become LF: a Windows checkout and a macOS checkout of the same commit hash identically. Every other difference, including whitespace, changes the hash.</p>
 
 <h2>Chain id</h2>
-<p>Each change also gets a chain id: SHA-256 of the provider, the change name, its script hash and the chain id of the change before it. Like a git commit id, it depends on everything earlier. The chain id of the last change is the <strong>plan head</strong> (<code>bsm plan show</code>).</p>
-<p>When a database deploys a change, it records a chain id computed from <em>its own</em> deploy order. If the database received a prefix of the plan, in plan order, with identical scripts, its head equals the plan's chain id at that position, and <code>bsm status</code> reports it as <strong>certified</strong>. Two databases with the same head received byte-identical history.</p>
+<p>Each change also gets a chain id: SHA-256 of the provider, the change name, its script hash and the chain id of the change before it. Like a git commit id, it depends on everything earlier. The chain id of the last change is the <strong>plan head</strong> (<code>trek plan show</code>).</p>
+<p>When a database deploys a change, it records a chain id computed from <em>its own</em> deploy order. If the database received a prefix of the plan, in plan order, with identical scripts, its head equals the plan's chain id at that position, and <code>trek status</code> reports it as <strong>certified</strong>. Two databases with the same head received byte-identical history.</p>
 
 <h2>Rendered hash</h2>
-<p>Scripts can contain {link("docs/variables/", "variables")} that differ per environment, so the SQL that runs in test and prod is not the same text. Badger SQL Migrate therefore stores a second hash per change: SHA-256 of deploy and verify as rendered for that environment, plus one for the rendered revert. That separates "same change" (chain id, equal across environments) from "same SQL executed here" (rendered hash). <code>bsm verify</code> reports changes whose variables now render differently; <code>revert</code> refuses to run a revert script that no longer matches.</p>
+<p>Scripts can contain {link("docs/variables/", "variables")} that differ per environment, so the SQL that runs in test and prod is not the same text. Badger Trek therefore stores a second hash per change: SHA-256 of deploy and verify as rendered for that environment, plus one for the rendered revert. That separates "same change" (chain id, equal across environments) from "same SQL executed here" (rendered hash). <code>trek verify</code> reports changes whose variables now render differently; <code>revert</code> refuses to run a revert script that no longer matches.</p>
 
 <h2>Schema fingerprint</h2>
-<p>After each run bsm records a fingerprint: a hash of a canonical, sorted description of the schema (tables, columns, types, defaults, indexes, keys, constraints, module definitions, types, sequences, synonyms). System-generated constraint names, which differ from server to server, are masked; the <code>bsm</code> journal schema is excluded. <code>bsm verify</code> compares the live schema with the last fingerprint, so a hotfix made outside bsm shows up as drift.</p>
+<p>After each run trek records a fingerprint: a hash of a canonical, sorted description of the schema (tables, columns, types, defaults, indexes, keys, constraints, module definitions, types, sequences, synonyms). System-generated constraint names, which differ from server to server, are masked; the <code>trek</code> journal schema is excluded. <code>trek verify</code> compares the live schema with the last fingerprint, so a hotfix made outside trek shows up as drift.</p>
 
 <h2>What status tells you</h2>
 <table>
@@ -343,29 +343,29 @@ def certification():
 <tr><td>edited after deploy</td><td>The working copy's scripts differ from what this database ran.</td></tr>
 <tr><td>deployed but not in plan</td><td>An orphan: removed from the plan, or from another branch. It can still be reverted.</td></tr>
 </table>
-<p>Releases of bsm itself publish SHA-256 sums for every download, so the tool can be verified the same way.</p>
+<p>Releases of trek itself publish SHA-256 sums for every download, so the tool can be verified the same way.</p>
 """)
 
 
 def revert():
     return doc("docs/revert/", "Revert (down)", "Rolling back with the scripts the database stored at deploy time.", f"""
-{sh('''bsm revert --last 1               # the most recently deployed change
-bsm revert --to create-customer    # everything deployed after it (it stays)
-bsm revert --to @release-1.4
-bsm revert --all
-bsm revert --to x --dry-run        # list, change nothing
-bsm rebase --to x                  # revert to x, then deploy to the head again
-bsm revert --repeatable views/vCustomer.sql   # put a view back to its previous definition''')}
+{sh('''trek revert --last 1               # the most recently deployed change
+trek revert --to create-customer    # everything deployed after it (it stays)
+trek revert --to @release-1.4
+trek revert --all
+trek revert --to x --dry-run        # list, change nothing
+trek rebase --to x                  # revert to x, then deploy to the head again
+trek revert --repeatable views/vCustomer.sql   # put a view back to its previous definition''')}
 <p>Changes are reverted in reverse deploy order, each in its own transaction (unless <code>!notx</code>), with a <code>revert</code> event in the log. Revert asks for confirmation; pass <code>--yes</code> in scripts.</p>
 
 <h2>Stored scripts</h2>
-<p>When a change is deployed, its deploy, revert and verify scripts are saved in the journal. Revert runs the <em>saved</em> revert script. You can switch branches, delete the change, or roll back from a machine that never had the code, and the database still knows how to undo itself. If your working copy's revert script differs from the saved one, bsm says so and uses the saved one.</p>
+<p>When a change is deployed, its deploy, revert and verify scripts are saved in the journal. Revert runs the <em>saved</em> revert script. You can switch branches, delete the change, or roll back from a machine that never had the code, and the database still knows how to undo itself. If your working copy's revert script differs from the saved one, trek says so and uses the saved one.</p>
 
 <h2>Guards</h2>
 <ul>
   <li><code>!irreversible</code> changes stop the revert before anything runs.</li>
   <li>Environments with <code>allowRevert: false</code> refuse revert and rebase. Use it for production and fix forward.</li>
-  <li>If a variable used by the revert script changed since deploy, revert refuses (it would undo something other than what was done). Check <code>bsm vars</code>; override with <code>--allow-variable-drift</code>.</li>
+  <li>If a variable used by the revert script changed since deploy, revert refuses (it would undo something other than what was done). Check <code>trek vars</code>; override with <code>--allow-variable-drift</code>.</li>
   <li>Protected environments ask you to type the environment name.</li>
 </ul>
 
@@ -375,7 +375,7 @@ bsm revert --repeatable views/vCustomer.sql   # put a view back to its previous 
 <ul>
   <li>Undo in reverse order of the deploy.</li>
   <li>Drop what you created; restore what you changed. For data changes, keep enough information in the deploy (for example a backup table) to restore it.</li>
-  <li>Test the pair: <code>bsm rebase --to &lt;previous change&gt;</code> on a dev database runs revert and deploy back to back. <code>bsm verify</code> afterwards should match the original fingerprint.</li>
+  <li>Test the pair: <code>trek rebase --to &lt;previous change&gt;</code> on a dev database runs revert and deploy back to back. <code>trek verify</code> afterwards should match the original fingerprint.</li>
 </ul>
 """)
 
@@ -386,13 +386,13 @@ def fixing_changes():
 
 <table>
 <tr><th>The edit</th><th>Use</th><th>Runs SQL?</th></tr>
-<tr><td>The change must do something different (a new procedure body, another column)</td><td><code>bsm rework</code>: a new change that supersedes it</td><td>Yes, as a normal deploy</td></tr>
-<tr><td>A bug in <code>revert.sql</code> or <code>verify.sql</code>, a comment, formatting, a new <code>!notx</code> flag</td><td><code>bsm repair</code>: accept the edit in the journal</td><td>No</td></tr>
+<tr><td>The change must do something different (a new procedure body, another column)</td><td><code>trek rework</code>: a new change that supersedes it</td><td>Yes, as a normal deploy</td></tr>
+<tr><td>A bug in <code>revert.sql</code> or <code>verify.sql</code>, a comment, formatting, a new <code>!notx</code> flag</td><td><code>trek repair</code>: accept the edit in the journal</td><td>No</td></tr>
 </table>
 
 <h2 id="rework">Rework</h2>
-{sh('''bsm rework get-customer            # adds get-customer-v2
-bsm rework get-customer --as get-customer-by-email -n "search by email"''')}
+{sh('''trek rework get-customer            # adds get-customer-v2
+trek rework get-customer --as get-customer-by-email -n "search by email"''')}
 <p>Rework adds a change named <code>&lt;change&gt;-v2</code> (then <code>-v3</code>, and so on) that requires the original:</p>
 <ul>
   <li><code>deploy.sql</code> starts as a copy of the original deploy script. Edit it.</li>
@@ -408,34 +408,34 @@ SELECT Id, Name FROM dbo.Customer WHERE Id = @Id;''', "changes/get-customer-v2/r
 <p>Already edited the original by mistake? Move your edits into the new change and restore the original (<code>git checkout -- changes/get-customer</code>), so it matches what was deployed.</p>
 
 <h2 id="repair">Repair</h2>
-{sh('''bsm status -e test                      # ! create-order  EDITED AFTER DEPLOY
-bsm repair create-order -e test --reason "revert dropped the wrong index"
-bsm repair --all --dry-run -e test     # list every edited change and what differs''')}
+{sh('''trek status -e test                      # ! create-order  EDITED AFTER DEPLOY
+trek repair create-order -e test --reason "revert dropped the wrong index"
+trek repair --all --dry-run -e test     # list every edited change and what differs''')}
 <p>Repair records the working copy's scripts, hashes and flags for the named changes and recomputes the chain ids of every change deployed after them, so the database certifies against the plan again. It runs no SQL. Each repaired change gets a <code>repair</code> event in the log with what differed, the old hash and your reason.</p>
 <ul>
   <li>Repair is per database: run it in every environment that has the change.</li>
   <li>A fixed <code>revert.sql</code> is what revert will run from then on, because revert uses the scripts stored in the journal.</li>
-  <li>When <code>deploy.sql</code> itself differs, bsm warns and always asks for confirmation (type the environment name): databases that already ran the old script keep the old result. Only repair deploy edits that change nothing, and put real changes in a rework.</li>
+  <li>When <code>deploy.sql</code> itself differs, trek warns and always asks for confirmation (type the environment name): databases that already ran the old script keep the old result. Only repair deploy edits that change nothing, and put real changes in a rework.</li>
   <li>Repair takes the deploy lock and respects the environment ownership guard.</li>
 </ul>
 """)
 
 
 def generating():
-    return doc("docs/generating/", "Generating changes", "Make schema edits in your own database with any tool, then let bsm write the change.", f"""
-{sh('''bsm add customer-phone --from-diff                 # compare 'local' with the plan, write the change
-bsm add customer-phone --from-diff --dry-run       # print the deploy script, write nothing
-bsm add customer-phone --from-diff --shadow-env docker -n "phone numbers"''')}
-<p>Change your development database however you like (SSMS, Azure Data Studio, pgAdmin, DBeaver, a table designer, a script), then run <code>bsm add &lt;name&gt; --from-diff</code>. bsm:</p>
+    return doc("docs/generating/", "Generating changes", "Make schema edits in your own database with any tool, then let trek write the change.", f"""
+{sh('''trek add customer-phone --from-diff                 # compare 'local' with the plan, write the change
+trek add customer-phone --from-diff --dry-run       # print the deploy script, write nothing
+trek add customer-phone --from-diff --shadow-env docker -n "phone numbers"''')}
+<p>Change your development database however you like (SSMS, Azure Data Studio, pgAdmin, DBeaver, a table designer, a script), then run <code>trek add &lt;name&gt; --from-diff</code>. trek:</p>
 <ol>
   <li>checks that the database has exactly a prefix of the plan deployed, in order (otherwise the comparison would include unrelated differences);</li>
   <li>creates a temporary <strong>shadow database</strong> on the same server and deploys the plan to it, as far as your database has it, with your environment's variables and keys;</li>
   <li>compares the two catalogs and writes <code>changes/&lt;name&gt;/deploy.sql</code> (shadow → your database) and <code>revert.sql</code> (back again), with a summary and warnings at the top;</li>
-  <li>appends the change to <code>bsm.plan</code>, marks it <code>!notx</code> if needed, and records it as applied in your database, which already has it (<code>--no-record</code> to skip);</li>
+  <li>appends the change to <code>trek.plan</code>, marks it <code>!notx</code> if needed, and records it as applied in your database, which already has it (<code>--no-record</code> to skip);</li>
   <li>drops the shadow database (<code>--keep-shadow</code> to look at it).</li>
 </ol>
-<p>Everything is read from the database's own catalog with the same driver bsm already uses (no pg_dump, no SqlPackage): nothing else to install, on any OS. SQL Server and PostgreSQL both generate changes.</p>
-{sql('''-- Deploy customer-phone: generated by Badger SQL Migrate from 'local'. Review before committing.
+<p>Everything is read from the database's own catalog with the same driver trek already uses (no pg_dump, no SqlPackage): nothing else to install, on any OS. SQL Server and PostgreSQL both generate changes.</p>
+{sql('''-- Deploy customer-phone: generated by Badger Trek from 'local'. Review before committing.
 --   + column dbo.Customer.Phone varchar(30)
 --   + index dbo.Customer.IX_Customer_Phone
 
@@ -465,7 +465,7 @@ GO''', "changes/customer-phone/deploy.sql")}
 <tr><td>Comments and privileges</td><td><code>COMMENT ON</code>, <code>GRANT</code>/<code>REVOKE</code> (tables, columns, sequences, functions, schemas, types) and default privileges, written again for objects the script re-creates</td></tr>
 </table>
 <p>Views, triggers, policies and rules on a table whose columns are dropped or retyped are dropped first and re-created after, because PostgreSQL refuses the <code>ALTER</code> while they exist. The script starts with <code>SET LOCAL check_function_bodies = off</code> so function bodies may refer to objects created later in it. PostgreSQL-specific warnings: removing or reordering enum values and changing a domain's base type while columns use them, changing how a table is partitioned, changing a generated column's expression, foreign table options, ordered-set aggregates and subscriptions (their connection holds a password).</p>
-{sql('''-- Deploy orders: generated by Badger SQL Migrate from 'local'. Review before committing.
+{sql('''-- Deploy orders: generated by Badger Trek from 'local'. Review before committing.
 --   + type public.status
 --   + column public.customer.email character varying(200)
 --   + table public.orders
@@ -486,7 +486,7 @@ ALTER TABLE public.orders ADD CONSTRAINT orders_customer_id_fkey FOREIGN KEY (cu
 <p>Constraints SQL Server named itself (<code>DF__Order__Total__3B75D760</code>) have a different name on every server, so the script finds them at deploy time instead of hard-coding a name.</p>
 
 <h2>On SQLite</h2>
-<p>SQLite's <code>ALTER TABLE</code> can rename a column, add one and (from SQLite 3.35) drop a simple one, and bsm uses it for exactly those; it drops columns in place only when the project's <code>sqlite.minVersion</code> is 3.35 or later, and otherwise rebuilds the table. Every other table change (a type, a constraint, a key, a default, column order) is the rebuild SQLite documents: create the new table under a temporary name, copy the rows by column name (a column at the same position with the same definition and a new name is a rename), drop the old table, rename the new one, and re-create its indexes and triggers. Views and triggers that refer to the table, directly or through other views, are dropped first and re-created after, because SQLite re-checks them when a table is renamed. Indexes, views and triggers are compared as written, ignoring layout and identifier quoting.</p>
+<p>SQLite's <code>ALTER TABLE</code> can rename a column, add one and (from SQLite 3.35) drop a simple one, and trek uses it for exactly those; it drops columns in place only when the project's <code>sqlite.minVersion</code> is 3.35 or later, and otherwise rebuilds the table. Every other table change (a type, a constraint, a key, a default, column order) is the rebuild SQLite documents: create the new table under a temporary name, copy the rows by column name (a column at the same position with the same definition and a new name is a rename), drop the old table, rename the new one, and re-create its indexes and triggers. Views and triggers that refer to the table, directly or through other views, are dropped first and re-created after, because SQLite re-checks them when a table is renamed. Indexes, views and triggers are compared as written, ignoring layout and identifier quoting.</p>
 <p>When other tables have foreign keys to a rebuilt table, both scripts switch foreign keys off, which SQLite only allows outside a transaction, so the change is <code>!notx</code> and the script runs its own transaction. Before <code>COMMIT</code> it checks every foreign key and stops with <code>CHECK constraint failed: foreign_key_violation</code> if any row no longer matches.</p>
 {sql('''PRAGMA foreign_keys = OFF;
 
@@ -494,20 +494,20 @@ BEGIN;
 
 DROP VIEW v_customer;
 
-CREATE TABLE bsm_new_customer (id INTEGER PRIMARY KEY, full_name TEXT NOT NULL, email TEXT COLLATE NOCASE);
+CREATE TABLE trek_new_customer (id INTEGER PRIMARY KEY, full_name TEXT NOT NULL, email TEXT COLLATE NOCASE);
 
-INSERT INTO bsm_new_customer (id, full_name, email)
+INSERT INTO trek_new_customer (id, full_name, email)
 SELECT id, name, email FROM customer;
 
 DROP TABLE customer;
 
-ALTER TABLE bsm_new_customer RENAME TO customer;
+ALTER TABLE trek_new_customer RENAME TO customer;
 
 CREATE VIEW v_customer AS SELECT id, full_name AS name FROM customer;
 
-CREATE TEMP TABLE bsm_foreign_key_check (violation TEXT CONSTRAINT foreign_key_violation CHECK (violation IS NULL));
-INSERT INTO bsm_foreign_key_check SELECT "table" FROM pragma_foreign_key_check;
-DROP TABLE temp.bsm_foreign_key_check;
+CREATE TEMP TABLE trek_foreign_key_check (violation TEXT CONSTRAINT foreign_key_violation CHECK (violation IS NULL));
+INSERT INTO trek_foreign_key_check SELECT "table" FROM pragma_foreign_key_check;
+DROP TABLE temp.trek_foreign_key_check;
 
 COMMIT;
 
@@ -526,14 +526,14 @@ PRAGMA foreign_keys = ON;''', "changes/customer-full-name/deploy.sql")}
 </ul>
 
 <h2>Repeatables and other tools' tables</h2>
-<p>Views, procedures, functions and triggers (on PostgreSQL: views, materialized views, functions and procedures; on SQLite: views and triggers) that a repeatable script defines are maintained in that script, so they are never put in a change: the output tells you to edit the repeatable. The bsm journal, and other tools' journals (<code>flyway_schema_history</code>, <code>SchemaVersions</code>, grate's and RoundhousE's schemas, <code>__EFMigrationsHistory</code>) are left out; add your own with <code>--exclude audit.*</code>.</p>
+<p>Views, procedures, functions and triggers (on PostgreSQL: views, materialized views, functions and procedures; on SQLite: views and triggers) that a repeatable script defines are maintained in that script, so they are never put in a change: the output tells you to edit the repeatable. The trek journal, and other tools' journals (<code>flyway_schema_history</code>, <code>SchemaVersions</code>, grate's and RoundhousE's schemas, <code>__EFMigrationsHistory</code>) are left out; add your own with <code>--exclude audit.*</code>.</p>
 
 <h2>The shadow database</h2>
 <p>It is created next to your database with <code>CREATE DATABASE</code> and dropped afterwards, so the login needs that right. On Azure SQL Database a new database takes a minute and is billed while it exists: use <code>--shadow-env</code> to build it on another server, such as a local SQL Server or PostgreSQL container. On PostgreSQL the shadow is created through the server's <code>postgres</code> database, so the role needs <code>CREATEDB</code>. On SQLite it is a file in the temp folder. The shadow uses your environment's variables and Always Encrypted keys, so it matches your database except for your edits.</p>
 
 <h2>Comparing any two databases</h2>
-{sh('''bsm diff-schema -e test --against prod                    # what differs
-bsm diff-schema -e test --against prod --script sync.sql   # SQL that turns test into prod''')}
+{sh('''trek diff-schema -e test --against prod                    # what differs
+trek diff-schema -e test --against prod --script sync.sql   # SQL that turns test into prod''')}
 <p>The same scripter writes a one-off script between two live databases, for example to bring a drifted database back in line. It is not a change: review it, and run it yourself or turn it into one.</p>
 """)
 
@@ -541,7 +541,7 @@ bsm diff-schema -e test --against prod --script sync.sql   # SQL that turns test
 def teamwork():
     return doc("docs/teamwork/", "Teams and ordering", "Concurrent development without version collisions, and deploys that cannot interleave.", f"""
 <h2>Two developers, same day</h2>
-<p>Alice adds <code>add-customer-email</code> and Bob adds <code>add-order-index</code> on separate branches. Each appends a line to <code>bsm.plan</code>. With version numbers they would both have picked <code>V12</code>; with names there is nothing to collide on, and git's union merge keeps both lines. <code>bsm plan check</code> in CI verifies the merged plan.</p>
+<p>Alice adds <code>add-customer-email</code> and Bob adds <code>add-order-index</code> on separate branches. Each appends a line to <code>trek.plan</code>. With version numbers they would both have picked <code>V12</code>; with names there is nothing to collide on, and git's union merge keeps both lines. <code>trek plan check</code> in CI verifies the merged plan.</p>
 
 <h2>Shared databases and out-of-order changes</h2>
 <p>Bob's change reached the shared dev database first. After the merge, Alice's line sits above Bob's in the plan, but Bob's change is already deployed. What happens next is the environment's <code>ordering</code>:</p>
@@ -550,7 +550,7 @@ def teamwork():
 <tr><td><code>dependency</code> (default)</td><td>Deploy Alice's change now (its dependencies are satisfied), flagged out of order. The database is up to date but not certified.</td><td>Shared dev and test databases</td></tr>
 <tr><td><code>strict</code></td><td>Refuse. The database must receive changes in exact plan order.</td><td>Production</td></tr>
 </table>
-<p>Production databases only ever see the merged plan, in order, so they certify. Bring a dev database back to plan order with <code>bsm rebase --to &lt;last common change&gt;</code>. Override per run with <code>--ordering strict|dependency</code>.</p>
+<p>Production databases only ever see the merged plan, in order, so they certify. Bring a dev database back to plan order with <code>trek rebase --to &lt;last common change&gt;</code>. Override per run with <code>--ordering strict|dependency</code>.</p>
 
 <h2>Concurrent deploys</h2>
 <p>Deploy, revert, baseline and provisioning hold an exclusive lock on the database for the whole run (<code>sp_getapplock</code>, session-owned, works on Azure SQL). A second pipeline waits up to <code>lockTimeoutSeconds</code> (default 300) and then fails with a message naming the lock. Read-only commands (<code>status</code>, <code>verify</code>, <code>log</code>) do not take the lock.</p>
@@ -558,20 +558,20 @@ def teamwork():
 <h2>Recommended workflow</h2>
 <ol>
   <li>Each developer works against their own database (<code>local</code> environment).</li>
-  <li><code>bsm plan check</code> runs on every pull request.</li>
+  <li><code>trek plan check</code> runs on every pull request.</li>
   <li>Merges deploy to a shared test environment (<code>ordering: dependency</code>).</li>
-  <li>Releases deploy to production (<code>ordering: strict</code>, <code>protected: true</code>, <code>allowRevert: false</code>) and run <code>bsm verify</code>.</li>
+  <li>Releases deploy to production (<code>ordering: strict</code>, <code>protected: true</code>, <code>allowRevert: false</code>) and run <code>trek verify</code>.</li>
 </ol>
 """)
 
 
 def repeatables():
     return doc("docs/repeatables/", "Repeatables", "Views, procedures, functions and environment-only scripts that re-run when they change.", f"""
-<p>Objects that are defined rather than migrated, such as views, stored procedures, functions and triggers, belong in <code>repeatable/</code>. Write them with <code>CREATE OR ALTER</code>. After the changes in a deploy, bsm applies every repeatable whose hash differs from the one it last applied, each in its own transaction.</p>
+<p>Objects that are defined rather than migrated, such as views, stored procedures, functions and triggers, belong in <code>repeatable/</code>. Write them with <code>CREATE OR ALTER</code>. After the changes in a deploy, trek applies every repeatable whose hash differs from the one it last applied, each in its own transaction.</p>
 
 <h2>Order</h2>
 <p>Repeatables run in path order (ordinal), with declared dependencies first:</p>
-{sql('''-- bsm:requires views/vActiveCustomer.sql functions/fnFullName.sql
+{sql('''-- trek:requires views/vActiveCustomer.sql functions/fnFullName.sql
 CREATE OR ALTER PROCEDURE dbo.usp_FindCustomer ...''', "repeatable/procedures/usp_FindCustomer.sql")}
 <p>Names are paths relative to <code>repeatable/</code>, with forward slashes. Cycles and unknown names are reported by <code>plan check</code>.</p>
 
@@ -582,8 +582,8 @@ CREATE OR ALTER PROCEDURE dbo.usp_FindCustomer ...''', "repeatable/procedures/us
 <p>For each repeatable, the journal keeps the current and previous script and hash, and a <code>repeatable</code> event. Repeatables are not part of the plan certificate: they are re-applied by content, not by position.</p>
 
 <h2 id="revert">Reverting a repeatable</h2>
-{sh('''bsm revert --repeatable views/vCustomer.sql -e test
-bsm revert --repeatable views/a.sql --repeatable @test/seed.sql --dry-run''')}
+{sh('''trek revert --repeatable views/vCustomer.sql -e test
+trek revert --repeatable views/a.sql --repeatable @test/seed.sql --dry-run''')}
 <p>Runs the definition the repeatable had before its last apply (stored in the journal) and records it as current, with a <code>revert</code> event. Running it twice swaps back. Use it to back out a bad view or procedure quickly; the working copy still has the newer version, so the next deploy applies it again unless you fix it too. A repeatable applied only once has nothing to go back to: remove the object with a new change instead.</p>
 
 <h2>Changes or repeatables?</h2>
@@ -597,7 +597,7 @@ bsm revert --repeatable views/a.sql --repeatable @test/seed.sql --dry-run''')}
 
 def temporal_partitions():
     return doc("docs/temporal-partitions/", "Temporal tables and partitions", "System-versioned tables and partitioned tables in changes, reverts and fingerprints.", f"""
-<p>Both are ordinary schema, so they belong in {link("docs/changes/", "changes")}: deploy creates or alters them, revert undoes it, and both run in the change's transaction. Badger SQL Migrate adds three things: a fingerprint that understands them, a lint rule, and a setting for partitions that a job maintains.</p>
+<p>Both are ordinary schema, so they belong in {link("docs/changes/", "changes")}: deploy creates or alters them, revert undoes it, and both run in the change's transaction. Badger Trek adds three things: a fingerprint that understands them, a lint rule, and a setting for partitions that a job maintains.</p>
 
 <h2 id="temporal">System-versioned (temporal) tables</h2>
 {sql('''CREATE TABLE dbo.Price (
@@ -617,7 +617,7 @@ DROP TABLE dbo.Price, dbo.PriceHistory;''', "changes/create-price/revert.sql")}
 ALTER TABLE dbo.Price ALTER COLUMN Amount decimal(19, 4) NOT NULL;
 ALTER TABLE dbo.PriceHistory ALTER COLUMN Amount decimal(19, 4) NOT NULL;
 ALTER TABLE dbo.Price SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.PriceHistory, DATA_CONSISTENCY_CHECK = ON));''', "changes/price-amount-decimal/deploy.sql")}
-<p>Lint rule <code>BSM004</code> warns when a script switches versioning off for a table and neither switches it back on nor drops the table. The fingerprint records each table's period columns, versioning state, history table and retention, and the <code>GENERATED ALWAYS</code> and <code>HIDDEN</code> flags of period columns. A history table SQL Server named itself is recorded under the name of its table, so databases built from the same plan fingerprint the same. Reverting a change also reverts the schema; the rows in the history table go with it, so take a copy first if you need them.</p>
+<p>Lint rule <code>TREK004</code> warns when a script switches versioning off for a table and neither switches it back on nor drops the table. The fingerprint records each table's period columns, versioning state, history table and retention, and the <code>GENERATED ALWAYS</code> and <code>HIDDEN</code> flags of period columns. A history table SQL Server named itself is recorded under the name of its table, so databases built from the same plan fingerprint the same. Reverting a change also reverts the schema; the rows in the history table go with it, so take a copy first if you need them.</p>
 
 <h2 id="partitions">Partitioned tables</h2>
 {sql('''CREATE PARTITION FUNCTION pfOrderDate (date) AS RANGE RIGHT FOR VALUES ('2026-01-01', '2026-04-01', '2026-07-01', '2026-10-01');
@@ -636,24 +636,24 @@ ALTER PARTITION FUNCTION pfOrderDate() SPLIT RANGE ('2027-01-01');''', "changes/
 <p>Splitting or merging a partition that holds rows moves data and locks the table; split ahead of the data, while the partition is still empty. The fingerprint records each function's type, direction and boundary values, each scheme's filegroups, and the scheme and partitioning column of every partitioned table and index.</p>
 
 <h2 id="sliding-window">Partitions maintained by a job</h2>
-<p>With a sliding window, a scheduled job splits new partitions and switches out old ones outside bsm. Every split would show as schema drift. Tell the environment to leave boundaries out of the fingerprint:</p>
+<p>With a sliding window, a scheduled job splits new partitions and switches out old ones outside trek. Every split would show as schema drift. Tell the environment to leave boundaries out of the fingerprint:</p>
 {yaml('''environments:
   prod:
     schemaFingerprint:
-      partitionBoundaries: ignore   # include (default) | ignore''', "bsm.yaml")}
+      partitionBoundaries: ignore   # include (default) | ignore''', "trek.yaml")}
 <p>The fingerprint then records each function's type and direction, and the set of filegroups each scheme uses, so moving a table to another scheme or function is still drift; adding a boundary is not. The setting applies to snapshots taken from then on: deploy once after changing it.</p>
 
 <h2>Upgrading from 0.1</h2>
-<p>Version 0.2 records these details for the first time, so a database with temporal or partitioned tables deployed by 0.1 has a fingerprint in the old format. <code>bsm verify</code> warns instead of reporting drift until the next deploy records a new fingerprint. Databases without them fingerprint exactly as before.</p>
+<p>Version 0.2 records these details for the first time, so a database with temporal or partitioned tables deployed by 0.1 has a fingerprint in the old format. <code>trek verify</code> warns instead of reporting drift until the next deploy records a new fingerprint. Databases without them fingerprint exactly as before.</p>
 """)
 
 
 # ---------------------------------------------------------------- configure
 
 def environments():
-    return doc("docs/environments/", "Environments", "bsm.yaml: dev, test, prod and everything that differs between them.", f"""
+    return doc("docs/environments/", "Environments", "trek.yaml: dev, test, prod and everything that differs between them.", f"""
 {yaml('''provider: sqlserver
-defaultEnvironment: dev                # also: BSM_ENV, or --env / -e
+defaultEnvironment: dev                # also: TREK_ENV, or --env / -e
 
 variables: {}                         # see Variables
 
@@ -674,10 +674,10 @@ environments:
     host: myapp-prod.database.windows.net
     protected: true
     allowRevert: false
-    ordering: strict''', "bsm.yaml")}
+    ordering: strict''', "trek.yaml")}
 
 <h2>Inheritance</h2>
-<p><code>extends</code> names another environment (or template) to start from. Maps merge key by key, so <code>entra:</code> in a child adds to the template's <code>entra:</code>; values and lists are replaced. Chains are allowed, cycles are errors. <code>bsm env show -e prod</code> prints the merged result with secrets masked; <code>bsm env list</code> shows every environment.</p>
+<p><code>extends</code> names another environment (or template) to start from. Maps merge key by key, so <code>entra:</code> in a child adds to the template's <code>entra:</code>; values and lists are replaced. Chains are allowed, cycles are errors. <code>trek env show -e prod</code> prints the merged result with secrets masked; <code>trek env list</code> shows every environment.</p>
 
 <h2>Settings</h2>
 <table>
@@ -690,7 +690,7 @@ environments:
 <tr><td><code>protected</code></td><td><code>false</code></td><td>Deploy, revert, rebase, baseline and destructive provisioning require typing the environment name, or <code>--yes</code></td></tr>
 <tr><td><code>allowRevert</code></td><td><code>true</code></td><td><code>false</code> refuses revert and rebase</td></tr>
 <tr><td><code>ordering</code></td><td><code>dependency</code></td><td><code>dependency</code> or <code>strict</code> ({link("docs/teamwork/", "Teams")})</td></tr>
-<tr><td><code>stateSchema</code></td><td><code>bsm</code></td><td>Schema for the {link("docs/journal/", "journal tables")}</td></tr>
+<tr><td><code>stateSchema</code></td><td><code>trek</code></td><td>Schema for the {link("docs/journal/", "journal tables")}</td></tr>
 <tr><td><code>commandTimeoutSeconds</code></td><td>driver default (30)</td><td>Per-batch timeout</td></tr>
 <tr><td><code>lockTimeoutSeconds</code></td><td><code>300</code></td><td>Wait for another deployer</td></tr>
 <tr><td><code>variables</code></td><td></td><td>Environment-specific {link("docs/variables/", "variables")}</td></tr>
@@ -700,10 +700,10 @@ environments:
 <p>Unknown keys inside known blocks (for example a misspelled <code>entra.tennantId</code>) are errors, so typos never silently fall back to defaults.</p>
 
 <h2>Secrets</h2>
-<p>Any value can reference <code>${{env:NAME}}</code> (an environment variable) or <code>${{file:path}}</code> (a file, such as a mounted secret). They are resolved only for the environment being used, so a missing production secret never breaks a dev run. Never commit passwords; <code>bsm.yaml</code> belongs in source control.</p>
+<p>Any value can reference <code>${{env:NAME}}</code> (an environment variable) or <code>${{file:path}}</code> (a file, such as a mounted secret). They are resolved only for the environment being used, so a missing production secret never breaks a dev run. Never commit passwords; <code>trek.yaml</code> belongs in source control.</p>
 
 <h2>Database ownership</h2>
-<p>The first deploy records the environment name in the database. If you later run as a different environment against that database (for example prod settings pointing at a test server after a copy-paste mistake), bsm refuses:</p>
+<p>The first deploy records the environment name in the database. If you later run as a different environment against that database (for example prod settings pointing at a test server after a copy-paste mistake), trek refuses:</p>
 {code('''error: This database belongs to environment 'test', but you are running as 'prod'. Check --env and the
 connection settings. If the database was intentionally copied (e.g. prod restored into test), pass --claim-environment.''')}
 <p><code>--claim-environment</code> re-records the database under the new name. Every journal event also records the environment that wrote it.</p>
@@ -747,8 +747,8 @@ def authentication():
     authentication: entraInteractive
     entra:
       tenantId: 7f3c1e2a-0000-0000-0000-000000000000
-      loginHint: you@contoso.com''', "bsm.yaml")}
-<p>The first run opens a browser for sign-in, MFA included. The token is kept in the operating system's encrypted store (Keychain on macOS, DPAPI on Windows, libsecret on Linux) and a small sign-in record (account and tenant ids, no tokens) is saved in <code>~/.bsm/auth/</code>, so later runs are silent until the refresh token expires. <code>bsm auth clear</code> forgets saved sign-ins. Set <code>entra.tokenCache: memory</code> to sign in on every run. Without a browser (SSH sessions), use <code>entraDeviceCode</code>.</p>
+      loginHint: you@contoso.com''', "trek.yaml")}
+<p>The first run opens a browser for sign-in, MFA included. The token is kept in the operating system's encrypted store (Keychain on macOS, DPAPI on Windows, libsecret on Linux) and a small sign-in record (account and tenant ids, no tokens) is saved in <code>~/.trek/auth/</code>, so later runs are silent until the refresh token expires. <code>trek auth clear</code> forgets saved sign-ins. Set <code>entra.tokenCache: memory</code> to sign in on every run. Without a browser (SSH sessions), use <code>entraDeviceCode</code>.</p>
 
 <h2>More <code>entra</code> settings</h2>
 <table>
@@ -784,10 +784,10 @@ def authentication():
     authentication: integrated''')}
 
 <h2>Raw connection strings</h2>
-<p>A <code>connectionString</code> with <code>Authentication=Active Directory Interactive</code> (or any other SqlClient Entra mode) also works; bsm registers SqlClient's own Entra provider. Setting <code>authentication:</code> takes precedence and removes conflicting keywords from the string.</p>
+<p>A <code>connectionString</code> with <code>Authentication=Active Directory Interactive</code> (or any other SqlClient Entra mode) also works; trek registers SqlClient's own Entra provider. Setting <code>authentication:</code> takes precedence and removes conflicting keywords from the string.</p>
 
 <h2>Checking sign-in</h2>
-<p><code>bsm doctor</code> gets a token before connecting, so you can tell an identity problem from a network or permission problem:</p>
+<p><code>trek doctor</code> gets a token before connecting, so you can tell an identity problem from a network or permission problem:</p>
 {code('''provider       SQL Server / Azure SQL
 environment    prod (protected)
 auth           EntraInteractive
@@ -799,7 +799,7 @@ encrypted      TRUE
 recorded env   prod
 journal        14 change(s) deployed
 connection ok.''')}
-<p>The Entra identity needs a database user (<code>CREATE USER [you@contoso.com] FROM EXTERNAL PROVIDER</code>) with rights to run your changes and to create the <code>bsm</code> schema on first deploy.</p>
+<p>The Entra identity needs a database user (<code>CREATE USER [you@contoso.com] FROM EXTERNAL PROVIDER</code>) with rights to run your changes and to create the <code>trek</code> schema on first deploy.</p>
 """)
 
 
@@ -818,10 +818,10 @@ def connections():
   host: (localdb)\\MSSQLLocalDB
   database: MyApp
   authentication: integrated''')}
-<p>bsm works with SQL Server 2016 and later, including LocalDB.</p>
+<p>trek works with SQL Server 2016 and later, including LocalDB.</p>
 
 <h2>Any SqlClient setting</h2>
-<p><code>connectionProperties</code> accepts every keyword SqlClient understands and applies them last, over everything else. Invalid keywords or values are reported by <code>bsm doctor</code> and before connecting.</p>
+<p><code>connectionProperties</code> accepts every keyword SqlClient understands and applies them last, over everything else. Invalid keywords or values are reported by <code>trek doctor</code> and before connecting.</p>
 {yaml('''connectionProperties:
   Connect Retry Count: 3
   Connect Retry Interval: 10
@@ -837,7 +837,7 @@ def connections():
 <p>Common Azure SQL choices: <code>Connect Retry Count</code> and <code>Connect Retry Interval</code> for transient faults, <code>Multi Subnet Failover</code> for failover groups, <code>tls.mode: strict</code> where supported.</p>
 
 <h2>SSH tunnels</h2>
-<p>Reach a database behind a bastion host. Badger SQL Migrate opens a local port forward and connects through it; TLS is still validated against the real server name.</p>
+<p>Reach a database behind a bastion host. Badger Trek opens a local port forward and connects through it; TLS is still validated against the real server name.</p>
 {yaml('''ssh:
   host: bastion.example.com
   port: 22
@@ -859,15 +859,15 @@ def variables():
         ("{env}", "{env.name}", "Environment name"), ("{env.description}", "", "Environment description"),
         ("{db}", "{db.name}", "Database name"), ("{db.host}", "", "Server host"), ("{db.port}", "", "Server port"),
         ("{change}", "{change.name}", "Current change or repeatable"), ("{change.kind}", "", "deploy, revert, verify or repeatable"),
-        ("{change.hash}", "", "The change's script hash"), ("{bsm.provider}", "", "Provider id (sqlserver)"),
-        ("{bsm.version}", "", "Tool version"), ("{bsm.schema}", "", "Journal schema"), ("{plan.head}", "", "Plan head chain id"),
-        ("{deploy.user}", "", "OS user running bsm *"), ("{deploy.host}", "", "Machine running bsm *"),
+        ("{change.hash}", "", "The change's script hash"), ("{trek.provider}", "", "Provider id (sqlserver)"),
+        ("{trek.version}", "", "Tool version"), ("{trek.schema}", "", "Journal schema"), ("{plan.head}", "", "Plan head chain id"),
+        ("{deploy.user}", "", "OS user running trek *"), ("{deploy.host}", "", "Machine running trek *"),
         ("{deploy.utc}", "", "Run start, ISO 8601 UTC *"), ("{deploy.date}", "", "Run start date, UTC *"), ("{deploy.id}", "", "Unique id of the run *"),
     ]
     table = "<table><tr><th>Variable</th><th>Also</th><th>Value</th></tr>" + "".join(
         f"<tr><td><code>{a}</code></td><td>{f'<code>{b}</code>' if b else ''}</td><td>{c}</td></tr>" for a, b, c in builtins) + "</table>"
     return doc("docs/variables/", "Variables", "Scripts are preprocessed: {env}, {db}, your own variables, and $(sqlcmd) syntax.", f"""
-<p>Before a script reaches the database, bsm replaces variables in it:</p>
+<p>Before a script reaches the database, trek replaces variables in it:</p>
 {sql('''SELECT * FROM [calc_{env}].[table1];       -- test:  SELECT * FROM [calc_test].[table1];
 SELECT * FROM [calc_$(env)].[table1];      -- the same, sqlcmd syntax''')}
 
@@ -878,13 +878,13 @@ SELECT * FROM [calc_$(env)].[table1];      -- the same, sqlcmd syntax''')}
 <tr><td><code>{{var.name}}</code></td><td>A user variable, explicitly</td></tr>
 <tr><td><code>$(name)</code></td><td>The same variables, sqlcmd style</td></tr>
 <tr><td><code>{{{{name}}}}</code></td><td>A literal <code>{{name}}</code></td></tr>
-<tr><td><code>-- bsm:preprocess off</code> as the first line</td><td>The script untouched</td></tr>
+<tr><td><code>-- trek:preprocess off</code> as the first line</td><td>The script untouched</td></tr>
 </table>
 <p>Only an identifier directly inside the braces is a variable. ODBC escapes (<code>{{fn NOW()}}</code>, <code>{{d '2026-01-01'}}</code>), JSON (<code>'{{"a":1}}'</code>) and format strings (<code>'{{0}}'</code>) are left alone. Names are case-insensitive.</p>
 
 <h2>Built-in variables</h2>
 {table}
-<p>* Per-run values: a script that uses them renders differently on every run, so it is not tracked by rendered hash. The names <code>env</code>, <code>db</code>, <code>change</code>, <code>bsm</code>, <code>plan</code> and <code>deploy</code> (and anything under them) are reserved.</p>
+<p>* Per-run values: a script that uses them renders differently on every run, so it is not tracked by rendered hash. The names <code>env</code>, <code>db</code>, <code>change</code>, <code>trek</code>, <code>plan</code> and <code>deploy</code> (and anything under them) are reserved.</p>
 
 <h2>Your variables</h2>
 {yaml('''variables:                       # every environment
@@ -898,7 +898,7 @@ environments:
   prod:
     variables:                   # this environment only; wins over the shared ones
       AppRole: app_reader_prod
-      Region: ${env:DEPLOY_REGION} # secrets and env vars work here too''', "bsm.yaml")}
+      Region: ${env:DEPLOY_REGION} # secrets and env vars work here too''', "trek.yaml")}
 <p>Precedence, lowest to highest: shared <code>variables</code>, the environment's <code>variables</code> (including what it inherits through <code>extends</code>), then <code>--var name=value</code> on the command line. Circular references are errors.</p>
 <p class="callout"><strong>YAML tip:</strong> in an inline map (<code>{{ a: b }}</code>), braces are YAML syntax, so quote values that contain variables: <code>{{ calc: "calc_{{env}}" }}</code>. In block style (one key per line) no quotes are needed.</p>
 
@@ -906,14 +906,14 @@ environments:
 <p>An unknown <code>{{name}}</code> or <code>$(name)</code> is an error that names the script and line, so a typo never reaches the database. If your scripts contain many literal braces, set <code>preprocessor.unknown: keep</code> to leave unknown <code>{{name}}</code> tokens as they are (unknown built-ins such as <code>{{env.nmae}}</code> are still errors).</p>
 {yaml('''preprocessor:
   unknown: error        # error (default) | keep
-  sqlcmdSyntax: true    # expand $(name) too (default)''', "bsm.yaml")}
-<p><code>bsm plan check</code> also fails when a script uses a variable that some environment does not define, and names those environments.</p>
+  sqlcmdSyntax: true    # expand $(name) too (default)''', "trek.yaml")}
+<p><code>trek plan check</code> also fails when a script uses a variable that some environment does not define, and names those environments.</p>
 
 <h2>Seeing the result</h2>
-{sh('''bsm vars -e prod                        # every variable: value, source, description
-bsm render create-calc-schema -e prod   # the exact SQL prod will receive
-bsm render create-calc-schema -e prod --kind revert
-bsm deploy -e prod --script review.sql  # all pending changes, rendered, for review''')}
+{sh('''trek vars -e prod                        # every variable: value, source, description
+trek render create-calc-schema -e prod   # the exact SQL prod will receive
+trek render create-calc-schema -e prod --kind revert
+trek deploy -e prod --script review.sql  # all pending changes, rendered, for review''')}
 
 <h2>Variables and certification</h2>
 <p>Raw scripts are hashed and certified, so the same change certifies identically in every environment. The rendered SQL is hashed separately per environment (see {link("docs/certification/", "Hash certification")}). If a variable's value changes after a change was deployed, <code>verify</code> reports it and <code>revert</code> refuses unless you pass <code>--allow-variable-drift</code>.</p>
@@ -921,12 +921,12 @@ bsm deploy -e prod --script review.sql  # all pending changes, rendered, for rev
 
 
 def always_encrypted():
-    return doc("docs/always-encrypted/", "Always Encrypted", "Column master keys and column encryption keys per environment, provisioned and rotated by bsm.", f"""
-<p>Always Encrypted keys are a classic per-environment difference: production's column master key lives in production's Key Vault, test's somewhere else. Change scripts should not contain key paths or encrypted key values. Badger SQL Migrate splits it cleanly:</p>
+    return doc("docs/always-encrypted/", "Always Encrypted", "Column master keys and column encryption keys per environment, provisioned and rotated by trek.", f"""
+<p>Always Encrypted keys are a classic per-environment difference: production's column master key lives in production's Key Vault, test's somewhere else. Change scripts should not contain key paths or encrypted key values. Badger Trek splits it cleanly:</p>
 <ul>
   <li>Scripts reference a <strong>column encryption key name</strong> (the same in every environment).</li>
-  <li>Each environment maps that name to <strong>its own column master key</strong> in <code>bsm.yaml</code>.</li>
-  <li>Before changes run, bsm <strong>creates</strong> missing keys and <strong>rotates</strong> keys whose master key changed.</li>
+  <li>Each environment maps that name to <strong>its own column master key</strong> in <code>trek.yaml</code>.</li>
+  <li>Before changes run, trek <strong>creates</strong> missing keys and <strong>rotates</strong> keys whose master key changed.</li>
 </ul>
 
 {sql('''ALTER TABLE dbo.Customer ADD Ssn char(11) COLLATE Latin1_General_BIN2
@@ -956,7 +956,7 @@ def always_encrypted():
           keyPath: https://myapp-prod-kv.vault.azure.net/keys/cmk/9f8e7d6c
           enclaveComputations: true
       columnEncryptionKeys:
-        CEK_Customer: { columnMasterKey: CMK_Prod_2026 }''', "bsm.yaml")}
+        CEK_Customer: { columnMasterKey: CMK_Prod_2026 }''', "trek.yaml")}
 
 <h2>Settings</h2>
 <table>
@@ -983,17 +983,17 @@ def always_encrypted():
 <ol>
   <li>Create the new key in Key Vault and add it under <code>columnMasterKeys</code> with a new name.</li>
   <li>Point the column encryption key at it: <code>CEK_Customer: {{ columnMasterKey: CMK_Prod_2027 }}</code>.</li>
-  <li><code>bsm deploy</code> (or <code>bsm env provision</code>) adds a second value to the CEK: the same data key, decrypted with the old CMK and re-encrypted with the new one. Data does not change; both keys work.</li>
-  <li>When every application can reach the new key, run <code>bsm env provision --allow-destructive</code> to drop the value protected by the old CMK. This asks for confirmation.</li>
+  <li><code>trek deploy</code> (or <code>trek env provision</code>) adds a second value to the CEK: the same data key, decrypted with the old CMK and re-encrypted with the new one. Data does not change; both keys work.</li>
+  <li>When every application can reach the new key, run <code>trek env provision --allow-destructive</code> to drop the value protected by the old CMK. This asks for confirmation.</li>
 </ol>
-{sh('''bsm env status -e prod''')}
+{sh('''trek env status -e prod''')}
 {code('''  = column master key CMK_Prod_2026: AZURE_KEY_VAULT key path matches
   + column master key CMK_Prod_2027: create column master key in AZURE_KEY_VAULT
   + column encryption key CEK_Customer: add value protected by CMK_Prod_2027 (rotation from CMK_Prod_2026)
   - column encryption key CEK_Customer: drop value protected by old column master key CMK_Prod_2026 (rotation complete)''')}
 
 <h2>Conflicts</h2>
-<p>SQL Server cannot change a column master key's key path. If the database has <code>CMK_Prod_2026</code> pointing somewhere other than your configuration, bsm stops with a conflict instead of guessing. Define a new CMK name and rotate. Keys that exist in the database but not in your configuration are reported for information and never dropped.</p>
+<p>SQL Server cannot change a column master key's key path. If the database has <code>CMK_Prod_2026</code> pointing somewhere other than your configuration, trek stops with a conflict instead of guessing. Define a new CMK name and rotate. Keys that exist in the database but not in your configuration are reported for information and never dropped.</p>
 
 <h2>Fingerprints across environments</h2>
 <p>The schema fingerprint records which CEK name protects each encrypted column, never key paths or values, so environments with different keys still produce the same fingerprint for the same schema.</p>
@@ -1004,8 +1004,8 @@ def always_encrypted():
 
 def commands():
     cmds = [
-        ("init", "[--provider sqlserver|postgresql|sqlite] [--no-agents-file]", "Create bsm.yaml, bsm.plan, folders, .gitattributes and AGENTS.md (instructions for AI assistants)."),
-        ("add &lt;name&gt;", "[-r|--requires a b] [-n|--note text] [--notx] [--irreversible] [--author name]", "Scaffold changes/&lt;name&gt;/ and append it to the plan. The author recorded in the plan is --author, else BSM_AUTHOR, else git's user.name."),
+        ("init", "[--provider sqlserver|postgresql|sqlite] [--no-agents-file]", "Create trek.yaml, trek.plan, folders, .gitattributes and AGENTS.md (instructions for AI assistants)."),
+        ("add &lt;name&gt;", "[-r|--requires a b] [-n|--note text] [--notx] [--irreversible] [--author name]", "Scaffold changes/&lt;name&gt;/ and append it to the plan. The author recorded in the plan is --author, else TREK_AUTHOR, else git's user.name."),
         ("add &lt;name&gt; --from-diff", "[--shadow-env env] [--keep-shadow] [--exclude schema.name…] [--dry-run] [--no-record] [-r …] [-n …]", "Generate deploy.sql and revert.sql from schema edits made in the environment's database, compared with a shadow database built from the plan; records the change as applied there."),
         ("tag &lt;name&gt;", "", "Tag the last change in the plan (use as @name)."),
         ("plan check", "", "Validate plan, folders, lint and variable definitions. No database."),
@@ -1022,11 +1022,11 @@ def commands():
         ("verify", "", "Hashes versus working copy, rendered-SQL drift, verify scripts (rolled back), schema drift. Exit 1 on problems."),
         ("log", "[-n|--limit 50]", "Deploy, revert, fail, repeatable and resource events, newest first."),
         ("baseline", "--to x | --from flyway|dbup|grate|roundhouse|sqitch|sqlproj [--journal schema.table] [--skip-checksums] [-y]", "Record changes as applied without running them: up to x, or as far as the old tool's journal in the database says (with repeatables it already applied, or whose live definition matches). --from sqlproj: the database was published from the SQL project."),
-        ("import flyway &lt;folder&gt;", "[--config file] [--location dir…] [--provider sqlserver|postgresql|sqlite] [--dry-run]", "Convert a Flyway project into a new bsm project (written to -C). No database."),
-        ("import dbup &lt;folder&gt;", "[--file-names] [--run-always glob…] [--no-variables] [--var name=value…] [--dry-run]", "Convert DbUp scripts into a new bsm project (written to -C). No database."),
-        ("import grate &lt;folder&gt;", "[--folder key=name…] [--environment name…] [--ignore-directory-names] [--no-tokens] [--var name=value…] [--dry-run]", "Convert a grate or RoundhousE scripts folder into a new bsm project. No database."),
-        ("import sqitch &lt;folder&gt;", "[--engine name] [--provider …] [--dry-run]", "Convert a Sqitch project into a new bsm project. No database."),
-        ("import sqlproj &lt;file.sqlproj|folder&gt;", "[--dry-run]", "Convert an SSDT / SQL Database Project into a new SQL Server bsm project: one change or repeatable per object, in dependency order. No database."),
+        ("import flyway &lt;folder&gt;", "[--config file] [--location dir…] [--provider sqlserver|postgresql|sqlite] [--dry-run]", "Convert a Flyway project into a new trek project (written to -C). No database."),
+        ("import dbup &lt;folder&gt;", "[--file-names] [--run-always glob…] [--no-variables] [--var name=value…] [--dry-run]", "Convert DbUp scripts into a new trek project (written to -C). No database."),
+        ("import grate &lt;folder&gt;", "[--folder key=name…] [--environment name…] [--ignore-directory-names] [--no-tokens] [--var name=value…] [--dry-run]", "Convert a grate or RoundhousE scripts folder into a new trek project. No database."),
+        ("import sqitch &lt;folder&gt;", "[--engine name] [--provider …] [--dry-run]", "Convert a Sqitch project into a new trek project. No database."),
+        ("import sqlproj &lt;file.sqlproj|folder&gt;", "[--dry-run]", "Convert an SSDT / SQL Database Project into a new SQL Server trek project: one change or repeatable per object, in dependency order. No database."),
         ("convert schema --out &lt;folder&gt;", "[--from-provider p] [--to p] [--names lower|snake|keep] [--case-sensitive] [--exclude glob…] [--dry-run]", "Read a SQL Server, PostgreSQL or SQLite database's catalog and write a new project for another provider: tables, keys and indexes as changes; views, routines and triggers translated as repeatables; CONVERSION.md listing what to review."),
         ("convert data --target &lt;folder&gt;", "[--target-env env] [--from-provider p] [--tables glob…] [--truncate]", "Copy every table's rows into the deployed, converted project's database, then compare row counts."),
         ("vars", "", "Every variable for the environment: value, source, description."),
@@ -1041,18 +1041,18 @@ def commands():
         ("doctor", "", "Configuration, Entra token, connection, server facts, journal, resources."),
     ]
     table = "<table><tr><th>Command</th><th>Options</th><th>Does</th></tr>" + "".join(
-        f"<tr><td><code>bsm {c}</code></td><td>{f'<code>{o}</code>' if o else ''}</td><td>{d}</td></tr>" for c, o, d in cmds) + "</table>"
-    return doc("docs/commands/", "Command reference", f"Every bsm command and option (version {VERSION}).", f"""
+        f"<tr><td><code>trek {c}</code></td><td>{f'<code>{o}</code>' if o else ''}</td><td>{d}</td></tr>" for c, o, d in cmds) + "</table>"
+    return doc("docs/commands/", "Command reference", f"Every trek command and option (version {VERSION}).", f"""
 {table}
 
 <h2>Global options</h2>
 <table>
 <tr><th>Option</th><th>Meaning</th></tr>
 <tr><td><code>-C, --project &lt;dir&gt;</code></td><td>Project folder (default: current folder)</td></tr>
-<tr><td><code>-e, --env &lt;name&gt;</code></td><td>Environment (default: <code>BSM_ENV</code>, then <code>defaultEnvironment</code>, then the only one)</td></tr>
-<tr><td><code>--var name=value</code></td><td>Script variable; repeatable; overrides bsm.yaml</td></tr>
+<tr><td><code>-e, --env &lt;name&gt;</code></td><td>Environment (default: <code>TREK_ENV</code>, then <code>defaultEnvironment</code>, then the only one)</td></tr>
+<tr><td><code>--var name=value</code></td><td>Script variable; repeatable; overrides trek.yaml</td></tr>
 <tr><td><code>--connection-string "..."</code></td><td>Connect exactly here for this run</td></tr>
-<tr><td><code>--bundle &lt;file&gt;</code></td><td>Take the plan and scripts from a verified bundle instead of the project folder (and <code>bsm.yaml</code> too, when bundled)</td></tr>
+<tr><td><code>--bundle &lt;file&gt;</code></td><td>Take the plan and scripts from a verified bundle instead of the project folder (and <code>trek.yaml</code> too, when bundled)</td></tr>
 <tr><td><code>--claim-environment</code></td><td>Accept a database recorded under another environment and re-record it</td></tr>
 <tr><td><code>--json</code></td><td>Machine-readable output on stdout (warnings go to stderr)</td></tr>
 <tr><td><code>-v, --verbose</code></td><td>Server messages (PRINT), fingerprints, tunnel details</td></tr>
@@ -1071,9 +1071,9 @@ def commands():
 <h2>Environment variables</h2>
 <table>
 <tr><th>Variable</th><th>Meaning</th></tr>
-<tr><td><code>BSM_ENV</code></td><td>Default environment</td></tr>
-<tr><td><code>BSM_AUTHOR</code></td><td>Author written by <code>bsm add</code> (default: OS user)</td></tr>
-<tr><td><code>BSM_HOME</code></td><td>Where saved sign-ins live (default <code>~/.bsm</code>)</td></tr>
+<tr><td><code>TREK_ENV</code></td><td>Default environment</td></tr>
+<tr><td><code>TREK_AUTHOR</code></td><td>Author written by <code>trek add</code> (default: OS user)</td></tr>
+<tr><td><code>TREK_HOME</code></td><td>Where saved sign-ins live (default <code>~/.trek</code>)</td></tr>
 <tr><td><code>NO_COLOR</code></td><td>Disable colors</td></tr>
 </table>
 
@@ -1081,27 +1081,27 @@ def commands():
 <p>Revert, rebase, repair, baseline and destructive provisioning ask for confirmation. In a protected environment, so does deploy, and you must type the environment name. Non-interactive runs (redirected input, <code>--json</code>) fail instead of hanging unless you pass <code>--yes</code>.</p>
 
 <h2>JSON output</h2>
-{sh('''bsm status -e prod --json | jq '.certified, .databaseHead'
-bsm log --json -n 20''')}
+{sh('''trek status -e prod --json | jq '.certified, .databaseHead'
+trek log --json -n 20''')}
 """)
 
 
 def ci_cd():
     return doc("docs/ci-cd/", "CI/CD", "Checks on every pull request, gated deploys, no stored secrets.", f"""
 <h2>On every pull request</h2>
-{sh('''bsm plan check -C db''')}
+{sh('''trek plan check -C db''')}
 <p>Needs no database. Fails on plan problems, missing folders or reverts, lint errors, and variables missing in any environment.</p>
 
 <h2>On merge and release</h2>
-{sh('''bsm deploy -C db -e test --json
-bsm deploy -C db -e prod --yes --json     # --yes: protected environment, no prompt in CI
-bsm verify -C db -e prod''')}
+{sh('''trek deploy -C db -e test --json
+trek deploy -C db -e prod --yes --json     # --yes: protected environment, no prompt in CI
+trek verify -C db -e prod''')}
 <p>Two pipelines cannot interleave: the second waits for the deploy lock. Use <code>--script review.sql</code> to attach the exact SQL to an approval step, then <code>deploy</code> after approval.</p>
 
 <h2>Build once, deploy the same bundle everywhere</h2>
-{sh('''bsm bundle create -C db -o db-bundle.zip          # build stage: publish as an artifact
-bsm --bundle db-bundle.zip deploy -e test --json   # each release stage
-bsm --bundle db-bundle.zip deploy -e prod --yes --json''')}
+{sh('''trek bundle create -C db -o db-bundle.zip          # build stage: publish as an artifact
+trek --bundle db-bundle.zip deploy -e test --json   # each release stage
+trek --bundle db-bundle.zip deploy -e prod --yes --json''')}
 <p>A {link("docs/bundles/", "bundle")} freezes the plan and scripts at build time, and every stage checks its hashes before running anything, so production gets exactly what test got.</p>
 
 <h2>Identity without secrets</h2>
@@ -1115,25 +1115,25 @@ bsm --bundle db-bundle.zip deploy -e prod --yes --json''')}
 <p>Complete GitHub Actions and Azure Pipelines files are on the {link("examples/#github-actions", "Examples")} page.</p>
 
 <h2>Pin the tool version</h2>
-{sh(f'''dotnet tool install --global Badger.SqlMigrate --version {VERSION}''')}
+{sh(f'''dotnet tool install --global Badger.Trek --version {VERSION}''')}
 
 <h2>Containers</h2>
 {code(f'''FROM mcr.microsoft.com/dotnet/runtime-deps:10.0
-ADD https://lonebadgerdownloads.blob.core.windows.net/badger-sql-migrate/v{VERSION}/badger-sql-migrate-{VERSION}-linux-x64.tar.gz /tmp/bsm.tgz
-RUN tar -xzf /tmp/bsm.tgz -C /usr/local/bin bsm && rm /tmp/bsm.tgz
+ADD https://lonebadgerdownloads.blob.core.windows.net/badger-trek/v{VERSION}/badger-trek-{VERSION}-linux-x64.tar.gz /tmp/trek.tgz
+RUN tar -xzf /tmp/trek.tgz -C /usr/local/bin trek && rm /tmp/trek.tgz
 COPY db /db
-ENTRYPOINT ["bsm", "-C", "/db"]''', "", "Dockerfile")}
+ENTRYPOINT ["trek", "-C", "/db"]''', "", "Dockerfile")}
 
 <h2 id="up-to-date">Is this database up to date?</h2>
-{sh('''bsm status -C db -e prod --exit-code      # exit code 3 when changes are pending or history differs
-bsm status -C db -e prod --json            # upToDate, certified, databaseHead, planHead, changes''')}
-<p>An application can make the same check at start-up without bsm. Record the plan head when you build (<code>planHead</code> in the output of <code>bsm plan check --json</code>, which needs no database), and compare it with the chain id of the last change the database has:</p>
+{sh('''trek status -C db -e prod --exit-code      # exit code 3 when changes are pending or history differs
+trek status -C db -e prod --json            # upToDate, certified, databaseHead, planHead, changes''')}
+<p>An application can make the same check at start-up without trek. Record the plan head when you build (<code>planHead</code> in the output of <code>trek plan check --json</code>, which needs no database), and compare it with the chain id of the last change the database has:</p>
 {sql('''-- SQL Server
-SELECT TOP (1) chain_id FROM bsm.changes ORDER BY sequence DESC;
+SELECT TOP (1) chain_id FROM trek.changes ORDER BY sequence DESC;
 -- PostgreSQL
-SELECT chain_id FROM bsm.changes ORDER BY sequence DESC LIMIT 1;
+SELECT chain_id FROM trek.changes ORDER BY sequence DESC LIMIT 1;
 -- SQLite
-SELECT chain_id FROM bsm_changes ORDER BY sequence DESC LIMIT 1;''')}
+SELECT chain_id FROM trek_changes ORDER BY sequence DESC LIMIT 1;''')}
 <p>Equal chain ids mean the database has exactly the build's changes, in order. <code>sequence</code> and <code>chain_id</code> are part of the documented {link("docs/journal/", "journal")}: a change to its layout raises <code>state_version</code> in the meta table.</p>
 
 <h2 id="test-databases">Fast test databases</h2>
@@ -1144,7 +1144,7 @@ SELECT chain_id FROM bsm_changes ORDER BY sequence DESC LIMIT 1;''')}
 <tr><td>PostgreSQL</td><td><code>CREATE DATABASE app_test_1 TEMPLATE app_template</code></td></tr>
 <tr><td>SQLite</td><td>Copy the file</td></tr>
 </table>
-<p>A copy keeps the journal, so <code>bsm status</code> and <code>bsm verify</code> work on it like on the template. Run <code>bsm deploy</code> against the template whenever the plan head changes.</p>
+<p>A copy keeps the journal, so <code>trek status</code> and <code>trek verify</code> work on it like on the template. Run <code>trek deploy</code> against the template whenever the plan head changes.</p>
 
 <h2>Applications that migrate themselves</h2>
 <p>The engine is also a .NET library; see {link("docs/extending/", "Library and providers")}.</p>
@@ -1153,18 +1153,18 @@ SELECT chain_id FROM bsm_changes ORDER BY sequence DESC LIMIT 1;''')}
 
 def bundles():
     return doc("docs/bundles/", "Bundles", "One hash-verified file with everything a deploy needs, built once and deployed everywhere.", f"""
-{sh('''bsm bundle create                    # writes bsm-bundle-<plan head>.zip
-bsm bundle create -o release-1.4.zip --no-config
-bsm bundle verify release-1.4.zip
-bsm --bundle release-1.4.zip status -e prod
-bsm --bundle release-1.4.zip deploy -e prod''')}
+{sh('''trek bundle create                    # writes trek-bundle-<plan head>.zip
+trek bundle create -o release-1.4.zip --no-config
+trek bundle verify release-1.4.zip
+trek --bundle release-1.4.zip status -e prod
+trek --bundle release-1.4.zip deploy -e prod''')}
 
 <h2>What is in a bundle</h2>
-<p>A zip file with <code>bsm.plan</code>, the folders of every planned change, <code>repeatable/</code>, the environment scripts under <code>environments/</code>, <code>bsm.yaml</code> (unless <code>--no-config</code>) and a manifest, <code>bsm-bundle.json</code>, listing each file's SHA-256, the provider, the plan head and a content hash that identifies the bundle.</p>
-<p>Text is stored normalized (no byte-order mark, LF line endings) and entries are sorted with fixed timestamps, so the same commit produces a byte-identical bundle on Windows, macOS and Linux. A project with problems (<code>bsm plan check</code> errors) cannot be bundled.</p>
+<p>A zip file with <code>trek.plan</code>, the folders of every planned change, <code>repeatable/</code>, the environment scripts under <code>environments/</code>, <code>trek.yaml</code> (unless <code>--no-config</code>) and a manifest, <code>trek-bundle.json</code>, listing each file's SHA-256, the provider, the plan head and a content hash that identifies the bundle.</p>
+<p>Text is stored normalized (no byte-order mark, LF line endings) and entries are sorted with fixed timestamps, so the same commit produces a byte-identical bundle on Windows, macOS and Linux. A project with problems (<code>trek plan check</code> errors) cannot be bundled.</p>
 
 <h2>Running from a bundle</h2>
-<p><code>--bundle &lt;file&gt;</code> works with every command that reads the project: <code>status</code>, <code>deploy</code>, <code>revert</code>, <code>rebase</code>, <code>verify</code>, <code>repair</code>, <code>diff-schema</code>, <code>render</code>, <code>vars</code>, <code>plan check</code> and <code>plan show</code>. Before anything runs, bsm checks:</p>
+<p><code>--bundle &lt;file&gt;</code> works with every command that reads the project: <code>status</code>, <code>deploy</code>, <code>revert</code>, <code>rebase</code>, <code>verify</code>, <code>repair</code>, <code>diff-schema</code>, <code>render</code>, <code>vars</code>, <code>plan check</code> and <code>plan show</code>. Before anything runs, trek checks:</p>
 <ul>
   <li>every file matches its hash, none is missing and none was added;</li>
   <li>the manifest's content hash matches its file list;</li>
@@ -1173,16 +1173,16 @@ bsm --bundle release-1.4.zip deploy -e prod''')}
 <p>Any mismatch stops the run and names the files. The bundle is extracted to a temporary folder that is deleted on exit. Commands that write project files (<code>add</code>, <code>tag</code>, <code>rework</code>, <code>init</code>) refuse <code>--bundle</code>.</p>
 
 <h2>Configuration</h2>
-<p>When the bundle includes <code>bsm.yaml</code>, it is used, so the environments are frozen with the scripts. Secrets are never stored: keep them as <code>${{env:NAME}}</code> or <code>${{file:path}}</code> references, which resolve on the machine that deploys (relative paths from <code>--project</code>). Bundle with <code>--no-config</code> to read <code>bsm.yaml</code> from <code>--project</code> at deploy time instead.</p>
+<p>When the bundle includes <code>trek.yaml</code>, it is used, so the environments are frozen with the scripts. Secrets are never stored: keep them as <code>${{env:NAME}}</code> or <code>${{file:path}}</code> references, which resolve on the machine that deploys (relative paths from <code>--project</code>). Bundle with <code>--no-config</code> to read <code>trek.yaml</code> from <code>--project</code> at deploy time instead.</p>
 """)
 
 
 def drift():
-    return doc("docs/drift/", "Schema drift", "Find out what changed outside bsm, or how two databases differ.", f"""
-<p>After every deploy and revert, bsm records a canonical dump of the schema and its fingerprint. <code>bsm verify</code> reports when the live fingerprint no longer matches. <code>bsm diff-schema</code> shows what changed.</p>
+    return doc("docs/drift/", "Schema drift", "Find out what changed outside trek, or how two databases differ.", f"""
+<p>After every deploy and revert, trek records a canonical dump of the schema and its fingerprint. <code>trek verify</code> reports when the live fingerprint no longer matches. <code>trek diff-schema</code> shows what changed.</p>
 
 <h2>What changed since the last deploy</h2>
-{sh('''bsm diff-schema -e prod''')}
+{sh('''trek diff-schema -e prod''')}
 {code('''-              prod as recorded 2026-11-03 20:15Z
 +              prod live
 + column dbo.Customer.Phone
@@ -1197,12 +1197,12 @@ def drift():
 <p><code>+</code> exists only live, <code>-</code> was removed, <code>~</code> changed (with a line diff for views, procedures, functions and triggers). Then undo the change, or capture it as a new change so every environment gets it.</p>
 
 <h2>Two environments</h2>
-{sh('''bsm diff-schema -e test --against prod
-bsm diff-schema -e test --against prod --exit-code --json   # exit 3 when they differ''')}
+{sh('''trek diff-schema -e test --against prod
+trek diff-schema -e test --against prod --exit-code --json   # exit 3 when they differ''')}
 <p>Compares two live databases: <code>-</code> is only in the first, <code>+</code> only in the second. Add <code>--script file.sql</code> to get T-SQL that turns the first into the second (see {link("docs/generating/", "Generating changes")}). Each environment uses its own connection, sign-in and fingerprint settings, so if only one of them sets <code>schemaFingerprint.partitionBoundaries: ignore</code>, partition functions and schemes show as changed.</p>
 
 <h2>What is compared</h2>
-<p>Schemas, tables and table types with their columns (type, nullability, identity, collation, computed and default definitions, encryption, period columns), indexes, foreign keys, check constraints, views, procedures, functions, triggers, user types, sequences, synonyms, system versioning (period, history table, retention) and partitioning (functions, boundaries, schemes, and the scheme and column of each partitioned table and index). The bsm journal schema is excluded. Names SQL Server generates for unnamed constraints differ on every server, so they are compared as <code>&lt;system&gt;</code>; whitespace around a view, procedure, function or trigger definition and how its CREATE was written (which depend on the tool that sent it) are ignored; columns are compared by position, not by SQL Server's internal column id; Always Encrypted columns compare by key name, never key material, so environments with different keys still match.</p>
+<p>Schemas, tables and table types with their columns (type, nullability, identity, collation, computed and default definitions, encryption, period columns), indexes, foreign keys, check constraints, views, procedures, functions, triggers, user types, sequences, synonyms, system versioning (period, history table, retention) and partitioning (functions, boundaries, schemes, and the scheme and column of each partitioned table and index). The trek journal schema is excluded. Names SQL Server generates for unnamed constraints differ on every server, so they are compared as <code>&lt;system&gt;</code>; whitespace around a view, procedure, function or trigger definition and how its CREATE was written (which depend on the tool that sent it) are ignored; columns are compared by position, not by SQL Server's internal column id; Always Encrypted columns compare by key name, never key material, so environments with different keys still match.</p>
 """)
 
 
@@ -1211,43 +1211,43 @@ def baseline():
 <p>When a database already has its schema, you do not want to run your initial changes against it. Baseline records them as applied without executing them.</p>
 <ol>
   <li>Script the current schema as your first change(s), e.g. with SSMS, SqlPackage or Badger SQL. Keep them as the real history for new environments.</li>
-  <li>Tag that point: <code>bsm tag baseline</code>.</li>
-  <li>For each existing database: <code>bsm baseline --to @baseline -e prod</code>.</li>
+  <li>Tag that point: <code>trek tag baseline</code>.</li>
+  <li>For each existing database: <code>trek baseline --to @baseline -e prod</code>.</li>
   <li>From here on, add changes normally. New, empty databases run the full plan, including the initial changes.</li>
 </ol>
-{sh('''bsm add initial-schema --irreversible     # paste the scripted schema into deploy.sql
-bsm tag baseline
-bsm baseline --to @baseline -e prod
-bsm status -e prod                          # initial-schema shown as (baseline)''')}
+{sh('''trek add initial-schema --irreversible     # paste the scripted schema into deploy.sql
+trek tag baseline
+trek baseline --to @baseline -e prod
+trek status -e prod                          # initial-schema shown as (baseline)''')}
 <p>Baseline only works on a database with no deployed changes, takes the deploy lock, records the environment, and writes a schema fingerprint so later drift is detected.</p>
 
 <h2>Coming from Flyway, DbUp or grate</h2>
-<p>For Flyway, DbUp, grate, RoundhousE, Sqitch and SQL projects (SSDT), <code>bsm import</code> does the conversion and <code>bsm baseline --from</code> reads each database's history for you; see {link("docs/importing/", "Moving from other tools")}. For anything else:</p>
+<p>For Flyway, DbUp, grate, RoundhousE, Sqitch and SQL projects (SSDT), <code>trek import</code> does the conversion and <code>trek baseline --from</code> reads each database's history for you; see {link("docs/importing/", "Moving from other tools")}. For anything else:</p>
 <ul>
   <li>Convert your versioned scripts into changes (one folder each) in their existing order, or collapse history into one <code>initial-schema</code> change.</li>
   <li>Write revert scripts for the changes you might want to undo; mark the rest <code>!irreversible</code>.</li>
   <li>Move repeatable/"anytime" scripts into <code>repeatable/</code>.</li>
   <li>Replace placeholders such as <code>${{name}}</code> (Flyway) with <code>{{name}}</code> or keep <code>$(name)</code>.</li>
-  <li>Baseline each existing database. The old tool's history table can stay; bsm uses its own <code>bsm</code> schema.</li>
+  <li>Baseline each existing database. The old tool's history table can stay; trek uses its own <code>trek</code> schema.</li>
 </ul>
 """)
 
 
 def importing():
     return doc("docs/importing/", "Moving from other tools", "Convert a Flyway, DbUp, grate (or RoundhousE), Sqitch or SQL Server Database Project (SSDT), then adopt the databases it already manages without running anything.", f"""
-{sh('''bsm import flyway ./flyway-project -C db --dry-run   # see what it would do
-bsm import flyway ./flyway-project -C db             # write a new bsm project in db/
-bsm plan check -C db
-bsm baseline --from flyway -C db -e prod             # once per existing database
-bsm deploy -C db -e prod                             # from now on''')}
-<p>Import writes a new project (it refuses a folder that already has one) and changes no database. Baseline reads the old tool's journal table in each database, records the changes it already ran, and runs nothing; the old journal table stays until you drop it. It also records the repeatables the database already has with the same definition (on SQL Server), so the first deploy re-applies only the ones that differ. New, empty databases just run <code>bsm deploy</code>.</p>
+{sh('''trek import flyway ./flyway-project -C db --dry-run   # see what it would do
+trek import flyway ./flyway-project -C db             # write a new trek project in db/
+trek plan check -C db
+trek baseline --from flyway -C db -e prod             # once per existing database
+trek deploy -C db -e prod                             # from now on''')}
+<p>Import writes a new project (it refuses a folder that already has one) and changes no database. Baseline reads the old tool's journal table in each database, records the changes it already ran, and runs nothing; the old journal table stays until you drop it. It also records the repeatables the database already has with the same definition (on SQL Server), so the first deploy re-applies only the ones that differ. New, empty databases just run <code>trek deploy</code>.</p>
 <table>
 <tr><th>From</th><th>Import</th><th>Adopt existing databases</th></tr>
-<tr><td>{link("docs/importing/#flyway", "Flyway")}</td><td><code>bsm import flyway</code></td><td><code>bsm baseline --from flyway</code> (checksums checked)</td></tr>
-<tr><td>{link("docs/importing/#dbup", "DbUp")}</td><td><code>bsm import dbup</code></td><td><code>bsm baseline --from dbup</code></td></tr>
-<tr><td>{link("docs/importing/#grate", "grate, RoundhousE")}</td><td><code>bsm import grate</code></td><td><code>bsm baseline --from grate</code> or <code>--from roundhouse</code> (hashes checked)</td></tr>
-<tr><td>{link("docs/importing/#sqitch", "Sqitch")}</td><td><code>bsm import sqitch</code></td><td>PostgreSQL: <code>bsm baseline --from sqitch</code> (script hashes checked). Other engines: <code>bsm baseline --to &lt;change&gt;</code></td></tr>
-<tr><td>{link("docs/importing/#sqlproj", "SQL projects (SSDT)")}</td><td><code>bsm import sqlproj</code></td><td><code>bsm baseline --from sqlproj</code> (tables and module definitions checked)</td></tr>
+<tr><td>{link("docs/importing/#flyway", "Flyway")}</td><td><code>trek import flyway</code></td><td><code>trek baseline --from flyway</code> (checksums checked)</td></tr>
+<tr><td>{link("docs/importing/#dbup", "DbUp")}</td><td><code>trek import dbup</code></td><td><code>trek baseline --from dbup</code></td></tr>
+<tr><td>{link("docs/importing/#grate", "grate, RoundhousE")}</td><td><code>trek import grate</code></td><td><code>trek baseline --from grate</code> or <code>--from roundhouse</code> (hashes checked)</td></tr>
+<tr><td>{link("docs/importing/#sqitch", "Sqitch")}</td><td><code>trek import sqitch</code></td><td>PostgreSQL: <code>trek baseline --from sqitch</code> (script hashes checked). Other engines: <code>trek baseline --to &lt;change&gt;</code></td></tr>
+<tr><td>{link("docs/importing/#sqlproj", "SQL projects (SSDT)")}</td><td><code>trek import sqlproj</code></td><td><code>trek baseline --from sqlproj</code> (tables and module definitions checked)</td></tr>
 </table>
 <p>Imports target SQL Server unless you pass <code>--provider postgresql</code> or <code>--provider sqlite</code>; Sqitch projects for PostgreSQL (<code>engine = pg</code>) or SQLite become projects for that provider on their own, and Flyway's <code>jdbc:postgresql</code> and <code>jdbc:sqlite</code> URLs become environments for it.</p>
 <p>Every import marks changes <code>!notx</code> when their scripts contain statements SQL Server refuses inside a transaction (the other tools often run without one), and lists everything it could not carry over.</p>
@@ -1255,12 +1255,12 @@ bsm deploy -C db -e prod                             # from now on''')}
 <h2 id="flyway">Flyway</h2>
 <p>Point the import at the folder you run Flyway from. It reads <code>flyway.toml</code> or <code>flyway.conf</code> (also in <code>conf/</code>, or pass <code>--config</code>), takes migrations from <code>flyway.locations</code> (or <code>sql/</code>, <code>src/main/resources/db/migration</code>, or <code>--location</code>), and honours custom prefixes, separators, suffixes and placeholder syntax.</p>
 <table>
-<tr><th>Flyway</th><th>bsm</th></tr>
+<tr><th>Flyway</th><th>trek</th></tr>
 <tr><td><code>V1.2__Add_email.sql</code></td><td>Change <code>add-email</code>, in version order (1.10 after 1.9). The plan note <code>flyway V1.2 checksum …</code> links it to Flyway's history. Repeated descriptions get the version appended.</td></tr>
 <tr><td><code>U1.2__Add_email.sql</code> (undo)</td><td>The change's <code>revert.sql</code>. Changes without one are <code>!irreversible</code>.</td></tr>
 <tr><td><code>R__Customer_view.sql</code></td><td><code>repeatable/Customer_view.sql</code> (same order: by description)</td></tr>
 <tr><td><code>V2__x.sql.conf</code> with <code>executeInTransaction=false</code></td><td><code>!notx</code></td></tr>
-<tr><td><code>${{name}}</code> placeholders</td><td><code>{{name}}</code> variables. Values from <code>[flyway.placeholders]</code> go under <code>variables:</code>; values from <code>[environments.x.flyway.placeholders]</code> go to that environment. Names bsm reserves (such as <code>env</code>) become <code>{{flyway.env}}</code>.</td></tr>
+<tr><td><code>${{name}}</code> placeholders</td><td><code>{{name}}</code> variables. Values from <code>[flyway.placeholders]</code> go under <code>variables:</code>; values from <code>[environments.x.flyway.placeholders]</code> go to that environment. Names trek reserves (such as <code>env</code>) become <code>{{flyway.env}}</code>.</td></tr>
 <tr><td><code>${{flyway:database}}</code>, <code>${{flyway:environment}}</code></td><td><code>{{db}}</code>, <code>{{env}}</code></td></tr>
 <tr><td><code>${{flyway:defaultSchema}}</code>, <code>${{flyway:user}}</code>, <code>${{flyway:table}}</code></td><td><code>{{flyway.defaultSchema}}</code>, <code>{{flyway.user}}</code>, <code>{{flyway.table}}</code>, with values from the configuration</td></tr>
 <tr><td><code>${{flyway:timestamp}}</code>, <code>${{flyway:filename}}</code></td><td><code>{{deploy.utc}}</code> (ISO 8601 UTC), <code>{{change}}</code> (the change name)</td></tr>
@@ -1269,114 +1269,114 @@ bsm deploy -C db -e prod                             # from now on''')}
 </table>
 
 <h3>Baseline from Flyway's history</h3>
-{sh('''bsm baseline --from flyway -e prod                         # reads dbo.flyway_schema_history
-bsm baseline --from flyway -e prod --journal app.flyway_history''')}
+{sh('''trek baseline --from flyway -e prod                         # reads dbo.flyway_schema_history
+trek baseline --from flyway -e prod --journal app.flyway_history''')}
 <p>Applied, undone and baselined versions are taken from the history in order. Baseline refuses, and says why, when:</p>
 <ul>
   <li>a version Flyway applied has no change in the plan;</li>
   <li>a change before the last applied one was never applied (Flyway's <code>outOfOrder</code>);</li>
-  <li>Flyway's recorded checksum differs from the imported script, meaning the database ran a different version of it. bsm computes checksums exactly as Flyway does; <code>--skip-checksums</code> turns the check off.</li>
+  <li>Flyway's recorded checksum differs from the imported script, meaning the database ran a different version of it. trek computes checksums exactly as Flyway does; <code>--skip-checksums</code> turns the check off.</li>
 </ul>
 <p>Repeatable scripts whose latest run in Flyway's history has the checksum of the same script rendered for this environment are recorded too, so the first deploy only runs the ones that differ.</p>
 
 <h2 id="dbup">DbUp</h2>
-{sh('''bsm import dbup ./src/App.Database/Scripts -C db --var schemaName=app --run-always "Always/**"
-bsm baseline --from dbup -C db -e prod                    # reads dbo.SchemaVersions''')}
+{sh('''trek import dbup ./src/App.Database/Scripts -C db --var schemaName=app --run-always "Always/**"
+trek baseline --from dbup -C db -e prod                    # reads dbo.SchemaVersions''')}
 <p>DbUp's scripts and options live in code, so tell the import what the code does:</p>
 <table>
-<tr><th>DbUp</th><th>bsm import</th></tr>
+<tr><th>DbUp</th><th>trek import</th></tr>
 <tr><td>Scripts embedded as resources (<code>WithScriptsEmbeddedInAssembly</code>)</td><td>Default: script names are the folder path joined with dots (<code>Orders.Script0003.sql</code>), and the order is DbUp's: ordinal by name. Baseline matches them to the full resource names in the journal.</td></tr>
 <tr><td><code>WithScriptsFromFileSystem</code></td><td><code>--file-names</code>: names are the file names</td></tr>
 <tr><td><code>ScriptType.RunAlways</code> scripts</td><td><code>--run-always "glob"</code>: imported as repeatables, which run when they change rather than on every deploy</td></tr>
-<tr><td><code>$name$</code> variables, <code>WithVariable("name", value)</code></td><td><code>{{name}}</code> variables; pass the values with <code>--var name=value</code>, or add them to <code>bsm.yaml</code> afterwards (<code>plan check</code> fails until every variable has a value). <code>--no-variables</code> if the code calls <code>WithVariablesDisabled()</code>.</td></tr>
+<tr><td><code>$name$</code> variables, <code>WithVariable("name", value)</code></td><td><code>{{name}}</code> variables; pass the values with <code>--var name=value</code>, or add them to <code>trek.yaml</code> afterwards (<code>plan check</code> fails until every variable has a value). <code>--no-variables</code> if the code calls <code>WithVariablesDisabled()</code>.</td></tr>
 </table>
-<p>DbUp has no down scripts, so every change is <code>!irreversible</code>. DbUp runs without a transaction unless configured to; bsm runs each change in one, and <code>bsm plan check</code> lists any statement that needs <code>!notx</code>.</p>
+<p>DbUp has no down scripts, so every change is <code>!irreversible</code>. DbUp runs without a transaction unless configured to; trek runs each change in one, and <code>trek plan check</code> lists any statement that needs <code>!notx</code>.</p>
 
 <h2 id="grate">grate and RoundhousE</h2>
-{sh('''bsm import grate ./db -C bsm-db --var AppRole=app_reader
-bsm baseline --from grate -C bsm-db -e TEST                 # reads grate.ScriptsRun
-bsm baseline --from roundhouse -C bsm-db -e TEST            # reads RoundhousE.ScriptsRun''')}
+{sh('''trek import grate ./db -C trek-db --var AppRole=app_reader
+trek baseline --from grate -C trek-db -e TEST                 # reads grate.ScriptsRun
+trek baseline --from roundhouse -C trek-db -e TEST            # reads RoundhousE.ScriptsRun''')}
 <p>Point the import at the folder you pass to grate as <code>--sqlfilesdirectory</code>. grate's folders run in a fixed order, and the import keeps it:</p>
 <table>
-<tr><th>grate</th><th>bsm</th></tr>
+<tr><th>grate</th><th>trek</th></tr>
 <tr><td><code>up/</code> (run once)</td><td>One change per script, in grate's order (by path, ignoring case). The note <code>grate up/&lt;name&gt;</code> links it to <code>ScriptsRun</code>. grate has no down scripts, so changes are <code>!irreversible</code>.</td></tr>
 <tr><td><code>runAfterCreateDatabase/</code>, <code>alterDatabase/</code></td><td>Changes at the start of the plan: they run once on each new database</td></tr>
 <tr><td><code>runBeforeUp/</code>, <code>runFirstAfterUp/</code>, <code>functions/</code>, <code>views/</code>, <code>sprocs/</code>, <code>triggers/</code>, <code>indexes/</code>, <code>runAfterOtherAnyTimeScripts/</code> (anytime)</td><td>Repeatables under numbered folders that keep grate's folder order: <code>repeatable/06-functions/</code>, <code>07-views/</code>, <code>08-sprocs/</code> …</td></tr>
-<tr><td><code>beforeMigration/</code>, <code>permissions/</code>, <code>afterMigration/</code>, <code>everytime.*</code> (every time)</td><td>Repeatables, which bsm runs when they change rather than on every deploy</td></tr>
-<tr><td><code>*.ENV.*</code> scripts</td><td><code>environments/&lt;name&gt;/</code> for each environment in the file name (the upper-case parts, or the names you pass with <code>--environment</code>); bsm.yaml gets those environments</td></tr>
+<tr><td><code>beforeMigration/</code>, <code>permissions/</code>, <code>afterMigration/</code>, <code>everytime.*</code> (every time)</td><td>Repeatables, which trek runs when they change rather than on every deploy</td></tr>
+<tr><td><code>*.ENV.*</code> scripts</td><td><code>environments/&lt;name&gt;/</code> for each environment in the file name (the upper-case parts, or the names you pass with <code>--environment</code>); trek.yaml gets those environments</td></tr>
 <tr><td><code>{{{{Token}}}}</code></td><td><code>{{Token}}</code> variables; values for <code>--ut</code> tokens come from <code>--var</code>. <code>{{{{DatabaseName}}}}</code>, <code>{{{{ServerName}}}}</code> and <code>{{{{EnvironmentName}}}}</code> become <code>{{db}}</code>, <code>{{db.host}}</code> and <code>{{env}}</code>; folder-name tokens get their values; connection strings are never written into scripts.</td></tr>
-<tr><td><code>createDatabase/</code>, <code>dropDatabase/</code></td><td>Not imported: bsm does not create databases</td></tr>
+<tr><td><code>createDatabase/</code>, <code>dropDatabase/</code></td><td>Not imported: trek does not create databases</td></tr>
 </table>
 <p>Renamed folders: <code>--folder up=ddl</code>. If grate ran with <code>--ignoredirectorynames</code> or <code>--disabletokenreplacement</code>, pass <code>--ignore-directory-names</code> or <code>--no-tokens</code>.</p>
 <p>grate records a hash of each script after replacing its tokens, so <code>baseline --from grate</code> renders every imported script with this environment's variables and compares: a mismatch means the database ran different text (or a token now has another value), and baseline stops. Repeatables and environment scripts grate already ran with the same text are recorded as applied, so they do not run again. <code>runAfterCreateDatabase/</code> scripts may be missing from the journal: grate only runs them for databases it created.</p>
 
 <h2 id="sqitch">Sqitch</h2>
-{sh('''bsm import sqitch ./flipr -C bsm-db
-bsm import sqitch ./flipr -C bsm-db --engine pg      # use that engine's settings from sqitch.conf''')}
-<p>Sqitch is closest to bsm: a plan of named changes with deploy, revert and verify scripts. The import reads <code>sqitch.conf</code> (top_dir, plan_file, deploy/revert/verify dirs, extension, per-engine overrides) and keeps the plan's order, dependencies, tags, planner and timestamp.</p>
+{sh('''trek import sqitch ./flipr -C trek-db
+trek import sqitch ./flipr -C trek-db --engine pg      # use that engine's settings from sqitch.conf''')}
+<p>Sqitch is closest to trek: a plan of named changes with deploy, revert and verify scripts. The import reads <code>sqitch.conf</code> (top_dir, plan_file, deploy/revert/verify dirs, extension, per-engine overrides) and keeps the plan's order, dependencies, tags, planner and timestamp.</p>
 <ul>
   <li>A reworked change (the same name again after a tag) becomes <code>&lt;name&gt;-v2</code>, <code>-v3</code> …; earlier versions take their scripts from <code>&lt;name&gt;@&lt;tag&gt;.sql</code>, as Sqitch keeps them. Dependencies such as <code>users@v1.0.0</code> point at the right version.</li>
-  <li>Conflicts (<code>!change</code>) and dependencies on other Sqitch projects have no bsm equivalent and are listed.</li>
+  <li>Conflicts (<code>!change</code>) and dependencies on other Sqitch projects have no trek equivalent and are listed.</li>
   <li>Scripts that manage their own transaction (<code>BEGIN; … COMMIT;</code>, as Sqitch's templates do) are <code>!notx</code>.</li>
-  <li>Scripts are copied as written. A Sqitch project for PostgreSQL becomes a PostgreSQL project; one for another engine needs its SQL translated for the provider you choose (<code>bsm plan check</code> flags what does not parse).</li>
+  <li>Scripts are copied as written. A Sqitch project for PostgreSQL becomes a PostgreSQL project; one for another engine needs its SQL translated for the provider you choose (<code>trek plan check</code> flags what does not parse).</li>
 </ul>
-{sh('''bsm baseline --from sqitch -e prod      # reads sqitch.changes in the same PostgreSQL database''')}
+{sh('''trek baseline --from sqitch -e prod      # reads sqitch.changes in the same PostgreSQL database''')}
 <p>On PostgreSQL, baseline reads Sqitch's registry (<code>sqitch.changes</code>), matches each deployed change by project, name and version (a reworked change is deployed once per version), and checks the SHA-1 Sqitch recorded for each deploy script against the imported one. Sqitch's registry schema stays until you drop it.</p>
 
 <h2 id="sqlproj">From SQL projects (SSDT)</h2>
-{sh('''bsm import sqlproj ./Shop/Shop.sqlproj -C db --dry-run
-bsm import sqlproj ./Shop/Shop.sqlproj -C db
-bsm plan check -C db
-bsm baseline --from sqlproj -C db -e prod     # databases already published from the dacpac''')}
-<p>A SQL project describes the database as it should be, and SSDT works out a script on each publish. bsm needs ordered, reviewable steps, so the import gives every object its own piece and puts them in dependency order. It reads classic projects (<code>&lt;Build Include&gt;</code> items) and SDK-style <code>Microsoft.Build.Sql</code> projects (every <code>.sql</code> file except <code>None</code>, <code>Content</code> and <code>Build Remove</code> items, <code>bin/</code> and <code>obj/</code>). It parses the scripts with ScriptDom and needs no Visual Studio, MSBuild or dacpac, so it runs the same on Windows, macOS and Linux; item paths written with <code>\\</code> or in the wrong case still resolve.</p>
+{sh('''trek import sqlproj ./Shop/Shop.sqlproj -C db --dry-run
+trek import sqlproj ./Shop/Shop.sqlproj -C db
+trek plan check -C db
+trek baseline --from sqlproj -C db -e prod     # databases already published from the dacpac''')}
+<p>A SQL project describes the database as it should be, and SSDT works out a script on each publish. trek needs ordered, reviewable steps, so the import gives every object its own piece and puts them in dependency order. It reads classic projects (<code>&lt;Build Include&gt;</code> items) and SDK-style <code>Microsoft.Build.Sql</code> projects (every <code>.sql</code> file except <code>None</code>, <code>Content</code> and <code>Build Remove</code> items, <code>bin/</code> and <code>obj/</code>). It parses the scripts with ScriptDom and needs no Visual Studio, MSBuild or dacpac, so it runs the same on Windows, macOS and Linux; item paths written with <code>\\</code> or in the wrong case still resolve.</p>
 <table>
-<tr><th>In the project</th><th>In bsm</th></tr>
+<tr><th>In the project</th><th>In trek</th></tr>
 <tr><td>Schemas, tables, types, sequences, synonyms, users, roles, partition functions and schemes, XML schema collections; indexes and constraints in files of their own</td><td>One change each (<code>changes/create-&lt;schema&gt;-&lt;name&gt;/</code>, <code>create-type-…</code>, <code>create-schema-…</code>), with a generated <code>revert.sql</code> and <code>[requires]</code> on the changes it needs. Indexes, constraints, grants and extended properties in an object's file stay with that object.</td></tr>
-<tr><td>Views, procedures, functions, triggers</td><td>Repeatables (<code>repeatable/views/dbo.vCustomer.sql</code> and so on) with <code>CREATE</code> turned into <code>CREATE OR ALTER</code>, and <code>-- bsm:requires</code> for the repeatables they use (a view on a view, a function in a view).</td></tr>
+<tr><td>Views, procedures, functions, triggers</td><td>Repeatables (<code>repeatable/views/dbo.vCustomer.sql</code> and so on) with <code>CREATE</code> turned into <code>CREATE OR ALTER</code>, and <code>-- trek:requires</code> for the repeatables they use (a view on a view, a function in a view).</td></tr>
 <tr><td>A function or view a change needs (a computed column or check constraint uses it, it has an index, a <code>WITH SCHEMABINDING</code> object uses it)</td><td>A change instead: repeatables run after all changes, and CREATE OR ALTER would drop a view's indexes or fail on a schema-bound object. Edit it later with a new change.</td></tr>
 <tr><td>Standalone <code>GRANT</code>, <code>ALTER ROLE … ADD MEMBER</code></td><td>Repeatables under <code>permissions/</code>: they are safe to run again.</td></tr>
-<tr><td>Post-deployment script</td><td>A repeatable under <code>post-deploy/</code>, with <code>:r</code> includes inlined. SSDT ran it on every publish, so it is already safe to re-run; bsm runs it whenever it changes. Move data for one environment only into <code>environments/&lt;name&gt;/</code>.</td></tr>
-<tr><td>Pre-deployment script</td><td>Not imported, with a warning: bsm has no step before the changes. Turn work that is still needed into a change.</td></tr>
-<tr><td><code>SqlCmdVariable</code>s</td><td>Variables in <code>bsm.yaml</code> with their default values; <code>$(Name)</code> keeps working and <code>$(DatabaseName)</code> becomes <code>$(db)</code>. Put values from publish profiles under each environment.</td></tr>
+<tr><td>Post-deployment script</td><td>A repeatable under <code>post-deploy/</code>, with <code>:r</code> includes inlined. SSDT ran it on every publish, so it is already safe to re-run; trek runs it whenever it changes. Move data for one environment only into <code>environments/&lt;name&gt;/</code>.</td></tr>
+<tr><td>Pre-deployment script</td><td>Not imported, with a warning: trek has no step before the changes. Turn work that is still needed into a change.</td></tr>
+<tr><td><code>SqlCmdVariable</code>s</td><td>Variables in <code>trek.yaml</code> with their default values; <code>$(Name)</code> keeps working and <code>$(DatabaseName)</code> becomes <code>$(db)</code>. Put values from publish profiles under each environment.</td></tr>
 <tr><td>Database references</td><td><code>master</code> and <code>msdb</code> references are dropped. References to other databases are listed: their objects are not managed or ordered here. Same-database (composite) references are listed too; import those projects as well.</td></tr>
 </table>
 <p>Tables whose foreign keys reference each other cannot be created in any order, so the import moves one table's foreign keys into a later change, <code>add-foreign-keys-&lt;schema&gt;-&lt;table&gt;</code>, as SSDT's publish does. Other cycles keep project order and are reported. Procedures that call each other need no order: SQL Server resolves those names when they run.</p>
-<p>Every change's note starts with <code>sqlproj &lt;file&gt;:</code>. For a database already published from the dacpac, <code>bsm baseline --from sqlproj</code> checks that it has the project's tables, then records every imported change as applied. It also records the repeatables the database already has with exactly that definition, so the first deploy does not re-run them all; a view or procedure that differs (published from an older version, or edited by hand) is left out, and the next deploy applies it. The permission and post-deployment scripts are not recorded: the database may have been published with older versions of them, so the first deploy runs them once (SSDT ran them on every publish, so they are safe to run again). After that, stop publishing the dacpac to that database.</p>
-<p>Reverting an imported project goes back as far as its tables and types, but not past a schema that still holds views, procedures or functions: those are repeatables, which a revert leaves in place. <code>bsm revert --all</code> therefore stops at the first <code>create-schema-…</code> change; drop the repeatables' objects first if you really need an empty database.</p>
+<p>Every change's note starts with <code>sqlproj &lt;file&gt;:</code>. For a database already published from the dacpac, <code>trek baseline --from sqlproj</code> checks that it has the project's tables, then records every imported change as applied. It also records the repeatables the database already has with exactly that definition, so the first deploy does not re-run them all; a view or procedure that differs (published from an older version, or edited by hand) is left out, and the next deploy applies it. The permission and post-deployment scripts are not recorded: the database may have been published with older versions of them, so the first deploy runs them once (SSDT ran them on every publish, so they are safe to run again). After that, stop publishing the dacpac to that database.</p>
+<p>Reverting an imported project goes back as far as its tables and types, but not past a schema that still holds views, procedures or functions: those are repeatables, which a revert leaves in place. <code>trek revert --all</code> therefore stops at the first <code>create-schema-…</code> change; drop the repeatables' objects first if you really need an empty database.</p>
 <h3>Environments at different versions</h3>
 <p>A SQL project describes one state, but production is often behind staging, and staging behind development. Build the plan from the oldest environment forward, so each step is a change the older environments will deploy later:</p>
 <ol>
   <li>Import the project at the release tag production runs, not the current branch. Baseline's table check only finds missing tables, not missing columns, so a newer project would pass it and be wrong.</li>
   <li>Baseline production, then confirm it matches the plan exactly: the dry run must report no schema differences.</li>
-  <li>For each newer environment, oldest first: baseline it (<code>--from sqlproj</code> for the first, <code>--to</code> the previous environment's change after that), then capture what it has beyond the plan with <code>bsm add &lt;name&gt; --from-diff</code>. The new change is recorded there as applied.</li>
+  <li>For each newer environment, oldest first: baseline it (<code>--from sqlproj</code> for the first, <code>--to</code> the previous environment's change after that), then capture what it has beyond the plan with <code>trek add &lt;name&gt; --from-diff</code>. The new change is recorded there as applied.</li>
 </ol>
 {sh('''git -C Shop worktree add ../Shop-prod release-1.4      # the project as production runs it
-bsm import sqlproj ../Shop-prod/Shop.sqlproj -C db
-bsm baseline --from sqlproj -C db -e prod
-bsm add check --from-diff --dry-run -C db -e prod      # must say: no schema differences
+trek import sqlproj ../Shop-prod/Shop.sqlproj -C db
+trek baseline --from sqlproj -C db -e prod
+trek add check --from-diff --dry-run -C db -e prod      # must say: no schema differences
 
-bsm baseline --from sqlproj -C db -e staging
-bsm add release-1.5 --from-diff -C db -e staging       # staging's lead over prod, recorded there as applied
+trek baseline --from sqlproj -C db -e staging
+trek add release-1.5 --from-diff -C db -e staging       # staging's lead over prod, recorded there as applied
 
-bsm baseline --to release-1.5 -C db -e dev
-bsm add release-1.6 --from-diff -C db -e dev''')}
-<p>Every baseline also records the repeatables whose definition in that database already matches the script, and lists the ones that differ. Those run on the next deploy (on SQL Server; other providers re-run them all). That makes the last step safe: the plan's views and procedures are production's versions, so update the repeatable files to the newest definitions, for example by importing the current project into a scratch folder and copying its <code>repeatable/</code> folder over. Each environment's next <code>bsm deploy</code> then runs the changes it lacks and only the repeatables that differ from what it has.</p>
+trek baseline --to release-1.5 -C db -e dev
+trek add release-1.6 --from-diff -C db -e dev''')}
+<p>Every baseline also records the repeatables whose definition in that database already matches the script, and lists the ones that differ. Those run on the next deploy (on SQL Server; other providers re-run them all). That makes the last step safe: the plan's views and procedures are production's versions, so update the repeatable files to the newest definitions, for example by importing the current project into a scratch folder and copying its <code>repeatable/</code> folder over. Each environment's next <code>trek deploy</code> then runs the changes it lacks and only the repeatables that differ from what it has.</p>
 <p>Before relying on it:</p>
 <ul>
   <li>Generated changes cover schema only. Data fixes an environment received (reference data, backfills) are not in them; add those as changes yourself.</li>
   <li>A renamed column or table can come through as a drop and an add. Review every generated change, and turn those into renames (<code>sp_rename</code>) before another environment deploys them.</li>
   <li>The environments must form a straight line: each has everything the older ones have. A hotfix made only in production shows up in staging's change as something to undo. Bring it into the newer environments first, or edit the generated change.</li>
-  <li>Try the whole sequence on copies of the databases first, and compare each with <code>bsm diff-schema --against</code> afterwards.</li>
+  <li>Try the whole sequence on copies of the databases first, and compare each with <code>trek diff-schema --against</code> afterwards.</li>
 </ul>
 
 <h2>Text that must stay literal</h2>
-<p>None of these tools expands <code>{{name}}</code> or <code>$(name)</code>, but bsm does. The import escapes <code>{{name}}</code> to <code>{{{{name}}}}</code>, and if any script contains <code>$(name)</code> text it sets <code>preprocessor.sqlcmdSyntax: false</code> in <code>bsm.yaml</code>.</p>
+<p>None of these tools expands <code>{{name}}</code> or <code>$(name)</code>, but trek does. The import escapes <code>{{name}}</code> to <code>{{{{name}}}}</code>, and if any script contains <code>$(name)</code> text it sets <code>preprocessor.sqlcmdSyntax: false</code> in <code>trek.yaml</code>.</p>
 
 <h2>Before you baseline</h2>
 <ul>
-  <li>Write the reverts you want now: a change's hash includes its revert script, so adding one later means <code>bsm repair</code> in every database.</li>
+  <li>Write the reverts you want now: a change's hash includes its revert script, so adding one later means <code>trek repair</code> in every database.</li>
   <li>Review the generated environments and fill in what the output asks for (tenant ids, variables without values).</li>
-  <li>Check the result: deploy the project to an empty database and compare it with one the old tool built, using <code>bsm diff-schema -e new --against old</code>. Only the old tool's journal table should differ.</li>
+  <li>Check the result: deploy the project to an empty database and compare it with one the old tool built, using <code>trek diff-schema -e new --against old</code>. Only the old tool's journal table should differ.</li>
   <li>Scripts the old tool ran every time (DbUp run-always, grate everytime folders, Flyway callbacks) now run only when they change. If one must run on every deploy, make it idempotent and keep it in a change you add per release, or run it from your pipeline.</li>
 </ul>
 """)
@@ -1384,42 +1384,42 @@ bsm add release-1.6 --from-diff -C db -e dev''')}
 
 def sqlite():
     return doc("docs/sqlite/", "SQLite", "SQLite database files, with the SQLite engine built in: nothing else to install.", f"""
-{sh('''bsm init --provider sqlite
-bsm add create-product
-bsm deploy''')}
+{sh('''trek init --provider sqlite
+trek add create-product
+trek deploy''')}
 {yaml('''provider: sqlite
 sqlite:
   minVersion: "3.26"                    # the oldest SQLite that opens these databases (default 3.26)
 defaultEnvironment: local
 environments:
   local:
-    database: shop.db                   # relative to the folder you run bsm in
+    database: shop.db                   # relative to the folder you run trek in
   prod:
     database: /srv/shop/data/shop.db
     protected: true
     connectionProperties:               # any Microsoft.Data.Sqlite connection-string keyword
       Foreign Keys: true
-      Default Timeout: 60''', "bsm.yaml")}
-<p><code>database</code> is the file. A relative path starts at the folder you run bsm in, as with the <code>sqlite3</code> shell, and <code>~/</code> is your home folder. A file that does not exist yet is created. You can give <code>connectionString: Data Source=…</code> instead; <code>database</code> wins when both are set. <code>{{db}}</code> is the file name without its extension.</p>
+      Default Timeout: 60''', "trek.yaml")}
+<p><code>database</code> is the file. A relative path starts at the folder you run trek in, as with the <code>sqlite3</code> shell, and <code>~/</code> is your home folder. A file that does not exist yet is created. You can give <code>connectionString: Data Source=…</code> instead; <code>database</code> wins when both are set. <code>{{db}}</code> is the file name without its extension.</p>
 <p>Everything else is the same as on the other providers: the plan, hash certification, revert from stored scripts, environments, variables, bundles, <code>diff-schema</code>, generated changes (<code>add --from-diff</code>, <code>diff-schema --script</code>), rework and repair, and imports.</p>
 
 <h2>What does not apply</h2>
 <p>SQLite has no server, so <code>host</code>, <code>port</code>, <code>user</code>, <code>password</code>, <code>authentication</code>, <code>tls</code> and <code>ssh</code> are errors in an SQLite environment. An in-memory database (<code>:memory:</code>, <code>Mode=Memory</code>) is refused too: it disappears when the connection closes, and the journal with it. Encrypted (SQLCipher) databases are not supported.</p>
 
 <h2 id="versions">SQLite versions</h2>
-<p>bsm always runs the SQLite built into it, the same recent version on every machine. But your application opens the same file with the SQLite it was built with, and that is often years older: programs that use the system library get what the operating system ships, such as 3.26 on RHEL 8, 3.34 on RHEL 9, 3.37 on Ubuntu 22.04, 3.40 on Debian 12 and 3.45 on Ubuntu 24.04. Every SQLite 3 reads every SQLite 3 file, but an older engine rejects SQL it does not know, and a table that uses a newer feature (a <code>STRICT</code> table or a generated column) cannot be opened by an engine without it.</p>
-<p><code>sqlite.minVersion</code> in <code>bsm.yaml</code> is the oldest SQLite that opens your databases; the default is 3.26, the oldest bsm supports. Write it in quotes (<code>"3.30"</code>): unquoted, YAML reads 3.30 as 3.3.</p>
+<p>trek always runs the SQLite built into it, the same recent version on every machine. But your application opens the same file with the SQLite it was built with, and that is often years older: programs that use the system library get what the operating system ships, such as 3.26 on RHEL 8, 3.34 on RHEL 9, 3.37 on Ubuntu 22.04, 3.40 on Debian 12 and 3.45 on Ubuntu 24.04. Every SQLite 3 reads every SQLite 3 file, but an older engine rejects SQL it does not know, and a table that uses a newer feature (a <code>STRICT</code> table or a generated column) cannot be opened by an engine without it.</p>
+<p><code>sqlite.minVersion</code> in <code>trek.yaml</code> is the oldest SQLite that opens your databases; the default is 3.26, the oldest trek supports. Write it in quotes (<code>"3.30"</code>): unquoted, YAML reads 3.30 as 3.3.</p>
 <ul>
-<li>Changes bsm writes (<code>add --from-diff</code>, <code>diff-schema --script</code>) use only SQL that version understands. Below 3.35 a dropped column is a table rebuild rather than <code>ALTER TABLE … DROP COLUMN</code>.</li>
-<li>Lint warns (<code>BSM008</code>) when a script uses SQL newer than <code>minVersion</code>: <code>NULLS FIRST/LAST</code> and <code>FILTER</code> (3.30), generated columns (3.31), <code>iif()</code> (3.32), <code>UPDATE … FROM</code> (3.33), <code>DROP COLUMN</code>, <code>RETURNING</code> and <code>MATERIALIZED</code> CTEs (3.35), <code>STRICT</code> tables (3.37), <code>-&gt;</code>/<code>-&gt;&gt;</code>, <code>unixepoch()</code> and <code>format()</code> (3.38), <code>RIGHT</code>/<code>FULL JOIN</code> and <code>IS DISTINCT FROM</code> (3.39), <code>unhex()</code> (3.41), <code>timediff()</code> and <code>octet_length()</code> (3.43), <code>concat()</code> and <code>string_agg()</code> (3.44), and JSONB functions (3.45).</li>
+<li>Changes trek writes (<code>add --from-diff</code>, <code>diff-schema --script</code>) use only SQL that version understands. Below 3.35 a dropped column is a table rebuild rather than <code>ALTER TABLE … DROP COLUMN</code>.</li>
+<li>Lint warns (<code>TREK008</code>) when a script uses SQL newer than <code>minVersion</code>: <code>NULLS FIRST/LAST</code> and <code>FILTER</code> (3.30), generated columns (3.31), <code>iif()</code> (3.32), <code>UPDATE … FROM</code> (3.33), <code>DROP COLUMN</code>, <code>RETURNING</code> and <code>MATERIALIZED</code> CTEs (3.35), <code>STRICT</code> tables (3.37), <code>-&gt;</code>/<code>-&gt;&gt;</code>, <code>unixepoch()</code> and <code>format()</code> (3.38), <code>RIGHT</code>/<code>FULL JOIN</code> and <code>IS DISTINCT FROM</code> (3.39), <code>unhex()</code> (3.41), <code>timediff()</code> and <code>octet_length()</code> (3.43), <code>concat()</code> and <code>string_agg()</code> (3.44), and JSONB functions (3.45).</li>
 <li>If every program that opens the database has a newer SQLite (it bundles its own, as many drivers do), raise <code>minVersion</code> to match.</li>
 </ul>
-<p>bsm's tests run against the SQLite of each of those distributions, from 3.26 up, as well as the built-in engine on Windows, macOS and Linux.</p>
-<p>On Linux the built-in engine needs glibc 2.33 or later. On older systems (RHEL 8, Ubuntu 20.04, Debian 11) bsm uses the system's <code>libsqlite3</code> instead, when it is 3.26 or later: install <code>sqlite-libs</code> or <code>libsqlite3-0</code> if it is missing. To use a particular library, set <code>BSM_SQLITE_LIBRARY</code> to its path. <code>bsm doctor</code> shows which engine is in use.</p>
+<p>trek's tests run against the SQLite of each of those distributions, from 3.26 up, as well as the built-in engine on Windows, macOS and Linux.</p>
+<p>On Linux the built-in engine needs glibc 2.33 or later. On older systems (RHEL 8, Ubuntu 20.04, Debian 11) trek uses the system's <code>libsqlite3</code> instead, when it is 3.26 or later: install <code>sqlite-libs</code> or <code>libsqlite3-0</code> if it is missing. To use a particular library, set <code>TREK_SQLITE_LIBRARY</code> to its path. <code>trek doctor</code> shows which engine is in use.</p>
 
 <h2>Statements and transactions</h2>
-<p>bsm splits scripts into statements the way the <code>sqlite3</code> shell does: at semicolons, except inside strings, quoted names, comments and <code>CREATE TRIGGER … BEGIN … END;</code> bodies. A change runs in one transaction (<code>BEGIN IMMEDIATE</code>), and SQLite's DDL is transactional, so a failure leaves nothing behind. Errors name the line of the statement that failed.</p>
-<p><code>ALTER TABLE</code> only renames tables and columns, adds a column and (from SQLite 3.35) drops a simple one. For other table changes, rebuild the table (<code>bsm add --from-diff</code> writes the rebuild for you). If other tables have foreign keys to the table you rebuild, switch foreign keys off for it, which only works outside a transaction:</p>
+<p>trek splits scripts into statements the way the <code>sqlite3</code> shell does: at semicolons, except inside strings, quoted names, comments and <code>CREATE TRIGGER … BEGIN … END;</code> bodies. A change runs in one transaction (<code>BEGIN IMMEDIATE</code>), and SQLite's DDL is transactional, so a failure leaves nothing behind. Errors name the line of the statement that failed.</p>
+<p><code>ALTER TABLE</code> only renames tables and columns, adds a column and (from SQLite 3.35) drops a simple one. For other table changes, rebuild the table (<code>trek add --from-diff</code> writes the rebuild for you). If other tables have foreign keys to the table you rebuild, switch foreign keys off for it, which only works outside a transaction:</p>
 {sql('''PRAGMA foreign_keys = OFF;
 BEGIN;
 CREATE TABLE new_product (id INTEGER PRIMARY KEY, name TEXT NOT NULL, price NUMERIC NOT NULL CHECK (price >= 0));
@@ -1429,32 +1429,32 @@ ALTER TABLE new_product RENAME TO product;
 CREATE INDEX product_name_idx ON product (name);
 COMMIT;
 PRAGMA foreign_keys = ON;''', "changes/product-price-check/deploy.sql")}
-{code('''product-price-check [create-product] !notx''', "", "bsm.plan")}
+{code('''product-price-check [create-product] !notx''', "", "trek.plan")}
 <p>Repeatables: SQLite has no <code>CREATE OR REPLACE</code>, so write <code>DROP VIEW IF EXISTS v;</code> and then <code>CREATE VIEW v …</code> (and the same for triggers). A verify script selects from what must exist, for example <code>SELECT email FROM customer LIMIT 0;</code>: SQLite raises "no such column" when it is missing.</p>
 
 <h2 id="linter">Linter</h2>
 <table>
 <tr><th>Code</th><th>Severity</th><th>Finding</th></tr>
-<tr><td><code>BSM001</code></td><td>Error</td><td><code>VACUUM</code>, <code>ATTACH</code>, <code>DETACH</code>, <code>PRAGMA journal_mode</code> and <code>PRAGMA foreign_keys</code> (which does nothing inside a transaction) in a change that is not <code>!notx</code></td></tr>
-<tr><td><code>BSM003</code></td><td>Error</td><td><code>BEGIN</code>, <code>COMMIT</code>, <code>END</code> or <code>ROLLBACK</code> in a transactional change: it would end bsm's transaction. (<code>SAVEPOINT</code> and <code>ROLLBACK TO</code> are fine, and so is <code>BEGIN … END</code> in a trigger.)</td></tr>
-<tr><td><code>BSM005</code></td><td>Error</td><td><code>sqlite3</code> shell dot-commands such as <code>.read</code>, <code>.mode</code> and <code>.import</code>: they are not SQL</td></tr>
-<tr><td><code>BSM008</code></td><td>Warning</td><td>SQL that needs a newer SQLite than <code>sqlite.minVersion</code> (<a href="#versions">SQLite versions</a>)</td></tr>
+<tr><td><code>TREK001</code></td><td>Error</td><td><code>VACUUM</code>, <code>ATTACH</code>, <code>DETACH</code>, <code>PRAGMA journal_mode</code> and <code>PRAGMA foreign_keys</code> (which does nothing inside a transaction) in a change that is not <code>!notx</code></td></tr>
+<tr><td><code>TREK003</code></td><td>Error</td><td><code>BEGIN</code>, <code>COMMIT</code>, <code>END</code> or <code>ROLLBACK</code> in a transactional change: it would end trek's transaction. (<code>SAVEPOINT</code> and <code>ROLLBACK TO</code> are fine, and so is <code>BEGIN … END</code> in a trigger.)</td></tr>
+<tr><td><code>TREK005</code></td><td>Error</td><td><code>sqlite3</code> shell dot-commands such as <code>.read</code>, <code>.mode</code> and <code>.import</code>: they are not SQL</td></tr>
+<tr><td><code>TREK008</code></td><td>Warning</td><td>SQL that needs a newer SQLite than <code>sqlite.minVersion</code> (<a href="#versions">SQLite versions</a>)</td></tr>
 </table>
 
 <h2>Schema fingerprint</h2>
-<p>The fingerprint covers tables (column by column, with their constraints, <code>WITHOUT ROWID</code> and <code>STRICT</code>), virtual tables, indexes, views and triggers. Definitions are compared as written, ignoring layout, comments and identifier quoting, so a column added with <code>ALTER TABLE</code> fingerprints the same as the same column written in <code>CREATE TABLE</code>. Left out: SQLite's own tables (<code>sqlite_*</code>), the shadow tables of virtual tables, and the bsm journal.</p>
+<p>The fingerprint covers tables (column by column, with their constraints, <code>WITHOUT ROWID</code> and <code>STRICT</code>), virtual tables, indexes, views and triggers. Definitions are compared as written, ignoring layout, comments and identifier quoting, so a column added with <code>ALTER TABLE</code> fingerprints the same as the same column written in <code>CREATE TABLE</code>. Left out: SQLite's own tables (<code>sqlite_*</code>), the shadow tables of virtual tables, and the trek journal.</p>
 
 <h2>Journal and lock</h2>
-<p>SQLite has no schemas, so the journal tables are prefixed instead: <code>bsm_changes</code>, <code>bsm_repeatables</code>, <code>bsm_events</code>, <code>bsm_meta</code> and <code>bsm_schema_snapshots</code> (the prefix is <code>stateSchema</code>). SQLite's own locks last one transaction and a deploy is many, so bsm holds an exclusive lock on a file next to the database, <code>shop.db.bsm-lock</code>, for the whole run. The file stays after the run (deleting it could let two deployers lock different files); add <code>*.bsm-lock</code> to <code>.gitignore</code>. The lock works between processes on one machine; it is not reliable on network file shares, where SQLite itself is not either.</p>
-<p><code>bsm doctor</code> shows the SQLite version, the file, the journal mode, the encoding and whether foreign keys are on. The SQLite built into bsm enforces foreign keys unless the connection turns them off (<code>connectionProperties: {{ Foreign Keys: false }}</code>).</p>
+<p>SQLite has no schemas, so the journal tables are prefixed instead: <code>trek_changes</code>, <code>trek_repeatables</code>, <code>trek_events</code>, <code>trek_meta</code> and <code>trek_schema_snapshots</code> (the prefix is <code>stateSchema</code>). SQLite's own locks last one transaction and a deploy is many, so trek holds an exclusive lock on a file next to the database, <code>shop.db.trek-lock</code>, for the whole run. The file stays after the run (deleting it could let two deployers lock different files); add <code>*.trek-lock</code> to <code>.gitignore</code>. The lock works between processes on one machine; it is not reliable on network file shares, where SQLite itself is not either.</p>
+<p><code>trek doctor</code> shows the SQLite version, the file, the journal mode, the encoding and whether foreign keys are on. The SQLite built into trek enforces foreign keys unless the connection turns them off (<code>connectionProperties: {{ Foreign Keys: false }}</code>).</p>
 """)
 
 
 def postgresql():
     return doc("docs/postgresql/", "PostgreSQL", "PostgreSQL 12 through 18, each tested on every build.", f"""
-{sh('''bsm init --provider postgresql
-bsm add create-product
-bsm deploy''')}
+{sh('''trek init --provider postgresql
+trek add create-product
+trek deploy''')}
 {yaml('''provider: postgresql
 defaultEnvironment: local
 environments:
@@ -1464,7 +1464,7 @@ environments:
     database: shop
     authentication: password
     user: postgres
-    password: ${env:BSM_LOCAL_PASSWORD}
+    password: ${env:TREK_LOCAL_PASSWORD}
     tls:
       mode: optional
   prod:
@@ -1476,18 +1476,18 @@ environments:
       mode: strict
     connectionProperties:               # any Npgsql connection-string keyword
       Search Path: app,public
-      Command Timeout: 120''', "bsm.yaml")}
+      Command Timeout: 120''', "trek.yaml")}
 <p>Everything else is the same as on SQL Server: the plan, hash certification, revert from stored scripts, environments, variables, bundles, <code>diff-schema</code>, generated changes (<code>add --from-diff</code>, <code>diff-schema --script</code>), rework and repair, and imports.</p>
 
 <h2>Versions and services</h2>
-<p>Every build runs the provider's tests against PostgreSQL 12, 13, 14, 15, 16, 17 and 18 (the official Docker images). Managed services that run standard PostgreSQL, such as Azure Database for PostgreSQL, Amazon RDS and Aurora PostgreSQL, Google Cloud SQL, Supabase and Neon, use the same protocol and catalog and are expected to work, but have not been tested yet. Databases that only speak PostgreSQL's protocol (CockroachDB, YugabyteDB, Redshift) are not supported: they lack advisory locks or parts of the catalog bsm reads.</p>
+<p>Every build runs the provider's tests against PostgreSQL 12, 13, 14, 15, 16, 17 and 18 (the official Docker images). Managed services that run standard PostgreSQL, such as Azure Database for PostgreSQL, Amazon RDS and Aurora PostgreSQL, Google Cloud SQL, Supabase and Neon, use the same protocol and catalog and are expected to work, but have not been tested yet. Databases that only speak PostgreSQL's protocol (CockroachDB, YugabyteDB, Redshift) are not supported: they lack advisory locks or parts of the catalog trek reads.</p>
 
 <h2>Sign-in and TLS</h2>
 <table>
 <tr><th><code>authentication</code></th><th>PostgreSQL</th></tr>
 <tr><td><code>password</code></td><td>User and password (SCRAM or MD5, whatever the server asks for)</td></tr>
 <tr><td><code>integrated</code></td><td>Kerberos (GSSAPI); run <code>kinit</code> first on macOS and Linux</td></tr>
-<tr><td><code>entraDefault</code>, <code>entraInteractive</code>, <code>entraManagedIdentity</code>, <code>entraWorkloadIdentity</code>, <code>entraAzureCli</code>, … </td><td>Azure Database for PostgreSQL: bsm gets a token for <code>https://ossrdbms-aad.database.windows.net</code> and sends it as the password, following Azure's documented flow. <code>user</code> is required. (Not yet tested against a live Azure server.)</td></tr>
+<tr><td><code>entraDefault</code>, <code>entraInteractive</code>, <code>entraManagedIdentity</code>, <code>entraWorkloadIdentity</code>, <code>entraAzureCli</code>, … </td><td>Azure Database for PostgreSQL: trek gets a token for <code>https://ossrdbms-aad.database.windows.net</code> and sends it as the password, following Azure's documented flow. <code>user</code> is required. (Not yet tested against a live Azure server.)</td></tr>
 <tr><td>Client certificate</td><td><code>connectionProperties: {{ SSL Certificate: client.crt, SSL Key: client.key }}</code> alongside password or no password, as the server requires</td></tr>
 </table>
 <table>
@@ -1501,19 +1501,19 @@ environments:
 <p>For a primary with standbys, list the hosts in <code>connectionProperties</code> and let Npgsql pick the primary: <code>Host: pg1,pg2,pg3</code> and <code>Target Session Attributes: primary</code>. The <code>{{db.host}}</code> variable and SSH tunnels use the first host.</p>
 
 <h2>Statements and transactions</h2>
-<p>bsm splits scripts into statements at semicolons, the way psql does: semicolons inside strings, quoted identifiers, comments and <code>$$</code> dollar-quoted bodies (functions, <code>DO</code> blocks) do not count. A change still runs in one transaction, and PostgreSQL's transactional DDL means a failure leaves nothing behind. Errors name the line of the statement that failed.</p>
+<p>trek splits scripts into statements at semicolons, the way psql does: semicolons inside strings, quoted identifiers, comments and <code>$$</code> dollar-quoted bodies (functions, <code>DO</code> blocks) do not count. A change still runs in one transaction, and PostgreSQL's transactional DDL means a failure leaves nothing behind. Errors name the line of the statement that failed.</p>
 <p>Statements PostgreSQL refuses in a transaction block need a <code>!notx</code> change, which runs each statement on its own:</p>
 {sql('''CREATE INDEX CONCURRENTLY IF NOT EXISTS product_name_idx ON product (name);''', "changes/product-name-index/deploy.sql")}
-{code('''product-name-index [create-product] !notx''', "", "bsm.plan")}
+{code('''product-name-index [create-product] !notx''', "", "trek.plan")}
 
 <h2 id="psql">psql scripts</h2>
-<p>Scripts written for psql (Sqitch's PostgreSQL scripts, <code>psql -f</code> files) run as they are. bsm does not shell out to psql: it understands the parts of psql's syntax that change what a script does, and runs the SQL itself.</p>
+<p>Scripts written for psql (Sqitch's PostgreSQL scripts, <code>psql -f</code> files) run as they are. trek does not shell out to psql: it understands the parts of psql's syntax that change what a script does, and runs the SQL itself.</p>
 <table>
-<tr><th>psql</th><th>In bsm</th></tr>
+<tr><th>psql</th><th>In trek</th></tr>
 <tr><td><code>\\i file</code>, <code>\\include</code>, <code>\\ir file</code>, <code>\\include_relative</code></td><td>Included when the project loads (<code>\\i</code> relative to the project folder, <code>\\ir</code> relative to the script). The included text is part of the change: hashed, stored in the journal for revert, and packed into bundles. Files must be inside the project folder.</td></tr>
 <tr><td><code>\\copy table from 'file.csv' with (format csv)</code></td><td>The file's rows are loaded with <code>COPY … FROM STDIN</code> and are part of the change, like an include</td></tr>
 <tr><td><code>COPY … FROM STDIN;</code> followed by data and <code>\\.</code></td><td>The data is streamed to the server</td></tr>
-<tr><td><code>\\set name value</code>, <code>\\unset</code>, <code>:name</code>, <code>:'name'</code>, <code>:"name"</code>, <code>:{{?name}}</code></td><td>psql variables, interpolated before each statement runs. bsm's variables are psql variables too, so <code>:'schema'</code> and <code>{{schema}}</code> both work.</td></tr>
+<tr><td><code>\\set name value</code>, <code>\\unset</code>, <code>:name</code>, <code>:'name'</code>, <code>:"name"</code>, <code>:{{?name}}</code></td><td>psql variables, interpolated before each statement runs. trek's variables are psql variables too, so <code>:'schema'</code> and <code>{{schema}}</code> both work.</td></tr>
 <tr><td><code>\\if</code>, <code>\\elif</code>, <code>\\else</code>, <code>\\endif</code></td><td>Conditional sections, on true/false, on/off, yes/no or 1/0, usually with a variable: <code>\\if :is_prod</code></td></tr>
 <tr><td><code>\\echo</code>, <code>\\qecho</code>, <code>\\warn</code></td><td>Shown as server messages (with <code>-v</code>)</td></tr>
 <tr><td><code>\\gexec</code></td><td>Runs every value the query returns as a statement</td></tr>
@@ -1536,10 +1536,10 @@ FROM pg_tables WHERE schemaname = :'schema' \\gexec''', "changes/reference-data/
 <h2 id="linter">Linter</h2>
 <table>
 <tr><th>Code</th><th>Severity</th><th>Finding</th></tr>
-<tr><td><code>BSM001</code></td><td>Error</td><td><code>CREATE/DROP INDEX CONCURRENTLY</code>, <code>REINDEX … CONCURRENTLY</code>, <code>VACUUM</code>, <code>CREATE/DROP DATABASE</code>, <code>ALTER SYSTEM</code>, tablespace and subscription commands in a change that is not <code>!notx</code></td></tr>
-<tr><td><code>BSM003</code></td><td>Error</td><td><code>BEGIN</code>, <code>COMMIT</code>, <code>ROLLBACK</code> or <code>END</code> in a transactional change: it would end bsm's transaction. (Inside function bodies and <code>DO</code> blocks they are fine.)</td></tr>
-<tr><td><code>BSM005</code></td><td>Error</td><td>psql commands bsm cannot run (<code>\\connect</code>, <code>\\gset</code>, <code>\\copy … to</code>, shell and interactive commands, see <a href="#psql">psql scripts</a>), and unbalanced <code>\\if</code>/<code>\\endif</code></td></tr>
-<tr><td><code>BSM007</code></td><td>Warning</td><td><code>ALTER TYPE … ADD VALUE</code> in a transaction: the new value cannot be used until it commits</td></tr>
+<tr><td><code>TREK001</code></td><td>Error</td><td><code>CREATE/DROP INDEX CONCURRENTLY</code>, <code>REINDEX … CONCURRENTLY</code>, <code>VACUUM</code>, <code>CREATE/DROP DATABASE</code>, <code>ALTER SYSTEM</code>, tablespace and subscription commands in a change that is not <code>!notx</code></td></tr>
+<tr><td><code>TREK003</code></td><td>Error</td><td><code>BEGIN</code>, <code>COMMIT</code>, <code>ROLLBACK</code> or <code>END</code> in a transactional change: it would end trek's transaction. (Inside function bodies and <code>DO</code> blocks they are fine.)</td></tr>
+<tr><td><code>TREK005</code></td><td>Error</td><td>psql commands trek cannot run (<code>\\connect</code>, <code>\\gset</code>, <code>\\copy … to</code>, shell and interactive commands, see <a href="#psql">psql scripts</a>), and unbalanced <code>\\if</code>/<code>\\endif</code></td></tr>
+<tr><td><code>TREK007</code></td><td>Warning</td><td><code>ALTER TYPE … ADD VALUE</code> in a transaction: the new value cannot be used until it commits</td></tr>
 </table>
 
 <h2>Schema fingerprint</h2>
@@ -1553,17 +1553,17 @@ FROM pg_tables WHERE schemaname = :'schema' \\gexec''', "changes/reference-data/
   <li>publications and subscriptions; foreign data wrappers, servers and user mappings;</li>
   <li>comments, and privileges: GRANTs on tables, columns, sequences, functions, schemas and types, and default privileges.</li>
 </ul>
-<p>Definitions come from PostgreSQL's own <code>pg_get_*def</code> functions with an empty <code>search_path</code> (set inside a read-only transaction, so your session is untouched), so names are always schema-qualified and identical databases fingerprint identically. Left out on purpose: objects that belong to extensions, identity sequences, the bsm journal schema, object owners (they usually differ between environments) and sequence values (they are data).</p>
+<p>Definitions come from PostgreSQL's own <code>pg_get_*def</code> functions with an empty <code>search_path</code> (set inside a read-only transaction, so your session is untouched), so names are always schema-qualified and identical databases fingerprint identically. Left out on purpose: objects that belong to extensions, identity sequences, the trek journal schema, object owners (they usually differ between environments) and sequence values (they are data).</p>
 <p>Two parts can be left out per environment:</p>
 {yaml('''environments:
   prod:
     schemaFingerprint:
       partitionBoundaries: ignore   # partitions a job creates and drops (pg_partman, cron) are not drift
-      privileges: ignore            # GRANTs managed outside bsm are not drift''', "bsm.yaml")}
+      privileges: ignore            # GRANTs managed outside trek are not drift''', "trek.yaml")}
 <p>With <code>partitionBoundaries: ignore</code>, partitions and everything on them are left out; the partitioned table and its partition key still count.</p>
 
 <h2>Journal and lock</h2>
-<p>The journal tables are the same as on SQL Server, in schema <code>bsm</code> (<code>stateSchema</code>). The deploy lock is a session-level advisory lock (<code>pg_try_advisory_lock</code>), as Flyway and Sqitch use too, so deploys must hold one server connection for the whole run: connect directly, or through PgBouncer in session pooling mode, not transaction pooling.</p>
+<p>The journal tables are the same as on SQL Server, in schema <code>trek</code> (<code>stateSchema</code>). The deploy lock is a session-level advisory lock (<code>pg_try_advisory_lock</code>), as Flyway and Sqitch use too, so deploys must hold one server connection for the whole run: connect directly, or through PgBouncer in session pooling mode, not transaction pooling.</p>
 
 <h2>Not available</h2>
 <ul>
@@ -1576,14 +1576,14 @@ FROM pg_tables WHERE schemaname = :'schema' \\gexec''', "changes/reference-data/
 
 
 def converting():
-    return doc("docs/converting/", "Converting between databases", "Move a live database between SQL Server, PostgreSQL and SQLite, in any direction: its schema becomes a new bsm project for the other provider, then its rows are copied and checked.", f"""
-{sh('''bsm convert schema -C db -e prod --out ../db-pg               # read prod's catalog, write a PostgreSQL project
-# read ../db-pg/CONVERSION.md, set the connection in ../db-pg/bsm.yaml
-bsm plan check -C ../db-pg
-bsm deploy -C ../db-pg                                       # create the schema in PostgreSQL
-bsm convert data -C db -e prod --target ../db-pg             # copy every row, compare counts
-bsm verify -C ../db-pg''')}
-<p>The source is an environment of the project in <code>-C</code>, or any database: <code>--from-provider sqlserver --connection-string "..."</code>. Between SQL Server and PostgreSQL the target is the other one; to or from SQLite, pass <code>--to</code> (for example <code>bsm convert schema --from-provider sqlite --connection-string "Data Source=app.db" --to postgresql --out db</code>). Conversion reads the database itself (its catalog), not the project's scripts, so it also works for databases bsm has never managed.</p>
+    return doc("docs/converting/", "Converting between databases", "Move a live database between SQL Server, PostgreSQL and SQLite, in any direction: its schema becomes a new trek project for the other provider, then its rows are copied and checked.", f"""
+{sh('''trek convert schema -C db -e prod --out ../db-pg               # read prod's catalog, write a PostgreSQL project
+# read ../db-pg/CONVERSION.md, set the connection in ../db-pg/trek.yaml
+trek plan check -C ../db-pg
+trek deploy -C ../db-pg                                       # create the schema in PostgreSQL
+trek convert data -C db -e prod --target ../db-pg             # copy every row, compare counts
+trek verify -C ../db-pg''')}
+<p>The source is an environment of the project in <code>-C</code>, or any database: <code>--from-provider sqlserver --connection-string "..."</code>. Between SQL Server and PostgreSQL the target is the other one; to or from SQLite, pass <code>--to</code> (for example <code>trek convert schema --from-provider sqlite --connection-string "Data Source=app.db" --to postgresql --out db</code>). Conversion reads the database itself (its catalog), not the project's scripts, so it also works for databases trek has never managed.</p>
 
 <h2 id="what">What is converted</h2>
 <table>
@@ -1591,13 +1591,13 @@ bsm verify -C ../db-pg''')}
 <tr><td>Schemas, sequences, tables, columns, defaults, computed columns, primary keys, unique and check constraints</td><td>Changes <code>convert-schemas</code>, <code>convert-types</code>, <code>convert-sequences</code>, <code>convert-tables</code>, each with a revert. Types are mapped (table below); defaults and checks are translated.</td></tr>
 <tr><td>Foreign keys, indexes (including filtered and included columns)</td><td>Changes <code>convert-foreign-keys</code> and <code>convert-indexes</code>, after the tables. On PostgreSQL, foreign keys are <code>DEFERRABLE</code> so data can be loaded in any order.</td></tr>
 <tr><td>Enums and domains (PostgreSQL), alias types (SQL Server)</td><td>An enum becomes <code>nvarchar</code> with a <code>CHECK (... IN (...))</code>; domains and alias types map to each other, and a domain's checks are added to each column that uses it.</td></tr>
-<tr><td>Views, functions, procedures, triggers</td><td>Translated statement by statement into repeatables (<code>repeatable/views</code>, <code>functions</code>, <code>procedures</code>, <code>triggers</code>) with <code>-- bsm:requires</code> lines so they are created in dependency order. Functions that defaults or checks call are created by a change before the tables.</td></tr>
+<tr><td>Views, functions, procedures, triggers</td><td>Translated statement by statement into repeatables (<code>repeatable/views</code>, <code>functions</code>, <code>procedures</code>, <code>triggers</code>) with <code>-- trek:requires</code> lines so they are created in dependency order. Functions that defaults or checks call are created by a change before the tables.</td></tr>
 <tr><td>Comments (<code>COMMENT ON</code>, <code>MS_Description</code>)</td><td>Carried over.</td></tr>
 </table>
 <p>Partitioning, system versioning, Always Encrypted, masks, table types, synonyms, exclusion constraints, aggregates, and routines in languages other than SQL and PL/pgSQL are listed under "Not converted" in <code>CONVERSION.md</code>.</p>
 
 <h2 id="review">CONVERSION.md and REVIEW markers</h2>
-<p>Tables, keys and indexes convert mechanically. Code is translated as far as it can be done faithfully; everything that needs a person (a construct with no counterpart, a behaviour that differs, a guess) is marked <code>/* REVIEW bsm convert: ... */</code> in the script, listed at the top of the file, and collected in <code>CONVERSION.md</code> with the type mappings and every renamed identifier. Nothing is dropped silently: an object that cannot be translated at all is written with its original text commented out.</p>
+<p>Tables, keys and indexes convert mechanically. Code is translated as far as it can be done faithfully; everything that needs a person (a construct with no counterpart, a behaviour that differs, a guess) is marked <code>/* REVIEW trek convert: ... */</code> in the script, listed at the top of the file, and collected in <code>CONVERSION.md</code> with the type mappings and every renamed identifier. Nothing is dropped silently: an object that cannot be translated at all is written with its original text commented out.</p>
 
 <h2 id="names">Names</h2>
 <p>Converting to PostgreSQL lowercases identifiers by default, so existing unquoted queries keep working (PostgreSQL lowercases them too): <code>dbo.CustomerOrder.FirstName</code> becomes <code>public.customerorder.firstname</code>. <code>--names snake</code> gives <code>public.customer_order.first_name</code>; <code>--names keep</code> keeps the exact case (then every reference must be double-quoted). Converting to SQL Server keeps names as they are. <code>dbo</code> and <code>public</code> map to each other. Two names that would collide after mapping stop the conversion.</p>
@@ -1605,7 +1605,7 @@ bsm verify -C ../db-pg''')}
 <h2 id="behaviour">Behaviour differences handled</h2>
 <table>
 <tr><th>Difference</th><th>What the conversion does</th></tr>
-<tr><td>SQL Server compares text case-insensitively (<code>_CI_</code> collations)</td><td>PostgreSQL text columns get the nondeterministic collation <code>bsm_ci</code>, so equality, ordering and unique keys stay case-insensitive; translated <code>LIKE</code> uses <code>ILIKE</code>. <code>--case-sensitive</code> turns this off.</td></tr>
+<tr><td>SQL Server compares text case-insensitively (<code>_CI_</code> collations)</td><td>PostgreSQL text columns get the nondeterministic collation <code>trek_ci</code>, so equality, ordering and unique keys stay case-insensitive; translated <code>LIKE</code> uses <code>ILIKE</code>. <code>--case-sensitive</code> turns this off.</td></tr>
 <tr><td>T-SQL has no boolean values</td><td><code>bit</code> and <code>boolean</code> map to each other; <code>flag = 1</code> becomes <code>flag = true</code>, and a PostgreSQL condition used as a value becomes <code>CASE WHEN ... THEN 1 ELSE 0 END</code>.</td></tr>
 <tr><td>Unique constraints and NULL</td><td>SQL Server allows one NULL in a unique column, PostgreSQL many. To SQL Server, a unique constraint on nullable columns becomes a filtered unique index; to PostgreSQL it is flagged (add <code>NULLS NOT DISTINCT</code> to keep SQL Server's rule).</td></tr>
 <tr><td>SQL Server triggers work on whole statements (<code>inserted</code>, <code>deleted</code>)</td><td>To PostgreSQL: statement-level triggers with transition tables named <code>inserted</code> and <code>deleted</code>. To SQL Server: statement triggers map directly; row triggers loop over <code>inserted</code>/<code>deleted</code>, and a BEFORE trigger's changes to <code>NEW</code> are written back by primary key.</td></tr>
@@ -1640,35 +1640,35 @@ bsm verify -C ../db-pg''')}
 </table>
 
 <h2 id="data">Copying the data</h2>
-<p><code>bsm convert data</code> copies every table, parents before children, with the same name mapping <code>convert schema</code> used (it reads <code>convert.json</code> in the converted project). Into SQL Server it uses bulk copy (identity values kept, triggers not fired, constraints checked afterwards); into PostgreSQL, <code>COPY</code> in one transaction with foreign keys deferred and user triggers off; into SQLite, prepared inserts in one transaction with foreign keys deferred and the tables' triggers set aside until the commit. PostgreSQL and SQLite loads leave nothing behind when they fail. Identities and sequences are moved past the copied values, and row counts are compared at the end (exit code 1 when they differ).</p>
+<p><code>trek convert data</code> copies every table, parents before children, with the same name mapping <code>convert schema</code> used (it reads <code>convert.json</code> in the converted project). Into SQL Server it uses bulk copy (identity values kept, triggers not fired, constraints checked afterwards); into PostgreSQL, <code>COPY</code> in one transaction with foreign keys deferred and user triggers off; into SQLite, prepared inserts in one transaction with foreign keys deferred and the tables' triggers set aside until the commit. PostgreSQL and SQLite loads leave nothing behind when they fail. Identities and sequences are moved past the copied values, and row counts are compared at the end (exit code 1 when they differ).</p>
 <p>The target tables must be empty; <code>--truncate</code> empties them first. <code>--tables "sales.*"</code> copies only some. Run it after deploying the converted project, while the source is not being written to.</p>
 """)
 
 def journal():
-    return doc("docs/journal/", "Journal tables", "What bsm stores in each database (schema bsm, configurable).", f"""
+    return doc("docs/journal/", "Journal tables", "What trek stores in each database (schema trek, configurable).", f"""
 <table>
 <tr><th>Table</th><th>Contents</th></tr>
-<tr><td><code>bsm.changes</code></td><td>One row per applied change: sequence, name, script hash, chain id, deploy/revert/verify scripts, flags, deployed at/by/host, tool version, duration, out-of-order and baseline flags, rendered hashes</td></tr>
-<tr><td><code>bsm.repeatables</code></td><td>Current and previous script and hash of each repeatable, applied at/by</td></tr>
-<tr><td><code>bsm.events</code></td><td>Append-only log: deploy, revert, fail (with the error), repeatable, baseline, resource, repair; actor, host, tool version, environment</td></tr>
-<tr><td><code>bsm.schema_snapshots</code></td><td>Schema fingerprint and canonical dump after each run, with the head chain id</td></tr>
-<tr><td><code>bsm.meta</code></td><td><code>state_version</code> (journal layout) and <code>environment</code> (owner)</td></tr>
+<tr><td><code>trek.changes</code></td><td>One row per applied change: sequence, name, script hash, chain id, deploy/revert/verify scripts, flags, deployed at/by/host, tool version, duration, out-of-order and baseline flags, rendered hashes</td></tr>
+<tr><td><code>trek.repeatables</code></td><td>Current and previous script and hash of each repeatable, applied at/by</td></tr>
+<tr><td><code>trek.events</code></td><td>Append-only log: deploy, revert, fail (with the error), repeatable, baseline, resource, repair; actor, host, tool version, environment</td></tr>
+<tr><td><code>trek.schema_snapshots</code></td><td>Schema fingerprint and canonical dump after each run, with the head chain id</td></tr>
+<tr><td><code>trek.meta</code></td><td><code>state_version</code> (journal layout) and <code>environment</code> (owner)</td></tr>
 </table>
 {sql('''-- what is deployed, in order
-SELECT sequence, name, deployed_at, deployed_by, applied_out_of_order FROM bsm.changes ORDER BY sequence;
+SELECT sequence, name, deployed_at, deployed_by, applied_out_of_order FROM trek.changes ORDER BY sequence;
 
 -- recent failures
-SELECT TOP (20) at, name, message, actor, host FROM bsm.events WHERE kind = 'fail' ORDER BY id DESC;''')}
-<p>Badger SQL Migrate creates the schema and tables on the first deploy and upgrades them itself; a newer journal than the tool understands stops the tool with a message to upgrade. Change the schema name with <code>stateSchema</code>. Do not edit these tables by hand: they are the certificate.</p>
+SELECT TOP (20) at, name, message, actor, host FROM trek.events WHERE kind = 'fail' ORDER BY id DESC;''')}
+<p>Badger Trek creates the schema and tables on the first deploy and upgrades them itself; a newer journal than the tool understands stops the tool with a message to upgrade. Change the schema name with <code>stateSchema</code>. Do not edit these tables by hand: they are the certificate.</p>
 """)
 
 
 def troubleshooting():
     items = [
-        ("“These changes were edited after they were deployed”", "A deployed change's scripts changed (even whitespace). For new behaviour, restore the deployed version and use <code>bsm rework</code>; for a harmless edit such as a revert fix, use <code>bsm repair</code>. See " + link("docs/fixing-changes/", "Fixing deployed changes") + "."),
+        ("“These changes were edited after they were deployed”", "A deployed change's scripts changed (even whitespace). For new behaviour, restore the deployed version and use <code>trek rework</code>; for a harmless edit such as a revert fix, use <code>trek repair</code>. See " + link("docs/fixing-changes/", "Fixing deployed changes") + "."),
         ("“This database belongs to environment 'test'…”", "You are pointing one environment's settings at another environment's database. Check <code>--env</code> and the host/database. If the database was copied on purpose, pass <code>--claim-environment</code> once."),
         ("“Timed out … waiting for the deploy lock”", "Another deploy is running against the database. Wait, or raise <code>lockTimeoutSeconds</code>."),
-        ("“… cannot run inside a transaction”", "Lint BSM001. Mark the change <code>!notx</code> in the plan and make the script re-runnable."),
+        ("“… cannot run inside a transaction”", "Lint TREK001. Mark the change <code>!notx</code> in the plan and make the script re-runnable."),
 <h2 id="sqlite">SQLite</h2>
 <p>SQLite is a different shape of database, so converting to or from it changes more than the dialect:</p>
 <table>
@@ -1682,25 +1682,25 @@ def troubleshooting():
 </table>
 
         ("“unknown variable {x}”", "Define it under <code>variables:</code>, pass <code>--var x=…</code>, write <code>{{x}}</code> for a literal, or set <code>preprocessor.unknown: keep</code>."),
-        ("“renders differently than when it was deployed”", "A variable used by the change changed value. Run <code>bsm vars</code>; restore the value, or use <code>--allow-variable-drift</code> if the change is intended."),
+        ("“renders differently than when it was deployed”", "A variable used by the change changed value. Run <code>trek vars</code>; restore the value, or use <code>--allow-variable-drift</code> if the change is intended."),
         ("“Changes … come before changes already deployed” (strict ordering)", "A change merged above changes already in this database. In dev, use <code>--ordering dependency</code> or <code>rebase</code>; production should never see this if it only receives released plans."),
-        ("“schema drift”", "Something changed the schema outside bsm. <code>bsm diff-schema</code> lists what changed since the last deploy; then either undo it or capture it as a new change. See " + link("docs/drift/", "Schema drift") + "."),
-        ("BSM004: “SYSTEM_VERSIONING is turned OFF … and not turned back ON”", "The script switches versioning off (usually to change the table) but never back on. Add <code>ALTER TABLE … SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = …))</code> at the end, or drop the table if that is the intent. See " + link("docs/temporal-partitions/", "Temporal tables and partitions") + "."),
-        ("“Bundle … failed verification”", "A file in the bundle was changed, added or removed after it was built. Rebuild it from source control with <code>bsm bundle create</code>; never edit a bundle."),
-        ("Entra: “credential unavailable” or browser does not open", "On SSH or headless machines use <code>entraDeviceCode</code>. For CLI credentials, sign in with <code>az login</code> first. <code>bsm auth clear</code> resets saved sign-ins."),
+        ("“schema drift”", "Something changed the schema outside trek. <code>trek diff-schema</code> lists what changed since the last deploy; then either undo it or capture it as a new change. See " + link("docs/drift/", "Schema drift") + "."),
+        ("TREK004: “SYSTEM_VERSIONING is turned OFF … and not turned back ON”", "The script switches versioning off (usually to change the table) but never back on. Add <code>ALTER TABLE … SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = …))</code> at the end, or drop the table if that is the intent. See " + link("docs/temporal-partitions/", "Temporal tables and partitions") + "."),
+        ("“Bundle … failed verification”", "A file in the bundle was changed, added or removed after it was built. Rebuild it from source control with <code>trek bundle create</code>; never edit a bundle."),
+        ("Entra: “credential unavailable” or browser does not open", "On SSH or headless machines use <code>entraDeviceCode</code>. For CLI credentials, sign in with <code>az login</code> first. <code>trek auth clear</code> resets saved sign-ins."),
         ("Linux: token cache error", "Install libsecret (and a keyring), use <code>entra.tokenCache: memory</code>, or set <code>allowUnencryptedTokenCache: true</code>."),
         ("Kerberos on macOS/Linux fails", "Run <code>kinit user@REALM</code>, check <code>klist</code>, and set <code>connectionProperties: { Server SPN: MSSQLSvc/host:1433 }</code> if the SPN differs."),
-        ("“column master key … cannot be changed”", "The database's CMK points to a different key path. Add a new CMK name and rotate; bsm never rewrites CMK metadata."),
-        ("macOS: “bsm cannot be opened”", "Run <code>xattr -d com.apple.quarantine bsm</code> once, or install the .NET tool."),
+        ("“column master key … cannot be changed”", "The database's CMK points to a different key path. Add a new CMK name and rotate; trek never rewrites CMK metadata."),
+        ("macOS: “trek cannot be opened”", "Run <code>xattr -d com.apple.quarantine trek</code> once, or install the .NET tool."),
     ]
     rows = "".join(f"<h3>{q}</h3><p>{a}</p>" for q, a in items)
     return doc("docs/troubleshooting/", "Troubleshooting", "Common messages and what to do about them.", f"""
 <p>Start with:</p>
-{sh('''bsm doctor -e <environment> -v''')}
+{sh('''trek doctor -e <environment> -v''')}
 <p>It checks configuration, Entra sign-in, the connection, server facts, the journal and environment resources, and reports each separately.</p>
 {rows}
 <h2>Support</h2>
-<p>Email <a href="mailto:support@lonebadger.tech">support@lonebadger.tech</a> or open an issue on <a href="https://github.com/lonebadger-tech/badger-sql-migrate/issues">GitHub</a>. Include <code>bsm --version</code>, the command, and the output of <code>bsm doctor</code>. Never send passwords or tokens.</p>
+<p>Email <a href="mailto:support@lonebadger.tech">support@lonebadger.tech</a> or open an issue on <a href="https://github.com/lonebadger-tech/badger-trek/issues">GitHub</a>. Include <code>trek --version</code>, the command, and the output of <code>trek doctor</code>. Never send passwords or tokens.</p>
 """)
 
 
@@ -1708,11 +1708,11 @@ def extending():
     return doc("docs/extending/", "Library and providers", "Use the engine from .NET code, or add another database.", f"""
 <h2>Use the engine in an application</h2>
 <p>The CLI is a thin layer over a .NET library. An application can migrate its own database at startup with the same plan, hashes and journal:</p>
-{code('''using Badger.SqlMigrate.Core.Configuration;
-using Badger.SqlMigrate.Core.Engine;
-using Badger.SqlMigrate.Core.Project;
-using Badger.SqlMigrate.Core.Providers;
-using Badger.SqlMigrate.Providers.SqlServer;
+{code('''using Badger.Trek.Core.Configuration;
+using Badger.Trek.Core.Engine;
+using Badger.Trek.Core.Project;
+using Badger.Trek.Core.Providers;
+using Badger.Trek.Providers.SqlServer;
 
 var provider = new SqlServerProvider();
 var environment = new DeploymentEnvironment
@@ -1726,17 +1726,17 @@ var project = MigrationProject.Load(Path.Combine(AppContext.BaseDirectory, "db")
 await using var session = await provider.OpenSessionAsync(environment, SessionContext.Empty, cancellationToken);
 var engine = new MigrationEngine(project, provider, environment, session, Actor.Current("my-app"));
 var result = await engine.DeployAsync(new DeployOptions(), cancellationToken);''', "", "C#")}
-<p>Pass a <code>SessionContext</code> with an <code>IAccessTokenProvider</code> for Entra ID (the CLI uses <code>EntraTokenProvider</code> from <code>Badger.SqlMigrate.Connectivity</code>). Register custom Always Encrypted key stores with <code>SqlServerProvider.RegisterKeyStoreProvider</code>.</p>
+<p>Pass a <code>SessionContext</code> with an <code>IAccessTokenProvider</code> for Entra ID (the CLI uses <code>EntraTokenProvider</code> from <code>Badger.Trek.Connectivity</code>). Register custom Always Encrypted key stores with <code>SqlServerProvider.RegisterKeyStoreProvider</code>.</p>
 
 <h2>Architecture</h2>
-{code('''Badger.SqlMigrate.Cli  ──►  Badger.SqlMigrate.Core  ◄──  Badger.SqlMigrate.Providers.SqlServer
+{code('''Badger.Trek.Cli  ──►  Badger.Trek.Core  ◄──  Badger.Trek.Providers.SqlServer
                                     ▲
-Badger.SqlMigrate.Connectivity ─────┘   Entra ID tokens, SSH tunnels, secrets (vendor-neutral)''')}
+Badger.Trek.Connectivity ─────┘   Entra ID tokens, SSH tunnels, secrets (vendor-neutral)''')}
 <p>The core holds the plan, hashing, the preprocessor and the engine, and references no database driver; a test fails the build if the engine, connectivity or CLI reference a vendor driver directly.</p>
 
 <h2>Adding a database</h2>
-<p>A provider implements <code>IDatabaseProvider</code>: sessions, batch splitting, linting, journal tables, a deploy lock, a schema fingerprint, and optionally environment resources. It must pass the shared conformance test suite. The engine, plan, certification, variables, Entra ID tokens and SSH tunnels work unchanged; the PostgreSQL provider was added this way without touching any of them. <a href="https://github.com/lonebadger-tech/badger-sql-migrate/blob/dev/docs/writing-a-provider.md">Writing a provider</a> walks through it, and <a href="https://github.com/lonebadger-tech/badger-sql-migrate/blob/dev/CONTRIBUTING.md">CONTRIBUTING.md</a> covers sending it upstream. MySQL and SQLite are natural next providers.</p>
+<p>A provider implements <code>IDatabaseProvider</code>: sessions, batch splitting, linting, journal tables, a deploy lock, a schema fingerprint, and optionally environment resources. It must pass the shared conformance test suite. The engine, plan, certification, variables, Entra ID tokens and SSH tunnels work unchanged; the PostgreSQL provider was added this way without touching any of them. <a href="https://github.com/lonebadger-tech/badger-trek/blob/dev/docs/writing-a-provider.md">Writing a provider</a> walks through it, and <a href="https://github.com/lonebadger-tech/badger-trek/blob/dev/CONTRIBUTING.md">CONTRIBUTING.md</a> covers sending it upstream. MySQL and SQLite are natural next providers.</p>
 
 <h2>Source</h2>
-<p><a href="https://github.com/lonebadger-tech/badger-sql-migrate">github.com/lonebadger-tech/badger-sql-migrate</a> · <a href="{BASE}/license/">MIT license</a>. Contributions welcome.</p>
+<p><a href="https://github.com/lonebadger-tech/badger-trek">github.com/lonebadger-tech/badger-trek</a> · <a href="{BASE}/license/">MIT license</a>. Contributions welcome.</p>
 """)

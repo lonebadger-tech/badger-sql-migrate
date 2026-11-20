@@ -1,0 +1,118 @@
+using Badger.Trek.Core.Configuration;
+using Badger.Trek.Core.Providers;
+using Badger.Trek.Providers.PostgreSql;
+using Badger.Trek.Providers.Testing;
+using Npgsql;
+using Testcontainers.PostgreSql;
+
+namespace Badger.Trek.Providers.PostgreSql.Tests;
+
+/// <summary>
+/// One PostgreSQL for the whole run: TREK_TEST_POSTGRES (a connection string to an existing server) or a
+/// Testcontainers container of TREK_TEST_POSTGRES_IMAGE (default postgres:18; CI runs 12 through 18).
+/// When neither is available the database tests skip.
+/// </summary>
+public sealed class PostgreSqlFixture : IAsyncLifetime
+{
+    private PostgreSqlContainer? container;
+
+    public string? AdminConnectionString { get; private set; }
+
+    public string? UnavailableReason { get; private set; }
+
+    public async Task InitializeAsync()
+    {
+        var configured = Environment.GetEnvironmentVariable("TREK_TEST_POSTGRES");
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            AdminConnectionString = configured;
+            return;
+        }
+
+        try
+        {
+            container = new PostgreSqlBuilder(Environment.GetEnvironmentVariable("TREK_TEST_POSTGRES_IMAGE") is { Length: > 0 } image ? image : "postgres:18").Build();
+            await container.StartAsync();
+            AdminConnectionString = container.GetConnectionString();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            UnavailableReason = $"PostgreSQL container could not start ({ex.GetType().Name}: {ex.Message.Split('\n')[0]}). Start Docker or set TREK_TEST_POSTGRES.";
+        }
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (container is not null)
+        {
+            await container.DisposeAsync();
+        }
+    }
+
+    /// <summary>A new, empty database; dropped on dispose.</summary>
+    public async Task<TestDatabase> CreateDatabaseAsync()
+    {
+        var name = "trek_test_" + Guid.NewGuid().ToString("N")[..12];
+        await using (var admin = new NpgsqlConnection(AdminConnectionString))
+        {
+            await admin.OpenAsync();
+            await using var create = new NpgsqlCommand($"CREATE DATABASE \"{name}\";", admin);
+            await create.ExecuteNonQueryAsync();
+        }
+
+        return new TestDatabase(AdminConnectionString!, name);
+    }
+}
+
+public sealed class TestDatabase(string admin, string name) : IConformanceDatabase
+{
+    public string Name => name;
+
+    public DeploymentEnvironment Profile { get; } = new()
+    {
+        Name = "conformance",
+        ConnectionString = new NpgsqlConnectionStringBuilder(admin) { Database = name }.ConnectionString,
+        LockTimeoutSeconds = 5,
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        NpgsqlConnection.ClearAllPools();
+        await using var connection = new NpgsqlConnection(admin);
+        await connection.OpenAsync();
+        // DROP DATABASE ... WITH (FORCE) needs PostgreSQL 13; this works on 12 too.
+        await using var terminate = new NpgsqlCommand($"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{name}' AND pid <> pg_backend_pid();", connection);
+        await terminate.ExecuteNonQueryAsync();
+        await using var drop = new NpgsqlCommand($"DROP DATABASE \"{name}\";", connection);
+        await drop.ExecuteNonQueryAsync();
+    }
+}
+
+[CollectionDefinition("postgresql")]
+public sealed class PostgreSqlCollection : ICollectionFixture<PostgreSqlFixture>
+{
+}
+
+[Collection("postgresql")]
+public sealed class PostgreSqlConformanceTests(PostgreSqlFixture fixture) : ProviderConformanceTests
+{
+    protected override IDatabaseProvider Provider { get; } = new PostgreSqlProvider();
+
+    protected override IConformanceDialect Dialect { get; } = new PgDialect();
+
+    protected override async Task<IConformanceDatabase?> CreateDatabaseAsync() =>
+        fixture.AdminConnectionString is null ? null : await fixture.CreateDatabaseAsync();
+
+    private sealed class PgDialect : IConformanceDialect
+    {
+        public string Failing => "SELECT 1 / 0;";
+
+        public string CreateTable(string name) => $"CREATE TABLE public.{name} (id integer NOT NULL PRIMARY KEY, created timestamptz NOT NULL DEFAULT now());";
+
+        public string DropTable(string name) => $"DROP TABLE public.{name};";
+
+        public string Repeatable(string name, int value) => $"CREATE OR REPLACE VIEW public.{name} AS SELECT {value} AS value;";
+
+        public string VerifyTableExists(string name) => $"DO $$ BEGIN IF to_regclass('public.{name}') IS NULL THEN RAISE EXCEPTION '{name} missing'; END IF; END $$;";
+    }
+}

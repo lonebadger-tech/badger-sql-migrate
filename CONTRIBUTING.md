@@ -1,10 +1,10 @@
-# Contributing to Badger SQL Migrate
+# Contributing to Badger Trek
 
 Thanks for helping. Bug reports, documentation fixes, new providers and features are all welcome.
 
 ## Before you start
 
-- **Bugs:** open an [issue](https://github.com/lonebadger-tech/badger-sql-migrate/issues/new/choose) with `bsm --version`, the command you ran, and the output of `bsm doctor`. Remove passwords, tokens and server names you don't want public.
+- **Bugs:** open an [issue](https://github.com/lonebadger-tech/badger-trek/issues/new/choose) with `trek --version`, the command you ran, and the output of `trek doctor`. Remove passwords, tokens and server names you don't want public.
 - **Features and larger changes:** open an issue first to agree on the approach, so a pull request doesn't go to waste.
 - **Security problems:** don't open an issue. Follow [SECURITY.md](SECURITY.md).
 
@@ -15,12 +15,12 @@ You need the [.NET 10 SDK](https://dotnet.microsoft.com/download). Docker is opt
 ```bash
 dotnet build
 dotnet test
-dotnet run --project src/Badger.SqlMigrate.Cli -- plan check -C samples/demo-db
+dotnet run --project src/Badger.Trek.Cli -- plan check -C samples/demo-db
 ```
 
-- The SQL Server tests start SQL Server 2022 in Docker with Testcontainers (another version with `BSM_TEST_SQLSERVER_IMAGE=mcr.microsoft.com/mssql/server:2019-latest`), or use the server in `BSM_TEST_SQLSERVER=<connection string>`, such as LocalDB: `Server=(localdb)\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true`. The PostgreSQL tests do the same with `BSM_TEST_POSTGRES_IMAGE` and `BSM_TEST_POSTGRES`. Without Docker or a connection string they're skipped. The SQLite tests need nothing; to run them against another SQLite library instead of the built-in engine, set `BSM_SQLITE_LIBRARY` to its path (`libsqlite3.so.0`, `sqlite3.dll`; bsm itself honors it too), and `BSM_TEST_SQLITE_VERSION` to the version it must report. CI runs them on the SQLite of AlmaLinux 8 and 9, Ubuntu 22.04 and 24.04 and Debian 12.
+- The SQL Server tests start SQL Server 2022 in Docker with Testcontainers (another version with `TREK_TEST_SQLSERVER_IMAGE=mcr.microsoft.com/mssql/server:2019-latest`), or use the server in `TREK_TEST_SQLSERVER=<connection string>`, such as LocalDB: `Server=(localdb)\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true`. The PostgreSQL tests do the same with `TREK_TEST_POSTGRES_IMAGE` and `TREK_TEST_POSTGRES`. Without Docker or a connection string they're skipped. The SQLite tests need nothing; to run them against another SQLite library instead of the built-in engine, set `TREK_SQLITE_LIBRARY` to its path (`libsqlite3.so.0`, `sqlite3.dll`; trek itself honors it too), and `TREK_TEST_SQLITE_VERSION` to the version it must report. CI runs them on the SQLite of AlmaLinux 8 and 9, Ubuntu 22.04 and 24.04 and Debian 12.
 - Warnings are errors (`TreatWarningsAsErrors`), so the build must be clean.
-- `tests/Badger.SqlMigrate.ArchitectureTests` fails the build if the engine, connectivity or CLI reference a database driver directly. Vendor code belongs in a provider.
+- `tests/Badger.Trek.ArchitectureTests` fails the build if the engine, connectivity or CLI reference a database driver directly. Vendor code belongs in a provider.
 
 ## Pull requests
 
@@ -41,12 +41,12 @@ These are what make certification trustworthy, so changes to them need extra car
 
 - **Script hashes and chain ids** ([docs/methodology.md](docs/methodology.md)): changing how they're computed changes every existing database's history. Never change them silently.
 - **Journal tables:** schema changes need a migration path for databases deployed by earlier versions.
-- **`bsm.yaml` and `bsm.plan`:** existing files must keep working. Deprecate before removing.
+- **`trek.yaml` and `trek.plan`:** existing files must keep working. Deprecate before removing.
 - **`--json` output and exit codes:** pipelines parse them.
 
 ## Adding a database provider
 
-See [docs/writing-a-provider.md](docs/writing-a-provider.md). A provider is done when it passes the shared conformance suite in `tests/Badger.SqlMigrate.Providers.Testing`.
+See [docs/writing-a-provider.md](docs/writing-a-provider.md). A provider is done when it passes the shared conformance suite in `tests/Badger.Trek.Providers.Testing`.
 
 ## Releases
 
