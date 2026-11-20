@@ -49,6 +49,7 @@ def home():
 </div>
 
 <div class="features">
+  <div><h3>SQL Server, PostgreSQL and SQLite</h3><p>One tool for SQL Server and Azure SQL, PostgreSQL 12 to 18, and SQLite 3.26 and later. SQLite has its engine built in: a database file, nothing to install. <a href="{BASE}/docs/sqlite/">SQLite</a> · <a href="{BASE}/docs/converting/">Convert between them</a></p></div>
   <div><h3>Named changes, no collisions</h3><p>Changes have names, not version numbers. The plan file merges with git's union driver, so two developers adding changes the same day never collide.</p></div>
   <div><h3>Hash-certified</h3><p>SHA-256 per change and a hash chain over the whole plan. Same head hash means byte-identical history on every machine and environment.</p></div>
   <div><h3>Real down, for free</h3><p>Revert scripts are first-class. They are stored in the database at deploy time, so rollback works from any branch, even after the change is gone.</p></div>
@@ -56,7 +57,7 @@ def home():
   <div><h3>Every Entra ID flow</h3><p>Browser and device code with MFA (cached between runs), managed identity, service principals, workload identity, Azure CLI, pipelines, plus SQL and Windows auth.</p></div>
   <div><h3>Always Encrypted keys</h3><p>Scripts use the same key names everywhere; each environment brings its own column master keys. Badger Trek provisions and rotates them.</p></div>
   <div><h3>Variables that render</h3><p><code>[calc_{{env}}]</code> becomes <code>[calc_test]</code> in test. Built-ins, nested variables, per-environment values, and a hash of the SQL that actually ran.</p></div>
-  <div><h3>Safe by default</h3><p>A deploy lock for concurrent pipelines, transactional changes with verify scripts, a T-SQL linter, drift detection, and edited-after-deploy detection.</p></div>
+  <div><h3>Safe by default</h3><p>A deploy lock for concurrent pipelines, transactional changes with verify scripts, a linter for each SQL dialect, drift detection, and edited-after-deploy detection.</p></div>
   <div><h3>One binary, any OS</h3><p>Windows, macOS and Linux (x64 and Arm), or a .NET tool. No Java, no Perl, no sqlcmd. Connects through SSH bastions too.</p></div>
 </div>
 
@@ -348,7 +349,7 @@ def compare():
     table = "<table><thead>" + head + "</thead><tbody>" + "".join(
         "<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows) + "</tbody></table>"
     body = f"""
-<p>Every tool here is good at something. This is how Badger Trek's design relates to them, for SQL Server, Azure SQL and PostgreSQL. Feature sets change; check each project for its current state.</p>
+<p>Every tool here is good at something. This is how Badger Trek's design relates to them, for SQL Server, Azure SQL, PostgreSQL and SQLite. Feature sets change; check each project for its current state.</p>
 {table}
 
 <h2>What Badger Trek keeps</h2>
@@ -372,7 +373,7 @@ def compare():
 <p>Coming from another tool? See <a href="{BASE}/docs/baseline/">Existing databases</a> for adopting a database that is already in production.</p>
 """
     return Page("compare/", "Badger Trek compared with Flyway, DbUp, grate, EF, SSDT, Sqitch and Liquibase",
-                "How Badger Trek compares with other database migration tools for SQL Server and PostgreSQL.", body,
+                "How Badger Trek compares with other database migration tools for SQL Server, PostgreSQL and SQLite.", body,
                 heading="How it compares", lede="Flyway, DbUp, grate, EF Core migrations, SSDT, Sqitch and Liquibase.", wide=True)
 
 
