@@ -7,7 +7,7 @@ by editing it later.
 ## The project
 
 ```
-trek.yaml                 provider (sqlserver, postgresql, mysql, mariadb or sqlite), environments, variables
+trek.yaml                 provider (sqlserver, postgresql, mysql, mariadb, oracle or sqlite), environments, variables
 trek.plan                 every change, one per line, in deploy order
 changes/<name>/
   deploy.sql             makes the change
@@ -18,7 +18,8 @@ environments/<env>/      repeatables that run only in that environment (seed dat
 ```
 
 Read `trek.yaml` first to learn the provider: `provider: sqlserver` means T-SQL, `provider: postgresql` means
-PostgreSQL, `provider: mysql` means MySQL, `provider: mariadb` means MariaDB, `provider: sqlite` means SQLite. Never put connection strings, passwords or secrets in scripts.
+PostgreSQL, `provider: mysql` means MySQL, `provider: mariadb` means MariaDB, `provider: oracle` means Oracle (SQL and PL/SQL),
+`provider: sqlite` means SQLite. Never put connection strings, passwords or secrets in scripts.
 
 Badger Trek was called Badger SQL Migrate (command `bsm`, NuGet `Badger.SqlMigrate`) up to 0.3.0. A folder with
 `bsm.yaml` and `bsm.plan` is an old project: don't run `trek init` over it. Tell the person it needs upgrading
@@ -67,7 +68,7 @@ once with SQL that trek prints. Never run that SQL yourself, and don't edit depl
   `trek add <name> --irreversible`. There is then no `revert.sql`. Prefer reversible designs: rename or copy
   before you drop.
 - **Don't use `USE` (SQL Server, MySQL, MariaDB) or `\connect` (PostgreSQL).** trek deploys to the environment's database.
-- **Schema-qualify every object:** `dbo.Customer`, `public.customer` (MySQL, MariaDB and SQLite: don't; write `customer`).
+- **Schema-qualify every object:** `dbo.Customer`, `public.customer` (MySQL, MariaDB, Oracle and SQLite: don't; write `customer`).
 - **Data changes** belong in changes too, written to be correct on every environment's data. Use variables for
   values that differ between environments.
 
@@ -96,6 +97,8 @@ again:
   objects that have no `OR REPLACE`.
 - MySQL: `CREATE OR REPLACE VIEW ...`, and `DROP PROCEDURE|FUNCTION|TRIGGER IF EXISTS` then `CREATE`.
 - MariaDB: `CREATE OR REPLACE VIEW|PROCEDURE|FUNCTION|TRIGGER ...`.
+- Oracle: `CREATE OR REPLACE VIEW|PROCEDURE|FUNCTION|PACKAGE|PACKAGE BODY|TRIGGER|TYPE ...`, each PL/SQL
+  object followed by a line holding only `/`.
 
 Name them by path, for example `repeatable/views/active_customer.sql`. trek applies them after the changes,
 whenever their text differs from what was last applied. When one repeatable uses another, declare it on the
@@ -202,6 +205,20 @@ ALTER TABLE public.customer DROP COLUMN email;
   programs; MySQL has none of these. MySQL has functional indexes (`KEY ((lower(email)))`) and the `->>` JSON
   operator; MariaDB has neither (index a generated column; use `JSON_VALUE`).
 
+## Oracle
+
+- SQL statements end with `;`. A PL/SQL block (`DECLARE`, `BEGIN`) or stored program (`CREATE PROCEDURE`,
+  `FUNCTION`, `PACKAGE`, `PACKAGE BODY`, `TRIGGER`, `TYPE`) keeps its semicolons and ends with a line holding only
+  `/`; forgetting the `/` sends the next statement as part of the block (TREK005).
+- DDL commits as it runs and can't be rolled back. Keep each change to one table change and write a verify script.
+  Oracle 19c has no `IF [NOT] EXISTS`: check `user_tables`/`user_objects` in a PL/SQL block instead.
+- trek deploys to the environment's schema: write unqualified names. No `ALTER SESSION SET CURRENT_SCHEMA`
+  (TREK009), no SQL*Plus `@file`, `CONNECT` or `DEFINE` (TREK005); use `{Name}` variables, not `&substitution`.
+- `oracle.minVersion` in trek.yaml (default 19) is the oldest release the scripts must run on. Below 26, don't use
+  `BOOLEAN` columns, `TRUE`/`FALSE` in SQL, `IF [NOT] EXISTS`, `VECTOR`, domains or annotations (TREK008).
+- verify.sql: a query that fails when the change is missing, such as `SELECT email FROM customer WHERE 1 = 0;`
+- Revert with `DROP TABLE t PURGE;` so the table does not linger in the recycle bin.
+
 ## SQLite
 
 - Statements end with `;`. Semicolons inside strings, comments and `CREATE TRIGGER ... BEGIN ... END;` bodies
@@ -247,10 +264,10 @@ ALTER TABLE customer DROP COLUMN email;
 | TREK002 | SQL Server | `USE` switches databases. Remove it. |
 | TREK003 | all | `BEGIN`/`COMMIT`/`ROLLBACK` in a transactional change. Remove it. |
 | TREK004 | SQL Server | `SYSTEM_VERSIONING = OFF` without turning it back on. Turn it back on in the same script. |
-| TREK005 | PostgreSQL, SQLite, MySQL, MariaDB | A psql command trek can't run, or unbalanced `\if`/`\endif`; on SQLite, a sqlite3 dot-command (`.read`, `.mode`); on MySQL and MariaDB, a client command (`source`) or a stored program body without `DELIMITER`. Remove it, or add the delimiter. |
+| TREK005 | PostgreSQL, SQLite, MySQL, MariaDB, Oracle | A psql command trek can't run, or unbalanced `\if`/`\endif`; on SQLite, a sqlite3 dot-command (`.read`, `.mode`); on MySQL and MariaDB, a client command (`source`) or a stored program body without `DELIMITER`; on Oracle, a SQL*Plus command (`@file`, `CONNECT`, `DEFINE`) or a PL/SQL block without its `/` line. Remove it, or add the delimiter or `/`. |
 | TREK007 | PostgreSQL | An enum value added with `ADD VALUE` is used in the same change. Move that use to a later change. |
-| TREK008 | SQLite | SQL newer than `sqlite.minVersion` in trek.yaml (`RETURNING`, `DROP COLUMN`, `STRICT`, `->>` ...). Rewrite it for the older engine; raise `minVersion` only if the user says every program that opens the database has that SQLite. |
-| TREK009 | MySQL, MariaDB | `USE` switches databases, and would send the rest of the change and trek's journal entry there. Remove it. |
+| TREK008 | SQLite, Oracle | SQL newer than `sqlite.minVersion` or `oracle.minVersion` in trek.yaml (SQLite: `RETURNING`, `DROP COLUMN`, `STRICT`, `->>` ...; Oracle 26ai: `IF [NOT] EXISTS`, `BOOLEAN` columns ...). Rewrite it for the older engine; raise `minVersion` only if the user says every program that opens the database has that SQLite. |
+| TREK009 | MySQL, MariaDB, Oracle | `USE` (MySQL, MariaDB) or `ALTER SESSION SET CURRENT_SCHEMA` (Oracle) sends the rest of the change elsewhere. Remove it. |
 
 ## Generating a change from a database (person-run)
 

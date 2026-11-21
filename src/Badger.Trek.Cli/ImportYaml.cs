@@ -53,6 +53,19 @@ public static class ImportYaml
                     database: local.db
 
                 """
+                : providerId == "oracle"
+                ? """
+                  local:                               # where to deploy: edit to match your server
+                    host: localhost
+                    port: 1521
+                    database: FREEPDB1                 # the service name
+                    authentication: password
+                    user: myapp                        # trek deploys to this user's schema
+                    password: ${env:TREK_LOCAL_PASSWORD}
+                    tls:
+                      mode: optional                   # local development only
+
+                """
                 : providerId is "mysql" or "mariadb"
                 ? """
                   local:                               # where to deploy: edit to match your server

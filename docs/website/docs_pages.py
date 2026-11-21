@@ -29,6 +29,7 @@ SIDEBAR = [
         ("PostgreSQL", "docs/postgresql/"),
         ("MySQL", "docs/mysql/"),
         ("MariaDB", "docs/mariadb/"),
+        ("Oracle", "docs/oracle/"),
         ("SQLite", "docs/sqlite/"),
     ]),
     ("Operate", [
@@ -59,7 +60,7 @@ def link(path, label):
 
 def pages():
     return [overview(), install(), quick_start(), project(), ai(), plan(), changes(), certification(), revert(), fixing_changes(), generating(),
-            teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(), postgresql(), mysql(), mariadb(), sqlite(),
+            teamwork(), repeatables(), temporal_partitions(), environments(), authentication(), connections(), variables(), always_encrypted(), postgresql(), mysql(), mariadb(), oracle(), sqlite(),
             commands(), ci_cd(), bundles(), drift(), baseline(), importing(), upgrading(), converting(), journal(), troubleshooting(), extending()]
 
 
@@ -67,7 +68,7 @@ def pages():
 
 def overview():
     return doc("docs/", "Documentation", "Everything about Badger Trek, from the first change to production pipelines.", f"""
-<p>Badger Trek deploys hand-written SQL changes to SQL Server, Azure SQL, PostgreSQL, MySQL, MariaDB and SQLite, in an order you control, and proves afterwards that every database received exactly what you intended. It is a single command-line tool, <code>trek</code>, for Windows, macOS and Linux.</p>
+<p>Badger Trek deploys hand-written SQL changes to SQL Server, Azure SQL, PostgreSQL, MySQL, MariaDB, Oracle and SQLite, in an order you control, and proves afterwards that every database received exactly what you intended. It is a single command-line tool, <code>trek</code>, for Windows, macOS and Linux.</p>
 
 <h2>Five ideas</h2>
 <ol>
@@ -87,7 +88,7 @@ def overview():
 </ul>
 
 <h2>Supported databases</h2>
-<p>SQL Server 2019 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance. PostgreSQL 15 and later. MySQL 8.4 and 9.7 and MariaDB 10.11, 11.4, 11.8 and 12.3 (the LTS releases; see {link("docs/mysql/", "MySQL")} and {link("docs/mariadb/", "MariaDB")}). SQLite 3.26 and later: trek runs the engine built into it, and the scripts it generates also run on the older SQLite that other programs open your database with ({link("docs/sqlite/#versions", "SQLite versions")}). The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
+<p>SQL Server 2019 and later (on Windows, Linux and containers, LocalDB included), Azure SQL Database and Azure SQL Managed Instance. PostgreSQL 15 and later. MySQL 8.4 and 9.7 and MariaDB 10.11, 11.4, 11.8 and 12.3 (the LTS releases; see {link("docs/mysql/", "MySQL")} and {link("docs/mariadb/", "MariaDB")}). Oracle Database 19c and 26ai ({link("docs/oracle/", "Oracle")}). SQLite 3.26 and later: trek runs the engine built into it, and the scripts it generates also run on the older SQLite that other programs open your database with ({link("docs/sqlite/#versions", "SQLite versions")}). The engine is vendor-neutral, so other databases can be added as providers ({link("docs/extending/", "Library and providers")}).</p>
 """)
 
 
@@ -1559,6 +1560,66 @@ environments:
 """)
 
 
+def oracle():
+    return doc("docs/oracle/", "Oracle", "Oracle Database 19c and 26ai, the long-term releases Oracle still supports.", f"""
+{sh('''trek init --provider oracle
+trek add create-product
+trek deploy''')}
+{yaml('''provider: oracle
+defaultEnvironment: local
+oracle:
+  minVersion: 19                        # the oldest release the scripts must run on: 19 (19c) or 26 (26ai)
+environments:
+  local:
+    host: localhost
+    port: 1521
+    database: FREEPDB1                  # the service name: a pluggable database
+    authentication: password
+    user: shop                          # trek deploys to this user's schema and keeps its journal there (TREK_* tables)
+    password: ${env:TREK_LOCAL_PASSWORD}
+    tls:
+      mode: optional
+  prod:
+    host: db.example.com
+    port: 1522
+    database: SHOP_PROD
+    authentication: password
+    user: deployer
+    password: ${env:TREK_PROD_PASSWORD}
+    schema: SHOP                        # deploy to another schema than the login's own
+    tls:
+      mode: strict                      # TCPS, checking the server's name
+    connectionProperties:               # any ODP.NET connection-string keyword
+      Wallet_Location: /etc/oracle/wallet''', "trek.yaml")}
+<p>The plan, hash certification, revert from stored scripts, environments, variables, repeatables, bundles, <code>verify</code> and <code>diff-schema</code> work as on the other databases. Generated changes (<code>add --from-diff</code>), <code>trek convert</code> and imports from other tools are not available for Oracle yet.</p>
+
+<h2 id="connecting">Connecting</h2>
+<p><code>host</code>, <code>port</code> and <code>database</code> (the service name, such as a pluggable database) build the connection, or <code>connectionString</code> takes an ODP.NET connection string whose <code>Data Source</code> is EZConnect (<code>host:port/service</code>), a TNS alias or a full descriptor. <code>tls.mode: mandatory</code> or <code>strict</code> connects over TCPS (strict also checks the server's name against its certificate); the certificates come from an Oracle wallet, named with <code>connectionProperties: Wallet_Location</code>, which is also how Autonomous Database connects. SSH tunnels work with <code>host</code> and <code>database</code>. Sign-in is by password.</p>
+<p>trek deploys to the login's own schema, or to <code>schema</code>. Deploying to another schema needs the matching <code>ANY</code> privileges (<code>CREATE ANY TABLE</code>, <code>ALTER ANY TABLE</code>, <code>DROP ANY TABLE</code>, <code>SELECT</code>/<code>INSERT</code>/<code>UPDATE</code>/<code>DELETE ANY TABLE</code>, <code>LOCK ANY TABLE</code>, <code>CREATE ANY SEQUENCE</code>, <code>SELECT ANY SEQUENCE</code>, and <code>CREATE ANY</code> for each kind of object your changes create); trek sets the session's current schema, so unqualified names in scripts go there.</p>
+
+<h2 id="transactions">No transactions for DDL</h2>
+<p>Oracle commits each DDL statement as it runs, so trek runs Oracle changes without a transaction: a change that fails part-way keeps the statements that already ran, and trek records the change only when all of it has run. Keep changes small (one table change each), and give each a verify script. After a failure, fix the database by hand or with the change's revert, then deploy again.</p>
+
+<h2 id="scripts">Scripts: SQL*Plus rules</h2>
+<p>trek splits scripts the way SQL*Plus and SQLcl do. A SQL statement ends at <code>;</code>. A PL/SQL block (<code>DECLARE</code>, <code>BEGIN</code>) or a stored program (<code>CREATE PROCEDURE</code>, <code>FUNCTION</code>, <code>PACKAGE</code>, <code>PACKAGE BODY</code>, <code>TRIGGER</code>, <code>TYPE</code>) keeps the semicolons inside it and ends at a line holding only <code>/</code>:</p>
+{sql('''CREATE TABLE orders (id NUMBER(10) GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, total NUMBER(12,2) NOT NULL);
+
+CREATE OR REPLACE PROCEDURE add_order(p_total IN NUMBER) AS
+BEGIN
+  INSERT INTO orders (total) VALUES (p_total);
+END;
+/''')}
+<p>SQL*Plus commands that change only SQL*Plus itself (<code>PROMPT</code>, <code>REM</code>, <code>SET</code>, <code>SPOOL</code>, <code>WHENEVER</code> ...) are skipped, and <code>EXEC proc</code> runs as <code>BEGIN proc; END;</code>, so scripts written for SQL*Plus run as they are. <code>trek plan check</code> reports the commands trek cannot run (<code>@file</code>, <code>CONNECT</code>, <code>DEFINE</code>, <code>ACCEPT</code> ..., TREK005), a PL/SQL block followed by another statement without its <code>/</code> line (TREK005), and <code>ALTER SESSION SET CURRENT_SCHEMA</code> (TREK009). Use trek's <code>{{Name}}</code> variables instead of <code>&amp;substitution</code>: <code>&amp;</code> is sent as it is, so <code>'R&amp;D'</code> needs no <code>SET DEFINE OFF</code>.</p>
+<p><code>oracle.minVersion</code> in trek.yaml (default 19) is the oldest release the scripts must run on. While it is 19, lint warns about SQL only 26ai runs (TREK008): <code>IF [NOT] EXISTS</code>, <code>BOOLEAN</code> columns, <code>TRUE</code>/<code>FALSE</code> in SQL, <code>VECTOR</code>, domains, JSON relational duality views and annotations. Set it to 26 when every database is 26ai.</p>
+
+<h2 id="journal">The journal and the lock</h2>
+<p>trek keeps its journal in the deploy schema as the tables <code>TREK_META</code>, <code>TREK_CHANGES</code>, <code>TREK_REPEATABLES</code>, <code>TREK_EVENTS</code> and <code>TREK_SCHEMA_SNAPSHOTS</code> (the prefix is <code>stateSchema</code>), so it never needs the right to create users. The deploy lock is a row in <code>TREK_LOCK</code>, held by a second connection for the whole run: a lock held by the deploying connection would end at its first DDL statement, and <code>DBMS_LOCK</code> needs a grant few deploy logins have. The schema fingerprint covers tables, columns, identity options, constraints, indexes (expressions included), views, materialized views, sequences, synonyms, PL/SQL source, triggers and comments, from the <code>ALL_*</code> dictionary views. Names Oracle generates (<code>SYS_C</code> constraints and their indexes, identity sequences) and the schema's own name inside definitions are left out, so the same schema has the same fingerprint in every environment; so are current sequence values and the recycle bin.</p>
+
+<h2>Versions and services</h2>
+<p>trek supports Oracle Database 19c and 26ai (formerly 23ai), the long-term releases in Oracle's Premier Support. Every build runs the provider's tests against Oracle Database Free 26ai; 19c is covered by <code>oracle.minVersion</code> and checked by hand, since Oracle publishes no free 19c image. <code>trek doctor</code> flags innovation releases (21c) and releases past Premier Support. Autonomous Database and Oracle Base Database Service are expected to work, but have not been tested. trek connects with Oracle's ODP.NET managed driver, redistributed under Oracle's Free Distribution, Hosting, and Use terms (see THIRD-PARTY-NOTICES.md): <code>connectionProperties</code> takes any of its connection-string keywords.</p>
+""")
+
+
 def postgresql():
     return doc("docs/postgresql/", "PostgreSQL", "PostgreSQL 15 through 18, each tested on every build.", f"""
 {sh('''trek init --provider postgresql
@@ -1914,7 +1975,7 @@ Badger.Trek.Connectivity ─────┘   Entra ID tokens, SSH tunnels, secr
 <p>The core holds the plan, hashing, the preprocessor and the engine, and references no database driver; a test fails the build if the engine, connectivity or CLI reference a vendor driver directly.</p>
 
 <h2>Adding a database</h2>
-<p>A provider implements <code>IDatabaseProvider</code>: sessions, batch splitting, linting, journal tables, a deploy lock, a schema fingerprint, and optionally environment resources. It must pass the shared conformance test suite. The engine, plan, certification, variables, Entra ID tokens and SSH tunnels work unchanged; the PostgreSQL provider was added this way without touching any of them. <a href="https://github.com/lonebadger-tech/badger-trek/blob/dev/docs/writing-a-provider.md">Writing a provider</a> walks through it, and <a href="https://github.com/lonebadger-tech/badger-trek/blob/dev/CONTRIBUTING.md">CONTRIBUTING.md</a> covers sending it upstream. Oracle is a natural next provider.</p>
+<p>A provider implements <code>IDatabaseProvider</code>: sessions, batch splitting, linting, journal tables, a deploy lock, a schema fingerprint, and optionally environment resources. It must pass the shared conformance test suite. The engine, plan, certification, variables, Entra ID tokens and SSH tunnels work unchanged; the PostgreSQL provider was added this way without touching any of them. <a href="https://github.com/lonebadger-tech/badger-trek/blob/dev/docs/writing-a-provider.md">Writing a provider</a> walks through it, and <a href="https://github.com/lonebadger-tech/badger-trek/blob/dev/CONTRIBUTING.md">CONTRIBUTING.md</a> covers sending it upstream. </p>
 
 <h2>Source</h2>
 <p><a href="https://github.com/lonebadger-tech/badger-trek">github.com/lonebadger-tech/badger-trek</a> · <a href="{BASE}/license/">MIT license</a>. Contributions welcome.</p>

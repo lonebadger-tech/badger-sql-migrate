@@ -12,6 +12,7 @@ using Badger.Trek.Core.Preprocessing;
 using Badger.Trek.Core.Project;
 using Badger.Trek.Core.Providers;
 using Badger.Trek.Providers.MySql;
+using Badger.Trek.Providers.Oracle;
 using Badger.Trek.Providers.PostgreSql;
 using Badger.Trek.Providers.Sqlite;
 using Badger.Trek.Providers.SqlServer;
@@ -43,6 +44,7 @@ public static partial class Commands
         .Register("postgres", () => new PostgreSqlProvider())
         .Register(MySqlProvider.ProviderId, () => new MySqlProvider())
         .Register(MySqlProvider.MariaDbProviderId, () => new MySqlProvider(MySqlFlavor.MariaDb))
+        .Register(OracleProvider.ProviderId, OracleOptions.SectionName, settings => new OracleProvider(OracleOptions.Parse(settings)))
         .Register(SqliteProvider.ProviderId, SqliteOptions.SectionName, settings => new SqliteProvider(SqliteOptions.Parse(settings)))
         .Register("sqlite3", SqliteOptions.SectionName, settings => new SqliteProvider(SqliteOptions.Parse(settings)));
 
@@ -85,7 +87,7 @@ public static partial class Commands
         Directory.CreateDirectory(Path.Combine(dir, MigrationProject.RepeatableFolder));
         Directory.CreateDirectory(Path.Combine(dir, MigrationProject.EnvironmentsFolder));
 
-        WriteIfMissing(Path.Combine(dir, TrekConfig.FileName), provider.Id == PostgreSqlProvider.ProviderId ? PostgreSqlConfigTemplate : provider.Id == MySqlProvider.ProviderId ? MySqlConfigTemplate : provider.Id == MySqlProvider.MariaDbProviderId ? MariaDbConfigTemplate : provider.Id == SqliteProvider.ProviderId ? SqliteConfigTemplate : $$"""
+        WriteIfMissing(Path.Combine(dir, TrekConfig.FileName), provider.Id == PostgreSqlProvider.ProviderId ? PostgreSqlConfigTemplate : provider.Id == MySqlProvider.ProviderId ? MySqlConfigTemplate : provider.Id == MySqlProvider.MariaDbProviderId ? MariaDbConfigTemplate : provider.Id == OracleProvider.ProviderId ? OracleConfigTemplate : provider.Id == SqliteProvider.ProviderId ? SqliteConfigTemplate : $$"""
             # Badger Trek configuration
             provider: {{provider.Id}}
             defaultEnvironment: local
@@ -242,6 +244,46 @@ public static partial class Commands
         #    connectionProperties:            # any MySqlConnector connection-string keyword
         #      Default Command Timeout: 120
 
+        """;
+
+    private const string OracleConfigTemplate = """
+        # Badger Trek configuration
+        provider: oracle
+        defaultEnvironment: local
+
+        # The oldest Oracle Database the scripts must run on: 19 (19c) or 26 (26ai). Lint warns about SQL only 26ai runs.
+        oracle:
+          minVersion: 19
+
+        # Script variables, referenced as {Name} in scripts. Values are not part of change hashes.
+        # Environments can override them under their own 'variables:'.
+        variables: {}
+
+        # Oracle commits DDL as it runs, so changes run without a transaction: a change that fails part-way keeps what
+        # it already did. Keep changes small, and give each a verify script. End PL/SQL blocks with a line holding '/'.
+        environments:
+          local:
+            host: localhost
+            port: 1521
+            database: FREEPDB1                 # the service name (a pluggable database)
+            authentication: password
+            user: myapp                        # trek deploys to this user's schema and keeps its journal there (TREK_* tables)
+            password: ${env:TREK_LOCAL_PASSWORD}
+            tls:
+              mode: optional                   # local development only
+
+        #  prod:
+        #    host: db.example.com
+        #    port: 1522
+        #    database: MYAPP_PROD
+        #    authentication: password
+        #    user: deployer
+        #    password: ${env:TREK_PROD_PASSWORD}
+        #    schema: MYAPP                    # deploy to another schema than the login's own
+        #    tls: { mode: strict }            # TCPS; a wallet goes under connectionProperties: Wallet_Location
+        #    protected: true                  # deploy/revert require typing the environment name (or --yes)
+        #    allowRevert: false               # fix forward in production
+        #    ordering: strict                 # exact plan order; prod history is certified
         """;
 
     private const string MariaDbConfigTemplate = """
