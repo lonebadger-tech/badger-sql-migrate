@@ -2,6 +2,13 @@
 
 All notable changes to Badger Trek. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/). The website's [version history](https://lonebadger.tech/badger-trek/releases/) has the full release notes.
 
+## Unreleased
+
+### Added
+
+- **Oracle**: `trek init --provider oracle`, for Oracle Database 19c and 26ai, the long-term releases in Oracle's Premier Support (26ai tested on every build with Oracle Database Free; 19c through `oracle.minVersion`). Deploy, revert, verify, repeatables, bundles, the schema fingerprint and `diff-schema` work as on the other databases. trek deploys to the login's schema or to `schema`, and keeps its journal there as `TREK_*` tables; the deploy lock is a row held by a second connection. Oracle commits DDL as it runs, so changes run without a transaction. Scripts follow SQL*Plus: `;` ends a statement, a line holding `/` ends a PL/SQL block, SQL*Plus settings (`PROMPT`, `SET` ...) are skipped and `EXEC` works. Lint: SQL*Plus commands trek cannot run and a missing `/` (TREK005), `ALTER SESSION SET CURRENT_SCHEMA` (TREK009), and 26ai-only SQL while `oracle.minVersion` is 19 (TREK008). Connections by host and service, EZConnect, TNS alias or descriptor, TCPS with a wallet, and SSH tunnels; sign-in by password. Generated changes, conversions and imports for Oracle come later.
+- `THIRD-PARTY-NOTICES.md` ships in the package and the downloads, with the terms of Oracle's ODP.NET driver, which the Oracle provider redistributes.
+
 ## 0.6.0 (November 2026)
 
 ### Added

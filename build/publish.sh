@@ -23,19 +23,19 @@ for rid in "${rids[@]}"; do
   dotnet publish "$cli" -c Release -r "$rid" -o "$work/$rid" -p:Version="$version" \
     --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
     -p:EnableCompressionInSingleFile=true -p:DebugType=none -p:GenerateDocumentationFile=false -v quiet
-  cp LICENSE README.md "$work/$rid/"
+  cp LICENSE README.md THIRD-PARTY-NOTICES.md "$work/$rid/"
   name="badger-trek-$version-$rid"
   if [[ "$rid" == win-* ]]; then
-    (cd "$work/$rid" && zip -q -X "$out/$name.zip" trek.exe LICENSE README.md)
+    (cd "$work/$rid" && zip -q -X "$out/$name.zip" trek.exe LICENSE README.md THIRD-PARTY-NOTICES.md)
   else
     chmod +x "$work/$rid/trek"
-    tar -C "$work/$rid" -czf "$out/$name.tar.gz" trek LICENSE README.md
+    tar -C "$work/$rid" -czf "$out/$name.tar.gz" trek LICENSE README.md THIRD-PARTY-NOTICES.md
   fi
 done
 
 echo "== portable (framework-dependent)"
 dotnet publish "$cli" -c Release -o "$work/portable" -p:Version="$version" --self-contained false -p:UseAppHost=false -p:DebugType=none -v quiet
-cp LICENSE README.md "$work/portable/"
+cp LICENSE README.md THIRD-PARTY-NOTICES.md "$work/portable/"
 printf '#!/bin/sh\nexec dotnet "$(dirname "$0")/trek.dll" "$@"\n' > "$work/portable/trek" && chmod +x "$work/portable/trek"
 printf '@dotnet "%%~dp0trek.dll" %%*\r\n' > "$work/portable/trek.cmd"
 (cd "$work/portable" && zip -q -r -X "$out/badger-trek-$version-portable.zip" .)

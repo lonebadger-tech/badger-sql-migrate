@@ -5,6 +5,7 @@
     <ProjectReference Include="..\Badger.Trek.Connectivity\Badger.Trek.Connectivity.csproj" />
     <ProjectReference Include="..\Badger.Trek.Conversion\Badger.Trek.Conversion.csproj" />
     <ProjectReference Include="..\Badger.Trek.Providers.MySql\Badger.Trek.Providers.MySql.csproj" />
+    <ProjectReference Include="..\Badger.Trek.Providers.Oracle\Badger.Trek.Providers.Oracle.csproj" />
     <ProjectReference Include="..\Badger.Trek.Providers.PostgreSql\Badger.Trek.Providers.PostgreSql.csproj" />
     <ProjectReference Include="..\Badger.Trek.Providers.Sqlite\Badger.Trek.Providers.Sqlite.csproj" />
     <ProjectReference Include="..\Badger.Trek.Providers.SqlServer\Badger.Trek.Providers.SqlServer.csproj" />
@@ -14,6 +15,7 @@
     <!-- The package page shows docs/nuget/README.md: written for users, unlike the repository README. -->
     <None Include="..\..\docs\nuget\README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\docs\nuget\icon.png" Pack="true" PackagePath="\" />
+    <None Include="..\..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>
@@ -36,8 +38,8 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>trek</ToolCommandName>
     <PackageId>Badger.Trek</PackageId>
-    <Description>Badger Trek: free, cross-platform, hash-certified database migrations for SQL Server, Azure SQL, PostgreSQL, MySQL and SQLite, with real up and down, named changes, environments, Entra ID and Always Encrypted. Formerly Badger.SqlMigrate.</Description>
-    <PackageTags>sql-server;azure-sql;postgresql;mysql;sqlite;migrations;database;schema;devops;cli;entra-id;always-encrypted</PackageTags>
+    <Description>Badger Trek: free, cross-platform, hash-certified database migrations for SQL Server, Azure SQL, PostgreSQL, MySQL, MariaDB, Oracle and SQLite, with real up and down, named changes, environments, Entra ID and Always Encrypted. Formerly Badger.SqlMigrate.</Description>
+    <PackageTags>sql-server;azure-sql;postgresql;mysql;mariadb;oracle;sqlite;migrations;database;schema;devops;cli;entra-id;always-encrypted</PackageTags>
     <PackageProjectUrl>https://lonebadger.tech/badger-trek/</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>

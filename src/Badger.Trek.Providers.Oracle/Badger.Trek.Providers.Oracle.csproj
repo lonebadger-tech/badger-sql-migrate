@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Badger.Trek.Core\Badger.Trek.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Badger.Trek.Conversion" />
+    <InternalsVisibleTo Include="Badger.Trek.Providers.Oracle.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.26.401" />
+  </ItemGroup>
+
+</Project>

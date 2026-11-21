@@ -17,9 +17,11 @@ Delete this file when the items below are done (it is not documentation).
   - Translating functions, procedures and triggers PL/pgSQL <-> MySQL/MariaDB (now written commented out).
     MySQL and MariaDB cannot turn triggers off during `convert data`, so once triggers are translated the load
     must suppress them (for example a session variable the generated triggers check).
-- Oracle support: the user's next request (2026-11-20), after 0.6.0. Plan it like MySQL (versions with vendor
-  support, CI images, then provider, --from-diff, convert, imports) and ask the user about 19c vs 23ai/26ai and
-  CI images (only Oracle Database Free has a public image).
+- Oracle support (user's request, 2026-11-20): 19c and 26ai; CI tests 26ai only (Oracle Database Free,
+  gvenzl/oracle-free:23-slim-faststart), 19c through oracle.minVersion lint, checked by hand. Four PRs:
+  (1) provider core: done in the oracle-provider PR; (2) add --from-diff / diff-schema --script (shadow schema,
+  DBMS_METADATA); (3) trek convert to and from Oracle in every direction; (4) imports (Flyway jdbc:oracle, Sqitch
+  oracle engine, EF Core Oracle provider) and baseline --from. Release 0.7.0 only after all four.
 
 - Dogfooding suggestions not done: `baseline --check-schema`, excluding objects from the schema fingerprint (e.g. an
   old EF/Flyway history table), DNS check before an Entra token in `doctor`, a `trek clone`.
