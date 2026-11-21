@@ -145,6 +145,8 @@ jobs:
   # Oracle 26ai (Oracle Database Free): the provider's conformance and feature tests. 19c, also supported, has no
   # free public image; scripts are kept 19c-compatible by oracle.minVersion lint.
   oracle:
+    # The check is named by version only: the ruleset requires "oracle (26ai)".
+    name: oracle (${{ matrix.version }})
     strategy:
       fail-fast: false
       matrix:
